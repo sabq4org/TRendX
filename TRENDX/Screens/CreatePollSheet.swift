@@ -17,15 +17,40 @@ struct CreatePollSheet: View {
     @State private var addImage = false
     @State private var addVideo = false
     @State private var aiSuggestions: [String] = []
+    @State private var aiRationale = ""
+    @State private var isGeneratingAI = false
     
     private let durationOptions = [1, 2, 3, 7, 14, 30]
     
     private var canPublish: Bool {
-        !question.isEmpty && options.filter { !$0.isEmpty }.count >= 2
+        let hasQuestion = !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && question.count <= 500
+        switch selectedType {
+        case .singleChoice, .multipleChoice:
+            return hasQuestion && choiceOptions.count >= 2
+        case .rating, .linearScale:
+            return hasQuestion
+        }
     }
 
     private var clarityScore: Int {
-        TrendXAI.clarityScore(question: question, options: options)
+        TrendXAI.clarityScore(question: question, options: publishableOptionTexts)
+    }
+
+    private var choiceOptions: [String] {
+        options
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var publishableOptionTexts: [String] {
+        switch selectedType {
+        case .singleChoice, .multipleChoice:
+            return choiceOptions
+        case .rating:
+            return ["1", "2", "3", "4", "5"]
+        case .linearScale:
+            return (1...10).map(String.init)
+        }
     }
     
     var body: some View {
@@ -67,6 +92,8 @@ struct CreatePollSheet: View {
                     AIAssistPanel(
                         score: clarityScore,
                         suggestions: aiSuggestions,
+                        rationale: aiRationale,
+                        isLoading: isGeneratingAI,
                         onGenerate: generateSuggestions,
                         onApply: applySuggestions
                     )
@@ -101,17 +128,9 @@ struct CreatePollSheet: View {
                         }
                     }
                     
-                    // Media Options
                     HStack(spacing: 12) {
-                        MediaButton(icon: "photo", title: "صورة", isSelected: addImage) {
-                            addImage.toggle()
-                            if addImage { addVideo = false }
-                        }
-                        
-                        MediaButton(icon: "video", title: "فيديو", isSelected: addVideo) {
-                            addVideo.toggle()
-                            if addVideo { addImage = false }
-                        }
+                        MediaButton(icon: "photo", title: "صورة قريباً", isSelected: addImage, isDisabled: true) {}
+                        MediaButton(icon: "video", title: "فيديو قريباً", isSelected: addVideo, isDisabled: true) {}
                     }
                     
                     Divider()
@@ -131,19 +150,11 @@ struct CreatePollSheet: View {
                                 }
                             }
                         }
-                        
-                        // Rating Option
-                        HStack(spacing: 8) {
-                            Image(systemName: "star.fill")
-                                .foregroundStyle(TrendXTheme.accent)
-                            Text("تقييم")
-                                .font(.trendxCaption())
-                                .foregroundStyle(TrendXTheme.secondaryInk)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(TrendXTheme.softFill)
-                        .clipShape(Capsule())
+
+                        Text(typeHelperText)
+                            .font(.trendxSmall())
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     
                     // Options Input (for choice types)
@@ -187,6 +198,8 @@ struct CreatePollSheet: View {
                             }
                             .disabled(options.count >= 6)
                         }
+                    } else {
+                        ScalePreview(type: selectedType)
                     }
                     
                     Divider()
@@ -296,12 +309,12 @@ struct CreatePollSheet: View {
     }
     
     private func publishPoll() {
-        let pollOptions = options.filter { !$0.isEmpty }.map { PollOption(text: $0) }
+        let pollOptions = publishableOptionTexts.map { PollOption(text: $0) }
 
         let cover = PollCoverStyle.from(topicName: selectedTopic?.name)
 
         let poll = Poll(
-            title: question,
+            title: question.trimmingCharacters(in: .whitespacesAndNewlines),
             coverStyle: cover,
             options: pollOptions,
             topicId: selectedTopic?.id,
@@ -316,24 +329,54 @@ struct CreatePollSheet: View {
     }
 
     private func generateSuggestions() {
-        aiSuggestions = TrendXAI.suggestedOptions(
-            for: question,
-            topicName: selectedTopic?.name,
-            type: selectedType
-        )
+        isGeneratingAI = true
+        Task {
+            let result = await store.composePoll(
+                question: question,
+                topicName: selectedTopic?.name,
+                type: selectedType
+            )
+            aiSuggestions = result.options
+            aiRationale = result.rationale
+            isGeneratingAI = false
+        }
     }
 
     private func applySuggestions() {
         if aiSuggestions.isEmpty {
             generateSuggestions()
+            return
         }
-        options = aiSuggestions.isEmpty ? options : aiSuggestions
+
+        if question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !aiSuggestions.isEmpty {
+            question = TrendXAI.suggestedQuestion(topicName: selectedTopic?.name, type: selectedType)
+        }
+
+        if selectedType == .singleChoice || selectedType == .multipleChoice {
+            options = aiSuggestions
+        }
+    }
+
+    private var typeHelperText: String {
+        switch selectedType {
+        case .singleChoice:
+            return "يناسب سؤالاً له إجابة واحدة واضحة."
+        case .multipleChoice:
+            return "يسمح للمستخدم باختيار أكثر من إجابة في النسخ القادمة، ويحفظ حالياً كاستطلاع متعدد الخيارات."
+        case .rating:
+            return "سيتم إنشاء مقياس تقييم من 1 إلى 5 تلقائياً."
+        case .linearScale:
+            return "سيتم إنشاء مقياس خطي من 1 إلى 10 تلقائياً."
+        }
     }
 }
 
 private struct AIAssistPanel: View {
     let score: Int
     let suggestions: [String]
+    let rationale: String
+    let isLoading: Bool
     let onGenerate: () -> Void
     let onApply: () -> Void
 
@@ -389,13 +432,14 @@ private struct AIAssistPanel: View {
 
             HStack(spacing: 10) {
                 Button(action: onGenerate) {
-                    Label("اقترح خيارات", systemImage: "sparkles")
+                    Label(isLoading ? "يفكر…" : "اقترح خيارات", systemImage: "sparkles")
                         .font(.trendxCaption())
                         .foregroundStyle(TrendXTheme.aiIndigo)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 9)
                         .background(Capsule().fill(TrendXTheme.aiIndigo.opacity(0.10)))
                 }
+                .disabled(isLoading)
 
                 Button(action: onApply) {
                     Label("تطبيق", systemImage: "wand.and.stars")
@@ -407,6 +451,13 @@ private struct AIAssistPanel: View {
                 }
                 .disabled(suggestions.isEmpty)
                 .opacity(suggestions.isEmpty ? 0.45 : 1)
+            }
+
+            if !rationale.isEmpty {
+                Text(rationale)
+                    .font(.trendxSmall())
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(14)
@@ -423,6 +474,7 @@ struct MediaButton: View {
     let icon: String
     let title: String
     let isSelected: Bool
+    var isDisabled: Bool = false
     let action: () -> Void
     
     var body: some View {
@@ -442,6 +494,34 @@ struct MediaButton: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.58 : 1)
+    }
+}
+
+private struct ScalePreview: View {
+    let type: PollType
+
+    private var labels: [String] {
+        type == .rating ? ["1", "2", "3", "4", "5"] : ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(type == .rating ? "مقياس التقييم" : "المقياس الخطي")
+                .font(.trendxCaption())
+                .foregroundStyle(TrendXTheme.secondaryInk)
+
+            FlowLayout(spacing: 8) {
+                ForEach(labels, id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(TrendXTheme.primary)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(TrendXTheme.primary.opacity(0.10)))
+                }
+            }
+        }
     }
 }
 

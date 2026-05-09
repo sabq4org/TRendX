@@ -17,14 +17,35 @@ final class AppStore: ObservableObject {
     @Published var redemptions: [Redemption]
     @Published var selectedTab: TabItem = .home
     @Published var showCreatePoll: Bool = false
+    @Published var isAuthenticated: Bool
+    @Published var isLoading: Bool = false
+    @Published var appMessage: String?
 
     private let userKey      = "trendx_user_v1"
     private let surveysKey   = "trendx_surveys_v1"
     private let topicsKey = "trendx_topics_v1"
     private let pollsKey = "trendx_polls_v1"
     private let redemptionsKey = "trendx_redemptions_v1"
+    private let client: TrendXAPIClient
+    private let authRepository: AuthRepository
+    private let pollRepository: PollRepository
+    private let rewardsRepository: RewardsRepository
+    private let aiRepository: AIRepository
+    private var authSession: AuthSession?
+
+    var isRemoteEnabled: Bool {
+        client.config.isConfigured
+    }
     
-    init() {
+    init(client: TrendXAPIClient = TrendXAPIClient()) {
+        self.client = client
+        self.authRepository = AuthRepository(client: client)
+        self.pollRepository = PollRepository(client: client)
+        self.rewardsRepository = RewardsRepository(client: client)
+        self.aiRepository = AIRepository(client: client)
+        self.authSession = authRepository.restoreSession()
+        self.isAuthenticated = !client.config.isConfigured || authSession != nil
+
         // Load user
         if let data = UserDefaults.standard.data(forKey: userKey),
            let user = try? JSONDecoder().decode(TrendXUser.self, from: data) {
@@ -74,6 +95,79 @@ final class AppStore: ObservableObject {
         } else {
             self.redemptions = []
         }
+
+        if isAuthenticated {
+            Task { await refreshBootstrap() }
+        }
+    }
+
+    // MARK: - Session
+
+    func signIn(email: String, password: String) async {
+        await authenticate {
+            try await authRepository.signIn(email: email, password: password)
+        }
+    }
+
+    func signUp(name: String, email: String, password: String) async {
+        await authenticate {
+            try await authRepository.signUp(name: name, email: email, password: password)
+        }
+        if isAuthenticated {
+            currentUser.name = name
+            currentUser.email = email
+            currentUser.avatarInitial = String(name.prefix(1))
+            persistUser()
+        }
+    }
+
+    func signOut() {
+        authRepository.signOut()
+        authSession = nil
+        isAuthenticated = !isRemoteEnabled
+        appMessage = nil
+    }
+
+    private func authenticate(_ operation: () async throws -> AuthSession) async {
+        isLoading = true
+        appMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let session = try await operation()
+            authSession = session
+            isAuthenticated = true
+            currentUser.email = session.email
+            if isRemoteEnabled, let profile = try? await authRepository.fetchProfile(session: session) {
+                currentUser = profile
+            }
+            persistUser()
+            await refreshBootstrap()
+        } catch {
+            appMessage = "تعذر تسجيل الدخول. تحقق من البيانات أو إعداد TRENDX API."
+        }
+    }
+
+    func refreshBootstrap() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        async let bootstrapTask = pollRepository.loadBootstrap(session: authSession)
+        async let giftsTask = rewardsRepository.loadGifts(session: authSession)
+        async let redemptionsTask = rewardsRepository.loadRedemptions(session: authSession)
+
+        do {
+            let bootstrap = try await bootstrapTask
+            topics = bootstrap.topics
+            polls = bootstrap.polls.isEmpty ? polls : bootstrap.polls
+            gifts = await giftsTask
+            redemptions = await redemptionsTask
+            persistTopics()
+            persistPolls()
+            persistRedemptions()
+        } catch {
+            appMessage = "تم تشغيل الوضع المحلي الاحتياطي مؤقتاً."
+        }
     }
     
     // MARK: - User Actions
@@ -99,9 +193,11 @@ final class AppStore: ObservableObject {
             topics[index].isFollowing.toggle()
             if topics[index].isFollowing {
                 topics[index].followersCount += 1
-                currentUser.followedTopics.append(topicId)
+                if !currentUser.followedTopics.contains(topicId) {
+                    currentUser.followedTopics.append(topicId)
+                }
             } else {
-                topics[index].followersCount -= 1
+                topics[index].followersCount = max(0, topics[index].followersCount - 1)
                 currentUser.followedTopics.removeAll { $0 == topicId }
             }
             persistTopics()
@@ -139,6 +235,23 @@ final class AppStore: ObservableObject {
             currentUser.completedPolls.append(pollId)
         }
         persistPolls()
+
+        guard isRemoteEnabled else { return }
+        Task {
+            do {
+                let mutation = try await pollRepository.vote(
+                    pollId: pollId,
+                    optionId: optionId,
+                    session: authSession
+                )
+                replacePoll(mutation.poll.domain)
+                currentUser = mutation.user.domain
+                persistUser()
+                persistPolls()
+            } catch {
+                appMessage = "تم حفظ التصويت محلياً، وستتم محاولة المزامنة لاحقاً."
+            }
+        }
     }
     
     func toggleBookmark(_ pollId: UUID) {
@@ -161,6 +274,17 @@ final class AppStore: ObservableObject {
         newPoll.authorAvatar = currentUser.avatarInitial
         polls.insert(newPoll, at: 0)
         persistPolls()
+
+        guard isRemoteEnabled else { return }
+        Task {
+            do {
+                let remotePoll = try await pollRepository.createPoll(newPoll, session: authSession)
+                replacePoll(remotePoll)
+                persistPolls()
+            } catch {
+                appMessage = "تم نشر الاستطلاع محلياً، ولم تكتمل مزامنته بعد."
+            }
+        }
     }
     
     var activePolls: [Poll] {
@@ -204,11 +328,38 @@ final class AppStore: ObservableObject {
         )
         redemptions.insert(redemption, at: 0)
         persistRedemptions()
+
+        guard isRemoteEnabled else { return redemption }
+        Task {
+            do {
+                let mutation = try await rewardsRepository.redeem(gift, session: authSession)
+                currentUser = mutation.user.domain
+                redemptions.removeAll { $0.id == redemption.id }
+                redemptions.insert(mutation.redemption.domain, at: 0)
+                persistUser()
+                persistRedemptions()
+            } catch {
+                appMessage = "تم إنشاء كود تجريبي محلياً، ولم تكتمل مزامنته بعد."
+            }
+        }
         return redemption
     }
 
     func giftRecommendationReason(for gift: Gift) -> String {
         TrendXAI.giftReason(gift: gift, userPoints: currentUser.points)
+    }
+
+    func composePoll(question: String, topicName: String?, type: PollType) async -> AIComposeResult {
+        await aiRepository.composePoll(
+            question: question,
+            topicName: topicName,
+            type: type,
+            session: authSession
+        )
+    }
+
+    func generateInsight(for poll: Poll) async -> String {
+        await aiRepository.pollInsight(for: poll, session: authSession)
     }
 
     private func score(for poll: Poll) -> Int {
@@ -220,6 +371,14 @@ final class AppStore: ObservableObject {
         value += min(poll.totalVotes, 120) / 4
         value += poll.aiInsight == nil ? 0 : 12
         return value
+    }
+
+    private func replacePoll(_ poll: Poll) {
+        if let index = polls.firstIndex(where: { $0.id == poll.id }) {
+            polls[index] = poll
+        } else {
+            polls.insert(poll, at: 0)
+        }
     }
     
     // MARK: - Persistence

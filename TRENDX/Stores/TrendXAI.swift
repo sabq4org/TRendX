@@ -233,6 +233,20 @@ enum TrendXAI {
         }
     }
 
+    static func suggestedQuestion(topicName: String?, type: PollType) -> String {
+        let topic = topicName ?? "هذا الموضوع"
+        switch type {
+        case .singleChoice:
+            return "ما الخيار الأكثر تأثيراً في \(topic) خلال الفترة القادمة؟"
+        case .multipleChoice:
+            return "ما العوامل التي ترى أنها تؤثر في \(topic)؟"
+        case .rating:
+            return "كيف تقيّم وضع \(topic) حالياً؟"
+        case .linearScale:
+            return "على مقياس من 1 إلى 10، ما مدى أهمية \(topic) بالنسبة لك؟"
+        }
+    }
+
     // MARK: - Section subtitles (ambient copy)
 
     static let trendingSubtitle   = "رصد لحظي بواسطة TRENDX AI"

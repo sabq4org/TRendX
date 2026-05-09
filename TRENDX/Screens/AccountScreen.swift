@@ -82,12 +82,16 @@ struct AccountScreen: View {
                 }
 
                 Button {
-                    store.selectedTab = .home
+                    if store.isRemoteEnabled {
+                        store.signOut()
+                    } else {
+                        store.selectedTab = .home
+                    }
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "rectangle.portrait.and.arrow.right")
                             .font(.system(size: 16, weight: .semibold))
-                        Text("العودة للرادار")
+                        Text(store.isRemoteEnabled ? "تسجيل الخروج" : "العودة للرادار")
                             .font(.trendxBodyBold())
                     }
                     .foregroundStyle(TrendXTheme.error)
