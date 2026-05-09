@@ -10,7 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "tsx src/migrate.ts",
+    "migrate": "node dist/migrate.js",
+    "migrate:dev": "tsx src/migrate.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
