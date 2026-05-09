@@ -1,0 +1,524 @@
+// TRENDX Beta — Production-grade schema for the data intelligence platform.
+//
+// Design principles:
+// - Demographics captured both on the user (canonical) AND denormalized onto
+//   each vote/response (so historical analytics survive user updates and
+//   even user deletion when needed).
+// - `analytics_snapshots` and `ai_insights` are append-only JSONB stores so
+//   we can evolve the analytics schema without DB migrations every iteration.
+// - All money/points changes go through `points_ledger` so the user balance
+//   is always reconcilable.
+// - UUIDs everywhere, snake_case columns to match the existing API contract.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// MARK: - Enums
+
+enum UserRole {
+  respondent
+  publisher
+  admin
+}
+
+enum UserTier {
+  free
+  premium
+  enterprise
+}
+
+enum DeviceType {
+  ios
+  ipad
+  android
+  web
+  unknown
+}
+
+enum Gender {
+  male
+  female
+  other
+  unspecified
+}
+
+enum PollType {
+  single_choice
+  multiple_choice
+  rating
+  linear_scale
+}
+
+enum PollStatus {
+  draft
+  active
+  ended
+}
+
+enum SurveyStatus {
+  draft
+  active
+  ended
+}
+
+enum InsightType {
+  poll
+  survey
+  sector
+  recommendation
+  question_quality
+  auto_tag
+}
+
+enum LedgerType {
+  vote_reward
+  survey_reward
+  redemption
+  signup_bonus
+  manual_adjustment
+  refund
+}
+
+// MARK: - Identity
+
+model User {
+  id           String @id @default(uuid()) @db.Uuid
+  email        String @unique
+  passwordHash String @map("password_hash")
+  passwordSalt String @map("password_salt")
+
+  name          String
+  avatarUrl     String? @map("avatar_url")
+  avatarInitial String  @default("م") @map("avatar_initial")
+  phone         String?
+
+  role UserRole @default(respondent)
+  tier UserTier @default(free)
+
+  // Demographics (the strategic asset of the platform)
+  gender     Gender     @default(unspecified)
+  birthYear  Int?       @map("birth_year")
+  city       String?
+  region     String?
+  country    String     @default("SA")
+  deviceType DeviceType @default(unknown) @map("device_type")
+  osVersion  String?    @map("os_version")
+
+  // Wallet (the running totals — source of truth is points_ledger)
+  points    Int     @default(100)
+  coins     Decimal @default(16.67) @db.Decimal(12, 2)
+  isPremium Boolean @default(false) @map("is_premium")
+
+  // Engagement
+  followedTopics String[] @default([]) @map("followed_topics")
+  completedPolls String[] @default([]) @map("completed_polls")
+
+  joinedAt     DateTime @default(now()) @map("joined_at")
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  publishedPolls   Poll[]           @relation("PollPublisher")
+  publishedSurveys Survey[]         @relation("SurveyPublisher")
+  votes            Vote[]
+  surveyResponses  SurveyResponse[]
+  redemptions      Redemption[]
+  ledgerEntries    PointsLedger[]
+  webhooks         Webhook[]
+
+  @@index([role])
+  @@index([tier])
+  @@index([city])
+  @@map("users")
+}
+
+// MARK: - Sectors (self-referential hierarchy: sector > topic > sub-topic)
+
+model Topic {
+  id    String @id @default(uuid()) @db.Uuid
+  name  String @unique
+  slug  String @unique
+  icon  String
+  color String @default("blue")
+
+  parentId String? @map("parent_id") @db.Uuid
+  parent   Topic?  @relation("TopicTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Topic[] @relation("TopicTree")
+
+  followersCount Int @default(0) @map("followers_count")
+  postsCount     Int @default(0) @map("posts_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  polls   Poll[]
+  surveys Survey[]
+
+  @@index([parentId])
+  @@map("topics")
+}
+
+// MARK: - Polls
+
+model Poll {
+  id          String  @id @default(uuid()) @db.Uuid
+  publisherId String? @map("publisher_id") @db.Uuid
+  publisher   User?   @relation("PollPublisher", fields: [publisherId], references: [id], onDelete: SetNull)
+
+  title       String  @db.VarChar(500)
+  description String?
+  imageUrl    String? @map("image_url")
+  coverStyle  String? @map("cover_style")
+
+  // Cached author identity for fast feed rendering even after publisher deletion
+  authorName       String  @map("author_name")
+  authorAvatar     String  @default("م") @map("author_avatar")
+  authorIsVerified Boolean @default(false) @map("author_is_verified")
+
+  topicId   String?  @map("topic_id") @db.Uuid
+  topic     Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  topicTags String[] @default([]) @map("topic_tags")
+
+  type   PollType   @default(single_choice)
+  status PollStatus @default(active)
+
+  totalVotes  Int @default(0) @map("total_votes")
+  totalViews  Int @default(0) @map("total_views")
+  totalShares Int @default(0) @map("total_shares")
+  totalSaves  Int @default(0) @map("total_saves")
+
+  rewardPoints Int @default(50) @map("reward_points")
+  durationDays Int @default(7) @map("duration_days")
+
+  isFeatured Boolean @default(false) @map("is_featured")
+  isBreaking Boolean @default(false) @map("is_breaking")
+
+  // Latest cached AI insight for fast detail view; full history lives in ai_insights.
+  aiInsight String? @map("ai_insight")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  options PollOption[]
+  votes   Vote[]
+
+  @@index([status])
+  @@index([topicId])
+  @@index([expiresAt])
+  @@index([publisherId])
+  @@map("polls")
+}
+
+model PollOption {
+  id     String @id @default(uuid()) @db.Uuid
+  pollId String @map("poll_id") @db.Uuid
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  text         String
+  displayOrder Int    @default(0) @map("display_order")
+  votesCount   Int    @default(0) @map("votes_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  votes Vote[]
+
+  @@index([pollId])
+  @@map("poll_options")
+}
+
+model Vote {
+  id       String     @id @default(uuid()) @db.Uuid
+  pollId   String     @map("poll_id") @db.Uuid
+  poll     Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId String     @map("option_id") @db.Uuid
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId   String     @map("user_id") @db.Uuid
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Demographics frozen at vote time so analytics are reproducible
+  deviceType DeviceType @default(unknown) @map("device_type")
+  osVersion  String?    @map("os_version")
+  city       String?
+  region     String?
+  country    String?
+  gender     Gender     @default(unspecified)
+  ageGroup   String?    @map("age_group") // "18-24" | "25-34" | "35-44" | "45-54" | "55+"
+
+  secondsToVote Int?    @map("seconds_to_vote")
+  changedVote   Boolean @default(false) @map("changed_vote")
+
+  votedAt DateTime @default(now()) @map("voted_at")
+
+  @@unique([pollId, userId])
+  @@index([pollId])
+  @@index([votedAt])
+  @@index([city])
+  @@index([gender])
+  @@map("votes")
+}
+
+// MARK: - Surveys
+
+model Survey {
+  id          String  @id @default(uuid()) @db.Uuid
+  publisherId String? @map("publisher_id") @db.Uuid
+  publisher   User?   @relation("SurveyPublisher", fields: [publisherId], references: [id], onDelete: SetNull)
+
+  title       String
+  description String?
+  imageUrl    String? @map("image_url")
+  coverStyle  String? @map("cover_style")
+
+  topicId   String?  @map("topic_id") @db.Uuid
+  topic     Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  topicTags String[] @default([]) @map("topic_tags")
+
+  status SurveyStatus @default(active)
+
+  rewardPoints Int @default(120) @map("reward_points")
+  durationDays Int @default(14) @map("duration_days")
+
+  totalResponses       Int @default(0) @map("total_responses")
+  totalCompletes       Int @default(0) @map("total_completes")
+  avgCompletionSeconds Int @default(0) @map("avg_completion_seconds")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  questions SurveyQuestion[]
+  responses SurveyResponse[]
+
+  @@index([status])
+  @@index([topicId])
+  @@index([publisherId])
+  @@map("surveys")
+}
+
+model SurveyQuestion {
+  id       String @id @default(uuid()) @db.Uuid
+  surveyId String @map("survey_id") @db.Uuid
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  title        String   @db.VarChar(500)
+  description  String?
+  type         PollType @default(single_choice)
+  displayOrder Int      @default(0) @map("display_order")
+  rewardPoints Int      @default(25) @map("reward_points")
+  isRequired   Boolean  @default(true) @map("is_required")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  options SurveyQuestionOption[]
+  answers SurveyAnswer[]
+
+  @@index([surveyId])
+  @@map("survey_questions")
+}
+
+model SurveyQuestionOption {
+  id         String         @id @default(uuid()) @db.Uuid
+  questionId String         @map("question_id") @db.Uuid
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  text         String
+  displayOrder Int    @default(0) @map("display_order")
+  votesCount   Int    @default(0) @map("votes_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  answers SurveyAnswer[]
+
+  @@index([questionId])
+  @@map("survey_question_options")
+}
+
+model SurveyResponse {
+  id       String @id @default(uuid()) @db.Uuid
+  surveyId String @map("survey_id") @db.Uuid
+  survey   Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId   String @map("user_id") @db.Uuid
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  isComplete Boolean @default(false) @map("is_complete")
+
+  // Frozen demographics for analytics reproducibility
+  deviceType DeviceType @default(unknown) @map("device_type")
+  osVersion  String?    @map("os_version")
+  city       String?
+  region     String?
+  country    String?
+  gender     Gender     @default(unspecified)
+  ageGroup   String?    @map("age_group")
+
+  startedAt         DateTime  @default(now()) @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+  completionSeconds Int?      @map("completion_seconds")
+
+  answers SurveyAnswer[]
+
+  @@unique([surveyId, userId])
+  @@index([surveyId])
+  @@index([completedAt])
+  @@map("survey_responses")
+}
+
+model SurveyAnswer {
+  id         String                @id @default(uuid()) @db.Uuid
+  responseId String                @map("response_id") @db.Uuid
+  response   SurveyResponse        @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String                @map("question_id") @db.Uuid
+  question   SurveyQuestion        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionId   String?               @map("option_id") @db.Uuid
+  option     SurveyQuestionOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+
+  // For free-text or numeric answer types (rating/scale future-proofing)
+  textValue    String? @map("text_value")
+  numericValue Int?    @map("numeric_value")
+
+  secondsToAnswer Int?     @map("seconds_to_answer")
+  answeredAt      DateTime @default(now()) @map("answered_at")
+
+  @@index([responseId])
+  @@index([questionId])
+  @@map("survey_answers")
+}
+
+// MARK: - Rewards
+
+model Gift {
+  id              String  @id @default(uuid()) @db.Uuid
+  name            String
+  brandName       String  @map("brand_name")
+  brandLogo       String  @default("") @map("brand_logo")
+  category        String
+  pointsRequired  Int     @map("points_required")
+  valueInRiyal    Decimal @map("value_in_riyal") @db.Decimal(12, 2)
+  imageUrl        String? @map("image_url")
+  isRedeemAtStore Boolean @default(true) @map("is_redeem_at_store")
+  isAvailable     Boolean @default(true) @map("is_available")
+  inventoryCount  Int?    @map("inventory_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  redemptions Redemption[]
+
+  @@unique([name, brandName])
+  @@index([isAvailable])
+  @@map("gifts")
+}
+
+model Redemption {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  giftId String @map("gift_id") @db.Uuid
+  gift   Gift   @relation(fields: [giftId], references: [id])
+
+  giftName     String  @map("gift_name")
+  brandName    String  @map("brand_name")
+  pointsSpent  Int     @map("points_spent")
+  valueInRiyal Decimal @map("value_in_riyal") @db.Decimal(12, 2)
+  code         String  @unique
+
+  redeemedAt DateTime @default(now()) @map("redeemed_at")
+
+  @@index([userId])
+  @@map("redemptions")
+}
+
+model PointsLedger {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount       Int // negative = debit, positive = credit
+  type         LedgerType
+  refType      String?    @map("ref_type") // "poll" | "survey" | "redemption"
+  refId        String?    @map("ref_id") @db.Uuid
+  description  String?
+  balanceAfter Int        @map("balance_after")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("points_ledger")
+}
+
+// MARK: - Analytics & AI
+
+model AnalyticsSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityId   String   @map("entity_id") @db.Uuid
+  entityType String   @map("entity_type") // "poll" | "survey" | "topic"
+  payload    Json     @db.JsonB
+  computedAt DateTime @default(now()) @map("computed_at")
+
+  @@unique([entityId, entityType, computedAt])
+  @@index([entityId, entityType])
+  @@map("analytics_snapshots")
+}
+
+model AIInsight {
+  id            String      @id @default(uuid()) @db.Uuid
+  entityId      String      @map("entity_id") @db.Uuid
+  entityType    String      @map("entity_type")
+  insightType   InsightType @map("insight_type")
+  modelUsed     String      @map("model_used")
+  promptVersion String      @map("prompt_version")
+
+  content   Json   @db.JsonB
+  latencyMs Int?   @map("latency_ms")
+  status    String @default("ok")
+
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  @@index([entityId, entityType])
+  @@index([insightType])
+  @@map("ai_insights")
+}
+
+// MARK: - Enterprise
+
+model Webhook {
+  id          String @id @default(uuid()) @db.Uuid
+  publisherId String @map("publisher_id") @db.Uuid
+  publisher   User   @relation(fields: [publisherId], references: [id], onDelete: Cascade)
+
+  url      String
+  events   String[] @default([])
+  secret   String
+  isActive Boolean  @default(true) @map("is_active")
+
+  lastFiredAt  DateTime? @map("last_fired_at")
+  failureCount Int       @default(0) @map("failure_count")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([publisherId])
+  @@map("webhooks")
+}
+
+model AuditLog {
+  id           String  @id @default(uuid()) @db.Uuid
+  actorId      String? @map("actor_id") @db.Uuid
+  action       String
+  resourceType String  @map("resource_type")
+  resourceId   String? @map("resource_id") @db.Uuid
+
+  ip        String?
+  userAgent String? @map("user_agent")
+  metadata  Json?   @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@map("audit_log")
+}

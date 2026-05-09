@@ -2,7 +2,8 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { randomUUID } from "node:crypto";
-import { sql, closePool } from "./db.js";
+import { Prisma } from "@prisma/client";
+import { prisma, closeDb } from "./db.js";
 import {
   hashPassword,
   makeSalt,
@@ -10,24 +11,51 @@ import {
   verifyPassword,
   verifyToken,
 } from "./auth.js";
+import { snake } from "./lib/snake.js";
+import {
+  ageGroupFromBirthYear,
+  normalizeDevice,
+  normalizeGender,
+} from "./lib/demographics.js";
+import { aiJSON } from "./lib/ai.js";
+import {
+  giftDTO,
+  pollDTO,
+  redemptionDTO,
+  surveyDTO,
+  topicDTO,
+  userDTO,
+} from "./lib/dto.js";
+
+// MARK: - Types
 
 type Variables = {
   userId: string;
+  userTier: string;
+  userRole: string;
 };
 
 const app = new Hono<{ Variables: Variables }>();
 
-app.use("*", cors({
-  origin: "*",
-  allowMethods: ["GET", "POST", "OPTIONS"],
-  allowHeaders: ["Authorization", "Content-Type"],
-}));
+// MARK: - Global middleware
+
+app.use(
+  "*",
+  cors({
+    origin: "*",
+    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Authorization", "Content-Type"],
+  }),
+);
+
+// MARK: - Public routes
 
 app.get("/", (c) =>
   c.json({
     service: "trendx-railway-api",
     status: "ok",
-    docs: "Public: GET /health, POST /auth/signup, POST /auth/signin. Everything else needs Authorization: Bearer <jwt>.",
+    docs: "Public: GET /health, POST /auth/signup, POST /auth/signin. Everything else requires Authorization: Bearer <jwt>.",
+    version: "0.2.0",
   }),
 );
 
@@ -36,11 +64,21 @@ app.get("/health", (c) => c.json({ ok: true, service: "trendx-railway-api" }));
 // MARK: - Auth
 
 app.post("/auth/signup", async (c) => {
-  const body = await c.req.json<{ name?: string; email?: string; password?: string }>();
+  const body = await c.req.json<{
+    name?: string;
+    email?: string;
+    password?: string;
+    gender?: string;
+    birth_year?: number;
+    city?: string;
+    region?: string;
+    device_type?: string;
+    os_version?: string;
+  }>();
+
   const email = (body.email ?? "").trim().toLowerCase();
   const name = (body.name ?? "").trim();
   const password = body.password ?? "";
-
   if (!email || !password || password.length < 6 || !name) {
     return c.json({ error: "Invalid signup payload" }, 400);
   }
@@ -49,26 +87,40 @@ app.post("/auth/signup", async (c) => {
   const passwordHash = await hashPassword(password, salt);
 
   try {
-    const users = await sql`
-      insert into beta_users (email, password_hash, password_salt)
-      values (${email}, ${passwordHash}, ${salt})
-      returning id, email
-    `;
-    const user = users[0]!;
-
-    const profiles = await sql`
-      insert into profiles (id, name, email, avatar_initial)
-      values (${user.id}, ${name}, ${email}, ${name.slice(0, 1) || "م"})
-      returning *
-    `;
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        passwordSalt: salt,
+        name,
+        avatarInitial: name.slice(0, 1) || "م",
+        gender: normalizeGender(body.gender),
+        birthYear: body.birth_year ?? null,
+        city: body.city ?? null,
+        region: body.region ?? null,
+        deviceType: normalizeDevice(body.device_type),
+        osVersion: body.os_version ?? null,
+        ledgerEntries: {
+          create: {
+            amount: 100,
+            type: "signup_bonus",
+            description: "رصيد البداية لمستخدم جديد",
+            balanceAfter: 100,
+          },
+        },
+      },
+    });
 
     return c.json({
-      access_token: signToken({ sub: user.id, email }, requireSecret(c)),
+      access_token: signToken({ sub: user.id, email }, requireSecret()),
       refresh_token: null,
-      user: profiles[0],
+      user: userDTO(user),
     });
   } catch (error) {
-    if (isUniqueViolation(error)) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
       return c.json({ error: "Email already registered" }, 409);
     }
     throw error;
@@ -78,24 +130,30 @@ app.post("/auth/signup", async (c) => {
 app.post("/auth/signin", async (c) => {
   const body = await c.req.json<{ email?: string; password?: string }>();
   const email = (body.email ?? "").trim().toLowerCase();
-  const password = body.password ?? "";
 
-  const users = await sql`select * from beta_users where email = ${email} limit 1`;
-  const user = users[0];
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return c.json({ error: "Invalid credentials" }, 401);
 
-  const ok = await verifyPassword(password, user.password_salt, user.password_hash);
+  const ok = await verifyPassword(
+    body.password ?? "",
+    user.passwordSalt,
+    user.passwordHash,
+  );
   if (!ok) return c.json({ error: "Invalid credentials" }, 401);
 
-  const profiles = await sql`select * from profiles where id = ${user.id} limit 1`;
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastActiveAt: new Date() },
+  });
+
   return c.json({
-    access_token: signToken({ sub: user.id, email }, requireSecret(c)),
+    access_token: signToken({ sub: user.id, email }, requireSecret()),
     refresh_token: null,
-    user: profiles[0],
+    user: userDTO(user),
   });
 });
 
-// MARK: - Auth middleware (everything below requires a token)
+// MARK: - Auth middleware (everything below needs a token)
 
 app.use("*", async (c, next) => {
   const path = c.req.path;
@@ -111,119 +169,259 @@ app.use("*", async (c, next) => {
   if (!token) return c.json({ error: "Missing token" }, 401);
 
   try {
-    const payload = verifyToken(token, requireSecret(c));
+    const payload = verifyToken(token, requireSecret());
     c.set("userId", payload.sub);
   } catch {
     return c.json({ error: "Invalid or expired token" }, 401);
   }
-
   return next();
 });
 
 // MARK: - Profile
 
 app.get("/profile", async (c) => {
-  const userId = c.get("userId");
-  const profiles = await sql`select * from profiles where id = ${userId} limit 1`;
-  if (!profiles[0]) return c.json({ error: "Profile not found" }, 404);
-  return c.json(profiles[0]);
+  const user = await prisma.user.findUnique({
+    where: { id: c.get("userId") },
+  });
+  if (!user) return c.json({ error: "Profile not found" }, 404);
+  return c.json(userDTO(user));
 });
 
 app.post("/profile", async (c) => {
-  const userId = c.get("userId");
   const body = await c.req.json<{
-    name: string;
-    email: string;
+    name?: string;
+    email?: string;
     avatar_initial?: string;
+    avatar_url?: string;
+    phone?: string;
+    gender?: string;
+    birth_year?: number;
+    city?: string;
+    region?: string;
   }>();
 
-  const profiles = await sql`
-    update profiles
-    set name = ${body.name},
-        email = ${body.email},
-        avatar_initial = ${body.avatar_initial ?? body.name.slice(0, 1)},
-        updated_at = now()
-    where id = ${userId}
-    returning *
-  `;
-  return c.json(profiles[0]);
+  const updates: Record<string, unknown> = {};
+  if (body.name !== undefined) updates.name = body.name;
+  if (body.email !== undefined) updates.email = body.email.trim().toLowerCase();
+  if (body.avatar_initial !== undefined) updates.avatarInitial = body.avatar_initial;
+  if (body.avatar_url !== undefined) updates.avatarUrl = body.avatar_url;
+  if (body.phone !== undefined) updates.phone = body.phone;
+  if (body.gender !== undefined) updates.gender = normalizeGender(body.gender);
+  if (body.birth_year !== undefined) updates.birthYear = body.birth_year;
+  if (body.city !== undefined) updates.city = body.city;
+  if (body.region !== undefined) updates.region = body.region;
+
+  const user = await prisma.user.update({
+    where: { id: c.get("userId") },
+    data: updates,
+  });
+  return c.json(userDTO(user));
+});
+
+// MARK: - Topics
+
+app.get("/topics", async (c) => {
+  const userId = c.get("userId");
+  const topics = await prisma.topic.findMany({ orderBy: { name: "asc" } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { followedTopics: true },
+  });
+  const followed = new Set(user?.followedTopics ?? []);
+  return c.json(
+    topics.map((t) => ({
+      ...topicDTO(t),
+      is_following: followed.has(t.id),
+    })),
+  );
+});
+
+app.post("/topics/:id/follow", async (c) => {
+  const userId = c.get("userId");
+  const topicId = c.req.param("id");
+  const [topic, user] = await Promise.all([
+    prisma.topic.findUnique({ where: { id: topicId } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { followedTopics: true } }),
+  ]);
+  if (!topic) return c.json({ error: "Topic not found" }, 404);
+  if (user?.followedTopics.includes(topicId)) {
+    return c.json({ ok: true, already: true });
+  }
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { followedTopics: { push: topicId } },
+    }),
+    prisma.topic.update({
+      where: { id: topicId },
+      data: { followersCount: { increment: 1 } },
+    }),
+  ]);
+  return c.json({ ok: true });
+});
+
+app.post("/topics/:id/unfollow", async (c) => {
+  const userId = c.get("userId");
+  const topicId = c.req.param("id");
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { followedTopics: true },
+  });
+  if (!user?.followedTopics.includes(topicId)) {
+    return c.json({ ok: true, already: true });
+  }
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { followedTopics: user.followedTopics.filter((t) => t !== topicId) },
+    }),
+    prisma.topic.update({
+      where: { id: topicId },
+      data: { followersCount: { decrement: 1 } },
+    }),
+  ]);
+  return c.json({ ok: true });
 });
 
 // MARK: - Bootstrap
 
 app.get("/bootstrap", async (c) => {
   const userId = c.get("userId");
-
-  const [topics, profileRows, polls, options, votes] = await Promise.all([
-    sql`select * from topics order by name asc`,
-    sql`select completed_polls, followed_topics from profiles where id = ${userId} limit 1`,
-    sql`select * from polls where status = 'نشط' order by created_at desc`,
-    sql`select * from poll_options order by created_at asc`,
-    sql`select poll_id, option_id from poll_votes where user_id = ${userId}`,
+  const [topics, polls, user, surveys] = await Promise.all([
+    prisma.topic.findMany({ orderBy: { name: "asc" } }),
+    prisma.poll.findMany({
+      where: { status: "active" },
+      include: {
+        options: { orderBy: { displayOrder: "asc" } },
+        votes: { where: { userId }, select: { userId: true, optionId: true } },
+        topic: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { followedTopics: true },
+    }),
+    prisma.survey.findMany({
+      where: { status: "active" },
+      include: {
+        questions: {
+          orderBy: { displayOrder: "asc" },
+          include: { options: { orderBy: { displayOrder: "asc" } } },
+        },
+        topic: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
   ]);
 
+  const followedSet = new Set(user?.followedTopics ?? []);
+  const topicsOut = topics.map((t) => ({
+    ...topicDTO(t),
+    is_following: followedSet.has(t.id),
+  }));
+
   return c.json({
-    topics,
-    polls: decoratePolls(polls, options, votes, profileRows[0] ?? {}),
+    topics: topicsOut,
+    polls: polls.map((p) => pollDTO(p, { userId })),
+    surveys: surveys.map(surveyDTO),
   });
 });
 
 // MARK: - Polls
 
+app.get("/polls", async (c) => {
+  const userId = c.get("userId");
+  const status = c.req.query("status");
+  const topicId = c.req.query("topic_id");
+  const polls = await prisma.poll.findMany({
+    where: {
+      status: status === "ended" ? "ended" : status === "draft" ? "draft" : "active",
+      topicId: topicId ?? undefined,
+    },
+    include: {
+      options: { orderBy: { displayOrder: "asc" } },
+      votes: { where: { userId }, select: { userId: true, optionId: true } },
+      topic: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return c.json(polls.map((p) => pollDTO(p, { userId })));
+});
+
+app.get("/polls/:id", async (c) => {
+  const userId = c.get("userId");
+  const poll = await prisma.poll.findUnique({
+    where: { id: c.req.param("id") },
+    include: {
+      options: { orderBy: { displayOrder: "asc" } },
+      votes: { where: { userId }, select: { userId: true, optionId: true } },
+      topic: true,
+    },
+  });
+  if (!poll) return c.json({ error: "Poll not found" }, 404);
+  return c.json(pollDTO(poll, { userId }));
+});
+
 app.post("/polls/create", async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json<{
-    poll: Record<string, any>;
+    poll: {
+      title: string;
+      description?: string;
+      image_url?: string;
+      cover_style?: string;
+      topic_id?: string;
+      topic_name?: string;
+      type?: string;
+      reward_points?: number;
+      duration_days?: number;
+      expires_at?: string;
+    };
     options: Array<{ text: string }>;
   }>();
 
-  const profileRows = await sql`
-    select name, avatar_initial from profiles where id = ${userId} limit 1
-  `;
-  const profile = profileRows[0];
+  const profile = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, avatarInitial: true },
+  });
   if (!profile) return c.json({ error: "Profile not found" }, 404);
 
-  const poll = body.poll ?? {};
-  const durationDays = Number(poll.duration_days ?? 7);
-  const expiresAt =
-    poll.expires_at ??
-    new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+  const durationDays = Number(body.poll.duration_days ?? 7);
+  const expiresAt = body.poll.expires_at
+    ? new Date(body.poll.expires_at)
+    : new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
 
-  const inserted = await sql`
-    insert into polls (
-      title, description, image_url, cover_style,
-      author_id, author_name, author_avatar,
-      topic_id, topic_name, type, status,
-      reward_points, duration_days, expires_at
-    )
-    values (
-      ${poll.title}, ${poll.description ?? null}, ${poll.image_url ?? null}, ${poll.cover_style ?? null},
-      ${userId}, ${profile.name}, ${profile.avatar_initial},
-      ${poll.topic_id ?? null}, ${poll.topic_name ?? null}, ${poll.type ?? "اختيار واحد"}, ${poll.status ?? "نشط"},
-      ${poll.reward_points ?? 50}, ${durationDays}, ${expiresAt}
-    )
-    returning *
-  `;
-
-  const newPoll = inserted[0]!;
-  const insertedOptions: any[] = [];
-  for (const option of body.options ?? []) {
-    const rows = await sql`
-      insert into poll_options (poll_id, text)
-      values (${newPoll.id}, ${option.text})
-      returning *
-    `;
-    insertedOptions.push(rows[0]);
-  }
-
-  return c.json({
-    poll: {
-      ...newPoll,
-      options: insertedOptions,
-      user_voted_option_id: null,
-      is_bookmarked: false,
+  const poll = await prisma.poll.create({
+    data: {
+      publisherId: userId,
+      title: body.poll.title,
+      description: body.poll.description ?? null,
+      imageUrl: body.poll.image_url ?? null,
+      coverStyle: body.poll.cover_style ?? null,
+      authorName: profile.name,
+      authorAvatar: profile.avatarInitial,
+      topicId: body.poll.topic_id ?? null,
+      type: (body.poll.type as any) ?? "single_choice",
+      rewardPoints: body.poll.reward_points ?? 50,
+      durationDays,
+      expiresAt,
+      options: {
+        create: (body.options ?? []).map((opt, idx) => ({
+          text: opt.text,
+          displayOrder: idx,
+        })),
+      },
+    },
+    include: {
+      options: { orderBy: { displayOrder: "asc" } },
+      topic: true,
     },
   });
+
+  return c.json({ poll: pollDTO(poll, { userId }) });
 });
 
 app.post("/polls/vote", async (c) => {
@@ -233,86 +431,340 @@ app.post("/polls/vote", async (c) => {
     pollId?: string;
     option_id?: string;
     optionId?: string;
+    seconds_to_vote?: number;
   }>();
   const pollId = body.poll_id ?? body.pollId;
   const optionId = body.option_id ?? body.optionId;
   if (!pollId || !optionId) return c.json({ error: "Missing poll or option" }, 400);
 
-  const inserted = await sql`
-    insert into poll_votes (poll_id, option_id, user_id)
-    values (${pollId}, ${optionId}, ${userId})
-    on conflict (poll_id, user_id) do nothing
-    returning id
-  `;
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return c.json({ error: "User not found" }, 404);
 
-  if (inserted.length === 0) {
-    return c.json({ error: "Already voted" }, 409);
+  const poll = await prisma.poll.findUnique({ where: { id: pollId } });
+  if (!poll) return c.json({ error: "Poll not found" }, 404);
+
+  const ageGroup = ageGroupFromBirthYear(user.birthYear);
+
+  let voteCreated = false;
+  try {
+    await prisma.$transaction([
+      prisma.vote.create({
+        data: {
+          pollId,
+          optionId,
+          userId,
+          deviceType: user.deviceType,
+          osVersion: user.osVersion,
+          city: user.city,
+          region: user.region,
+          country: user.country,
+          gender: user.gender,
+          ageGroup,
+          secondsToVote: body.seconds_to_vote ?? null,
+        },
+      }),
+      prisma.pollOption.update({
+        where: { id: optionId },
+        data: { votesCount: { increment: 1 } },
+      }),
+      prisma.poll.update({
+        where: { id: pollId },
+        data: { totalVotes: { increment: 1 } },
+      }),
+    ]);
+    voteCreated = true;
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return c.json({ error: "Already voted" }, 409);
+    }
+    throw error;
   }
 
-  await sql`
-    update poll_options
-    set votes_count = votes_count + 1
-    where id = ${optionId} and poll_id = ${pollId}
-  `;
+  if (voteCreated) {
+    const newBalance = user.points + poll.rewardPoints;
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          points: newBalance,
+          coins: newBalance / 6,
+          completedPolls: user.completedPolls.includes(pollId)
+            ? user.completedPolls
+            : { push: pollId },
+        },
+      }),
+      prisma.pointsLedger.create({
+        data: {
+          userId,
+          amount: poll.rewardPoints,
+          type: "vote_reward",
+          refType: "poll",
+          refId: pollId,
+          description: `مكافأة التصويت: ${poll.title.slice(0, 60)}`,
+          balanceAfter: newBalance,
+        },
+      }),
+    ]);
+  }
 
-  const pollRows = await sql`
-    update polls
-    set total_votes = total_votes + 1
-    where id = ${pollId}
-    returning *
-  `;
-  const poll = pollRows[0]!;
-  const points = Number(poll.reward_points ?? 0);
+  const fullPoll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    include: {
+      options: { orderBy: { displayOrder: "asc" } },
+      votes: { where: { userId }, select: { userId: true, optionId: true } },
+      topic: true,
+    },
+  });
+  const updatedUser = await prisma.user.findUnique({ where: { id: userId } });
 
-  const userRows = await sql`
-    update profiles
-    set points = points + ${points},
-        coins = (points + ${points}) / 6.0,
-        completed_polls = case
-          when ${pollId}::uuid = any(completed_polls) then completed_polls
-          else array_append(completed_polls, ${pollId}::uuid)
-        end,
-        updated_at = now()
-    where id = ${userId}
-    returning *
-  `;
+  // Generate AI insight (best-effort, never blocks the response if it fails)
+  const insight = await aiJSON<{ insight: string }>({
+    promptVersion: "poll-insight-v1",
+    system:
+      "Return Arabic JSON only with insight. Write one concise TRENDX poll insight.",
+    input: {
+      title: fullPoll?.title,
+      options: fullPoll?.options.map((o) => ({
+        text: o.text,
+        votes: o.votesCount,
+      })),
+      total_votes: fullPoll?.totalVotes,
+    },
+    fallback: {
+      insight: "النتائج بدأت تتشكل، وكل صوت جديد يضيف وضوحاً أكبر للصورة.",
+    },
+  });
 
-  const options = await sql`
-    select * from poll_options where poll_id = ${pollId} order by created_at asc
-  `;
-
-  const insight = await aiInsight({ poll: { ...poll, options } });
-  await sql`update polls set ai_insight = ${insight.insight} where id = ${pollId}`;
-  await logAI(userId, "ai-poll-insight", String(poll.title ?? ""), insight);
+  await prisma.poll.update({
+    where: { id: pollId },
+    data: { aiInsight: insight.insight },
+  });
+  await prisma.aIInsight.create({
+    data: {
+      entityId: pollId,
+      entityType: "poll",
+      insightType: "poll",
+      modelUsed: insight.modelUsed ?? "fallback",
+      promptVersion: insight.promptVersion ?? "poll-insight-v1",
+      content: { insight: insight.insight },
+      latencyMs: insight.latencyMs ?? null,
+    },
+  });
 
   return c.json({
-    poll: {
-      ...poll,
-      options,
-      ai_insight: insight.insight,
-      user_voted_option_id: optionId,
-      is_bookmarked: false,
-    },
-    user: userRows[0],
+    poll: pollDTO(
+      { ...fullPoll!, aiInsight: insight.insight },
+      { userId },
+    ),
+    user: userDTO(updatedUser!),
     insight: insight.insight,
   });
 });
 
-// MARK: - Gifts & Redemptions
+// MARK: - Surveys
+
+app.get("/surveys", async (c) => {
+  const surveys = await prisma.survey.findMany({
+    where: { status: "active" },
+    include: {
+      questions: {
+        orderBy: { displayOrder: "asc" },
+        include: { options: { orderBy: { displayOrder: "asc" } } },
+      },
+      topic: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return c.json(surveys.map(surveyDTO));
+});
+
+app.get("/surveys/:id", async (c) => {
+  const survey = await prisma.survey.findUnique({
+    where: { id: c.req.param("id") },
+    include: {
+      questions: {
+        orderBy: { displayOrder: "asc" },
+        include: { options: { orderBy: { displayOrder: "asc" } } },
+      },
+      topic: true,
+    },
+  });
+  if (!survey) return c.json({ error: "Survey not found" }, 404);
+  return c.json(surveyDTO(survey));
+});
+
+app.post("/surveys/create", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{
+    survey: {
+      title: string;
+      description?: string;
+      cover_style?: string;
+      topic_id?: string;
+      reward_points?: number;
+      duration_days?: number;
+    };
+    questions: Array<{
+      title: string;
+      type?: string;
+      reward_points?: number;
+      options: Array<{ text: string }>;
+    }>;
+  }>();
+
+  const durationDays = Number(body.survey.duration_days ?? 14);
+  const survey = await prisma.survey.create({
+    data: {
+      publisherId: userId,
+      title: body.survey.title,
+      description: body.survey.description ?? null,
+      coverStyle: body.survey.cover_style ?? null,
+      topicId: body.survey.topic_id ?? null,
+      rewardPoints: body.survey.reward_points ?? 120,
+      durationDays,
+      expiresAt: new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000),
+      questions: {
+        create: body.questions.map((q, qIdx) => ({
+          title: q.title,
+          type: (q.type as any) ?? "single_choice",
+          displayOrder: qIdx,
+          rewardPoints: q.reward_points ?? 25,
+          options: {
+            create: q.options.map((o, oIdx) => ({
+              text: o.text,
+              displayOrder: oIdx,
+            })),
+          },
+        })),
+      },
+    },
+    include: {
+      questions: {
+        orderBy: { displayOrder: "asc" },
+        include: { options: { orderBy: { displayOrder: "asc" } } },
+      },
+      topic: true,
+    },
+  });
+  return c.json({ survey: surveyDTO(survey) });
+});
+
+app.post("/surveys/:id/respond", async (c) => {
+  const userId = c.get("userId");
+  const surveyId = c.req.param("id");
+  const body = await c.req.json<{
+    answers: Array<{ question_id: string; option_id: string; seconds?: number }>;
+    completion_seconds?: number;
+  }>();
+
+  const [user, survey] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.survey.findUnique({
+      where: { id: surveyId },
+      include: { questions: true },
+    }),
+  ]);
+  if (!user || !survey) return c.json({ error: "Not found" }, 404);
+
+  const requiredQuestionCount = survey.questions.filter((q) => q.isRequired).length;
+  const isComplete = body.answers.length >= requiredQuestionCount;
+  const ageGroup = ageGroupFromBirthYear(user.birthYear);
+
+  try {
+    const response = await prisma.surveyResponse.create({
+      data: {
+        surveyId,
+        userId,
+        isComplete,
+        completedAt: isComplete ? new Date() : null,
+        completionSeconds: body.completion_seconds ?? null,
+        deviceType: user.deviceType,
+        osVersion: user.osVersion,
+        city: user.city,
+        region: user.region,
+        country: user.country,
+        gender: user.gender,
+        ageGroup,
+        answers: {
+          create: body.answers.map((a) => ({
+            questionId: a.question_id,
+            optionId: a.option_id,
+            secondsToAnswer: a.seconds ?? null,
+          })),
+        },
+      },
+    });
+
+    await prisma.$transaction([
+      ...body.answers.map((a) =>
+        prisma.surveyQuestionOption.update({
+          where: { id: a.option_id },
+          data: { votesCount: { increment: 1 } },
+        }),
+      ),
+      prisma.survey.update({
+        where: { id: surveyId },
+        data: {
+          totalResponses: { increment: 1 },
+          totalCompletes: isComplete ? { increment: 1 } : undefined,
+        },
+      }),
+    ]);
+
+    if (isComplete) {
+      const reward = survey.rewardPoints;
+      const newBalance = user.points + reward;
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: { points: newBalance, coins: newBalance / 6 },
+        }),
+        prisma.pointsLedger.create({
+          data: {
+            userId,
+            amount: reward,
+            type: "survey_reward",
+            refType: "survey",
+            refId: surveyId,
+            description: `مكافأة الاستبيان: ${survey.title.slice(0, 60)}`,
+            balanceAfter: newBalance,
+          },
+        }),
+      ]);
+    }
+
+    return c.json({ ok: true, response_id: response.id, is_complete: isComplete });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return c.json({ error: "Already responded" }, 409);
+    }
+    throw error;
+  }
+});
+
+// MARK: - Gifts
 
 app.get("/gifts", async () => {
-  const rows = await sql`
-    select * from gifts where is_available = true order by points_required asc
-  `;
-  return Response.json(rows);
+  const rows = await prisma.gift.findMany({
+    where: { isAvailable: true },
+    orderBy: { pointsRequired: "asc" },
+  });
+  return Response.json(rows.map(giftDTO));
 });
 
 app.get("/redemptions", async (c) => {
-  const userId = c.get("userId");
-  const rows = await sql`
-    select * from redemptions where user_id = ${userId} order by redeemed_at desc
-  `;
-  return c.json(rows);
+  const rows = await prisma.redemption.findMany({
+    where: { userId: c.get("userId") },
+    orderBy: { redeemedAt: "desc" },
+  });
+  return c.json(rows.map(redemptionDTO));
 });
 
 app.post("/gifts/redeem", async (c) => {
@@ -321,43 +773,63 @@ app.post("/gifts/redeem", async (c) => {
   const giftId = body.gift_id ?? body.giftId;
   if (!giftId) return c.json({ error: "Missing gift" }, 400);
 
-  const gifts = await sql`
-    select * from gifts where id = ${giftId} and is_available = true limit 1
-  `;
-  const gift = gifts[0];
-  if (!gift) return c.json({ error: "Gift not available" }, 404);
-
-  const profiles = await sql`select * from profiles where id = ${userId} limit 1`;
-  const profile = profiles[0];
-  if (!profile) return c.json({ error: "Profile not found" }, 404);
-
-  if (Number(profile.points) < Number(gift.points_required)) {
+  const [user, gift] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.gift.findUnique({ where: { id: giftId } }),
+  ]);
+  if (!user || !gift) return c.json({ error: "Not found" }, 404);
+  if (!gift.isAvailable) return c.json({ error: "Gift not available" }, 410);
+  if (user.points < gift.pointsRequired) {
     return c.json({ error: "Insufficient points" }, 402);
   }
 
   const code = `TX-${randomUUID().slice(0, 6).toUpperCase()}`;
+  const newBalance = user.points - gift.pointsRequired;
 
-  const redemptions = await sql`
-    insert into redemptions (
-      user_id, gift_id, gift_name, brand_name,
-      points_spent, value_in_riyal, code
-    )
-    values (
-      ${userId}, ${gift.id}, ${gift.name}, ${gift.brand_name},
-      ${gift.points_required}, ${gift.value_in_riyal}, ${code}
-    )
-    returning *
-  `;
+  const [redemption, updatedUser] = await prisma.$transaction([
+    prisma.redemption.create({
+      data: {
+        userId,
+        giftId,
+        giftName: gift.name,
+        brandName: gift.brandName,
+        pointsSpent: gift.pointsRequired,
+        valueInRiyal: gift.valueInRiyal,
+        code,
+      },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { points: newBalance, coins: newBalance / 6 },
+    }),
+    prisma.pointsLedger.create({
+      data: {
+        userId,
+        amount: -gift.pointsRequired,
+        type: "redemption",
+        refType: "redemption",
+        refId: giftId,
+        description: `استبدال هدية: ${gift.name}`,
+        balanceAfter: newBalance,
+      },
+    }),
+  ]);
 
-  const newPoints = Number(profile.points) - Number(gift.points_required);
-  const userRows = await sql`
-    update profiles
-    set points = ${newPoints}, coins = ${newPoints / 6.0}, updated_at = now()
-    where id = ${userId}
-    returning *
-  `;
+  return c.json({
+    redemption: redemptionDTO(redemption),
+    user: userDTO(updatedUser),
+  });
+});
 
-  return c.json({ redemption: redemptions[0], user: userRows[0] });
+// MARK: - Points ledger
+
+app.get("/points/ledger", async (c) => {
+  const rows = await prisma.pointsLedger.findMany({
+    where: { userId: c.get("userId") },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return c.json(snake(rows));
 });
 
 // MARK: - AI
@@ -375,127 +847,185 @@ app.post("/ai/compose-poll", async (c) => {
     clarityScore: 70,
     rationale: "اقتراح احتياطي جاهز للـ Beta.",
   };
-  const output = await aiJSON(
-    "Return Arabic JSON only with question, options, clarityScore, rationale.",
-    body,
+  const result = await aiJSON({
+    promptVersion: "compose-poll-v1",
+    system:
+      "Return Arabic JSON only with question, options, clarityScore, rationale.",
+    input: body,
     fallback,
-  );
-  await logAI(userId, "ai-compose-poll", String(body.question ?? ""), output);
-  return c.json(output);
+  });
+  await prisma.aIInsight.create({
+    data: {
+      entityId: userId,
+      entityType: "user",
+      insightType: "auto_tag",
+      modelUsed: result.modelUsed ?? "fallback",
+      promptVersion: result.promptVersion ?? "compose-poll-v1",
+      content: result as Prisma.InputJsonValue,
+      latencyMs: result.latencyMs ?? null,
+    },
+  });
+  return c.json(result);
 });
 
 app.post("/ai/poll-insight", async (c) => {
-  const userId = c.get("userId");
-  const body = await c.req.json<{ poll?: { title?: string } }>();
-  const output = await aiInsight(body);
-  await logAI(userId, "ai-poll-insight", String(body.poll?.title ?? ""), output);
-  return c.json(output);
+  const body = await c.req.json<{ poll?: { title?: string; options?: unknown } }>();
+  const result = await aiJSON({
+    promptVersion: "poll-insight-v1",
+    system:
+      "Return Arabic JSON only with insight. Write one concise TRENDX poll insight.",
+    input: body,
+    fallback: {
+      insight: "النتائج بدأت تتشكل، وكل صوت جديد يضيف وضوحاً أكبر للصورة.",
+    },
+  });
+  return c.json(result);
+});
+
+// MARK: - Analytics (Phase 2 — basic synchronous version, replaced by jobs later)
+
+app.get("/analytics/poll/:id", async (c) => {
+  const pollId = c.req.param("id");
+  const [poll, votes] = await Promise.all([
+    prisma.poll.findUnique({
+      where: { id: pollId },
+      include: {
+        options: { orderBy: { displayOrder: "asc" } },
+        topic: true,
+      },
+    }),
+    prisma.vote.findMany({ where: { pollId } }),
+  ]);
+  if (!poll) return c.json({ error: "Poll not found" }, 404);
+
+  // Demographic breakdown
+  const byGender = countBy(votes, (v) => v.gender);
+  const byAgeGroup = countBy(votes, (v) => v.ageGroup ?? "unknown");
+  const byCity = topN(countBy(votes, (v) => v.city ?? "غير محدد"), 10);
+  const byDevice = countBy(votes, (v) => v.deviceType);
+
+  // Behavioral
+  const decisionTimes = votes
+    .map((v) => v.secondsToVote)
+    .filter((v): v is number => typeof v === "number");
+  const avgDecisionSeconds =
+    decisionTimes.length > 0
+      ? Math.round(decisionTimes.reduce((a, b) => a + b, 0) / decisionTimes.length)
+      : null;
+
+  // Consensus
+  const sortedOptions = [...poll.options].sort((a, b) => b.votesCount - a.votesCount);
+  const total = poll.totalVotes;
+  const leadingPct = total > 0 && sortedOptions[0] ? (sortedOptions[0].votesCount / total) * 100 : 0;
+  const secondPct = total > 0 && sortedOptions[1] ? (sortedOptions[1].votesCount / total) * 100 : 0;
+  const polarization = leadingPct - secondPct;
+  const consensusLabel =
+    polarization >= 40 ? "إجماع قوي" :
+    polarization >= 20 ? "ميل واضح" :
+    polarization >= 10 ? "اختلاف خفيف" :
+                          "انقسام حاد";
+
+  return c.json({
+    sample_size: total,
+    confidence_level: total >= 1000 ? 99 : total >= 384 ? 95 : 90,
+    margin_of_error: total > 0 ? Number((1.96 * Math.sqrt(0.25 / total) * 100).toFixed(2)) : null,
+    data_freshness: new Date().toISOString(),
+    methodology_note:
+      "العيّنة محسوبة على المصوّتين الفعليين فقط. هامش الخطأ بافتراض أقصى تباين (p=0.5).",
+    poll: pollDTO(poll, { userId: c.get("userId") }),
+    breakdown: {
+      by_gender: byGender,
+      by_age_group: byAgeGroup,
+      by_city_top: byCity,
+      by_device: byDevice,
+    },
+    behavioral: {
+      avg_decision_seconds: avgDecisionSeconds,
+      change_vote_rate: total > 0
+        ? Math.round((votes.filter((v) => v.changedVote).length / total) * 100)
+        : 0,
+    },
+    consensus: {
+      leading_option_id: sortedOptions[0]?.id ?? null,
+      leading_percentage: Number(leadingPct.toFixed(2)),
+      polarization_index: Number(polarization.toFixed(2)),
+      label: consensusLabel,
+    },
+  });
+});
+
+app.get("/analytics/survey/:id", async (c) => {
+  const surveyId = c.req.param("id");
+  const survey = await prisma.survey.findUnique({
+    where: { id: surveyId },
+    include: {
+      questions: {
+        orderBy: { displayOrder: "asc" },
+        include: { options: { orderBy: { displayOrder: "asc" } } },
+      },
+      topic: true,
+    },
+  });
+  if (!survey) return c.json({ error: "Survey not found" }, 404);
+
+  const responses = await prisma.surveyResponse.findMany({
+    where: { surveyId },
+    include: { answers: true },
+  });
+
+  const total = responses.length;
+  const completed = responses.filter((r) => r.isComplete).length;
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const completionTimes = responses
+    .map((r) => r.completionSeconds)
+    .filter((v): v is number => typeof v === "number");
+  const avgCompletionSeconds = completionTimes.length > 0
+    ? Math.round(completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length)
+    : null;
+
+  const byGender = countBy(responses, (r) => r.gender);
+  const byAgeGroup = countBy(responses, (r) => r.ageGroup ?? "unknown");
+  const byCity = topN(countBy(responses, (r) => r.city ?? "غير محدد"), 10);
+  const byDevice = countBy(responses, (r) => r.deviceType);
+
+  return c.json({
+    sample_size: total,
+    completion_rate: completionRate,
+    avg_completion_seconds: avgCompletionSeconds,
+    confidence_level: total >= 1000 ? 99 : total >= 384 ? 95 : 90,
+    margin_of_error: total > 0 ? Number((1.96 * Math.sqrt(0.25 / total) * 100).toFixed(2)) : null,
+    data_freshness: new Date().toISOString(),
+    methodology_note:
+      "العيّنة محسوبة على المستجيبين الفعليين. معدل الإكمال = مكتمل / مبدوء.",
+    survey: surveyDTO(survey),
+    breakdown: {
+      by_gender: byGender,
+      by_age_group: byAgeGroup,
+      by_city_top: byCity,
+      by_device: byDevice,
+    },
+  });
 });
 
 // MARK: - Helpers
 
-function decoratePolls(
-  polls: any[],
-  options: any[],
-  votes: any[],
-  profile: any,
-): any[] {
-  const voteByPoll = new Map(votes.map((v) => [v.poll_id, v.option_id]));
-  const completed = new Set<string>(profile?.completed_polls ?? []);
-  const followed = new Set<string>(profile?.followed_topics ?? []);
-
-  return polls
-    .map((poll) => {
-      const pollOptions = options.filter((o) => o.poll_id === poll.id);
-      const totalVotes = Number(poll.total_votes ?? 0);
-      return {
-        ...poll,
-        options: pollOptions.map((o) => ({
-          ...o,
-          percentage: totalVotes > 0
-            ? (Number(o.votes_count) / totalVotes) * 100
-            : 0,
-        })),
-        user_voted_option_id: voteByPoll.get(poll.id) ?? null,
-        is_bookmarked: false,
-        score:
-          (followed.has(poll.topic_id) ? 70 : 0) +
-          (!completed.has(poll.id) ? 45 : 0) +
-          Math.min(totalVotes, 120) / 4,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+function countBy<T>(items: T[], keyFn: (t: T) => string): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const item of items) {
+    const key = keyFn(item);
+    result[key] = (result[key] ?? 0) + 1;
+  }
+  return result;
 }
 
-async function aiInsight(body: unknown) {
-  return aiJSON(
-    "Return Arabic JSON only with insight. Write one concise TRENDX poll insight.",
-    body,
-    {
-      insight: "النتائج بدأت تتشكل، وكل صوت جديد يضيف وضوحاً أكبر للصورة.",
-    },
+function topN(map: Record<string, number>, n: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n),
   );
 }
 
-async function aiJSON(
-  system: string,
-  input: unknown,
-  fallback: Record<string, unknown>,
-): Promise<Record<string, unknown> & { latencyMs?: number }> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return fallback;
-
-  const started = Date.now();
-  try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-        input: [
-          { role: "system", content: system },
-          { role: "user", content: JSON.stringify(input) },
-        ],
-      }),
-    });
-
-    if (!response.ok) return fallback;
-
-    const payload = (await response.json()) as { output_text?: string };
-    const parsed = JSON.parse(payload.output_text ?? "{}");
-    return { ...parsed, latencyMs: Date.now() - started };
-  } catch (error) {
-    console.warn("[trendx] aiJSON failed:", error);
-    return fallback;
-  }
-}
-
-async function logAI(
-  userId: string,
-  type: string,
-  summary: string,
-  output: unknown,
-): Promise<void> {
-  try {
-    const trimmed = summary.length > 200 ? summary.slice(0, 200) : summary;
-    const latency = (output as { latencyMs?: number }).latencyMs ?? null;
-    await sql`
-      insert into ai_events (user_id, type, input_summary, output, latency_ms)
-      values (${userId}, ${type}, ${trimmed}, ${JSON.stringify(output)}, ${latency})
-    `;
-  } catch (error) {
-    console.warn("[trendx] logAI failed:", error);
-  }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && (error as any).code === "23505");
-}
-
-function requireSecret(c: { req: { url: string } }): string {
+function requireSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not configured");
   return secret;
@@ -524,7 +1054,7 @@ const server = serve(
 const shutdown = async () => {
   console.log("[trendx] shutting down…");
   server.close();
-  await closePool();
+  await closeDb();
   process.exit(0);
 };
 

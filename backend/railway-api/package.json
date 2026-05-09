@@ -8,16 +8,21 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "migrate": "node dist/migrate.js",
-    "migrate:dev": "tsx src/migrate.ts",
+    "migrate": "prisma migrate deploy",
+    "seed": "node dist/seed.js",
+    "seed:dev": "tsx src/seed.ts",
+    "postdeploy": "prisma migrate deploy && node dist/seed.js",
+    "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
+    "@prisma/client": "5.22.0",
     "hono": "^4.6.0",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "prisma": "5.22.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
