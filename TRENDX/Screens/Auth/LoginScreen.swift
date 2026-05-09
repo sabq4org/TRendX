@@ -76,7 +76,7 @@ struct LoginScreen: View {
                         .disabled(store.isLoading || email.isEmpty || password.count < 6 || (isSignUp && name.isEmpty))
                         .opacity(email.isEmpty || password.count < 6 || (isSignUp && name.isEmpty) ? 0.55 : 1)
 
-                        Text(store.isRemoteEnabled ? "متصل بـ TRENDX Neon API" : "وضع محلي احتياطي حتى تضيف رابط API")
+                        Text(store.isRemoteEnabled ? "متصل بـ TRENDX API" : "وضع محلي احتياطي حتى تضيف رابط API")
                             .font(.trendxSmall())
                             .foregroundStyle(TrendXTheme.tertiaryInk)
                             .frame(maxWidth: .infinity, alignment: .center)
