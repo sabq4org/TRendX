@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-cairo: "Cairo", "Inter", system-ui, sans-serif;
+  --font-inter: "Inter", system-ui, sans-serif;
+}
+
+html,
+body {
+  background-color: #FAFBFD;
+  color: #1A1B25;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  font-feature-settings: "ss01", "cv11", "tnum" 1;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Tabular numbers for KPIs */
+.tabular {
+  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft shimmer for loading states */
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #F0F2F8 0%, #E6E9F2 50%, #F0F2F8 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+}
+
+/* Hide scrollbar in horizontally scrolling chip rows */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
