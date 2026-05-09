@@ -23,6 +23,14 @@ app.use("*", cors({
   allowHeaders: ["Authorization", "Content-Type"],
 }));
 
+app.get("/", (c) =>
+  c.json({
+    service: "trendx-railway-api",
+    status: "ok",
+    docs: "Public: GET /health, POST /auth/signup, POST /auth/signin. Everything else needs Authorization: Bearer <jwt>.",
+  }),
+);
+
 app.get("/health", (c) => c.json({ ok: true, service: "trendx-railway-api" }));
 
 // MARK: - Auth
@@ -92,6 +100,7 @@ app.post("/auth/signin", async (c) => {
 app.use("*", async (c, next) => {
   const path = c.req.path;
   const isPublic =
+    path === "/" ||
     path === "/health" ||
     path.startsWith("/auth/") ||
     c.req.method === "OPTIONS";
