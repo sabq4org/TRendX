@@ -12,6 +12,7 @@ async function run(): Promise<void> {
     process.exit(1);
   }
 
+  console.log("[migrate] reading migrations from", MIGRATIONS_DIR);
   const entries = (await readdir(MIGRATIONS_DIR))
     .filter((file) => file.endsWith(".sql"))
     .sort();
@@ -21,12 +22,17 @@ async function run(): Promise<void> {
     return;
   }
 
+  console.log(`[migrate] verifying database connection…`);
+  await pool.query("select 1");
+
   for (const file of entries) {
     const path = join(MIGRATIONS_DIR, file);
     const content = await readFile(path, "utf8");
     if (!content.trim()) continue;
+    const started = Date.now();
     console.log(`[migrate] applying ${file}…`);
     await pool.query(content);
+    console.log(`[migrate]   done in ${Date.now() - started}ms`);
   }
   console.log(`[migrate] applied ${entries.length} file(s).`);
 }

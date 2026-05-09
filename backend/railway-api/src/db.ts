@@ -6,16 +6,23 @@ if (!process.env.DATABASE_URL) {
   console.warn("[trendx] DATABASE_URL is not set; database calls will fail until configured.");
 }
 
+// Railway's internal Postgres networking doesn't use SSL.
+// Only enable SSL when the connection string explicitly asks for it
+// (e.g. external Neon/Supabase URLs that always require sslmode=require).
+const url = process.env.DATABASE_URL ?? "";
 const sslRequired =
-  process.env.PGSSLMODE === "require" ||
-  /sslmode=require/i.test(process.env.DATABASE_URL ?? "") ||
-  process.env.NODE_ENV === "production";
+  process.env.PGSSLMODE === "require" || /sslmode=require/i.test(url);
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: sslRequired ? { rejectUnauthorized: false } : undefined,
+  ssl: sslRequired ? { rejectUnauthorized: false } : false,
   max: 10,
   idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
+});
+
+pool.on("error", (error) => {
+  console.error("[trendx] postgres pool error:", error);
 });
 
 export type Row = Record<string, any>;

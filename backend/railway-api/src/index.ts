@@ -503,9 +503,14 @@ app.onError((err, c) => {
 // MARK: - Boot
 
 const port = Number(process.env.PORT ?? 3000);
-const server = serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`[trendx] railway-api listening on :${info.port}`);
-});
+const server = serve(
+  { fetch: app.fetch, port, hostname: "0.0.0.0" },
+  (info) => {
+    console.log(
+      `[trendx] railway-api listening on http://${info.address}:${info.port}`,
+    );
+  },
+);
 
 const shutdown = async () => {
   console.log("[trendx] shutting down…");
