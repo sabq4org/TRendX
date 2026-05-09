@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UIKit
 
 struct AuthSession: Codable, Equatable {
     var accessToken: String
@@ -47,21 +48,39 @@ final class AuthRepository {
         return session
     }
 
-    func signUp(name: String, email: String, password: String) async throws -> AuthSession {
+    func signUp(
+        name: String,
+        email: String,
+        password: String,
+        gender: UserGender = .unspecified,
+        birthYear: Int? = nil,
+        city: String? = nil,
+        region: String? = nil
+    ) async throws -> AuthSession {
         if !client.config.isConfigured {
             let session = localSession(email: email)
             save(session)
             return session
         }
 
+        let payload = SignUpPayload(
+            name: name,
+            email: email,
+            password: password,
+            gender: gender.rawValue,
+            birthYear: birthYear,
+            city: city,
+            region: region,
+            deviceType: "ios",
+            osVersion: UIDevice.current.systemVersion
+        )
         let response: AuthResponse = try await client.post(
             "/auth/signup",
-            body: SignUpPayload(name: name, email: email, password: password)
+            body: payload
         )
 
         let session = response.session
         save(session)
-        try? await upsertProfile(name: name, email: email, session: session)
         return session
     }
 
@@ -112,6 +131,12 @@ private struct SignUpPayload: Encodable {
     let name: String
     let email: String
     let password: String
+    let gender: String
+    let birthYear: Int?
+    let city: String?
+    let region: String?
+    let deviceType: String
+    let osVersion: String?
 }
 
 private struct AuthResponse: Decodable {

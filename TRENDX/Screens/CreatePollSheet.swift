@@ -544,7 +544,7 @@ struct PollTypeChip: View {
             HStack(spacing: 6) {
                 Image(systemName: isSelected ? icon + ".fill" : icon)
                     .font(.system(size: 14))
-                Text(type.rawValue)
+                Text(type.displayName)
                     .font(.trendxCaption())
             }
             .foregroundStyle(isSelected ? .white : TrendXTheme.secondaryInk)

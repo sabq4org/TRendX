@@ -134,6 +134,13 @@ struct UserDTO: Codable {
     let followedTopics: [UUID]?
     let completedPolls: [UUID]?
     let isPremium: Bool?
+    let role: String?
+    let tier: String?
+    let gender: String?
+    let birthYear: Int?
+    let city: String?
+    let region: String?
+    let country: String?
 
     var domain: TrendXUser {
         TrendXUser(
@@ -145,7 +152,14 @@ struct UserDTO: Codable {
             coins: coins,
             followedTopics: followedTopics ?? [],
             completedPolls: completedPolls ?? [],
-            isPremium: isPremium ?? false
+            isPremium: isPremium ?? false,
+            role: role.flatMap(UserRole.init(rawValue:)) ?? .respondent,
+            tier: tier.flatMap(UserTier.init(rawValue:)) ?? .free,
+            gender: gender.flatMap(UserGender.init(rawValue:)) ?? .unspecified,
+            birthYear: birthYear,
+            city: city,
+            region: region,
+            country: country ?? "SA"
         )
     }
 }

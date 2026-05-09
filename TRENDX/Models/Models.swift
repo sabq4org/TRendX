@@ -8,6 +8,34 @@ import SwiftUI
 
 // MARK: - User Model
 
+enum UserGender: String, Codable, CaseIterable {
+    case male = "male"
+    case female = "female"
+    case other = "other"
+    case unspecified = "unspecified"
+
+    var displayName: String {
+        switch self {
+        case .male:        return "ذكر"
+        case .female:      return "أنثى"
+        case .other:       return "أخرى"
+        case .unspecified: return "لا أحب التحديد"
+        }
+    }
+}
+
+enum UserRole: String, Codable {
+    case respondent
+    case publisher
+    case admin
+}
+
+enum UserTier: String, Codable {
+    case free
+    case premium
+    case enterprise
+}
+
 struct TrendXUser: Codable, Identifiable, Equatable {
     let id: UUID
     var name: String
@@ -18,7 +46,15 @@ struct TrendXUser: Codable, Identifiable, Equatable {
     var followedTopics: [UUID]
     var completedPolls: [UUID]
     var isPremium: Bool
-    
+
+    var role: UserRole
+    var tier: UserTier
+    var gender: UserGender
+    var birthYear: Int?
+    var city: String?
+    var region: String?
+    var country: String
+
     init(
         id: UUID = UUID(),
         name: String = "مستخدم",
@@ -28,7 +64,14 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         coins: Double = 16.67,
         followedTopics: [UUID] = [],
         completedPolls: [UUID] = [],
-        isPremium: Bool = false
+        isPremium: Bool = false,
+        role: UserRole = .respondent,
+        tier: UserTier = .free,
+        gender: UserGender = .unspecified,
+        birthYear: Int? = nil,
+        city: String? = nil,
+        region: String? = nil,
+        country: String = "SA"
     ) {
         self.id = id
         self.name = name
@@ -39,6 +82,13 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         self.followedTopics = followedTopics
         self.completedPolls = completedPolls
         self.isPremium = isPremium
+        self.role = role
+        self.tier = tier
+        self.gender = gender
+        self.birthYear = birthYear
+        self.city = city
+        self.region = region
+        self.country = country
     }
 }
 
@@ -220,16 +270,62 @@ enum PollCoverStyle: String, Codable, CaseIterable {
 // MARK: - Poll Model
 
 enum PollType: String, Codable, CaseIterable {
-    case singleChoice = "اختيار واحد"
-    case multipleChoice = "متعدد الاختيار"
-    case rating = "تقييم"
-    case linearScale = "مقياس خطي"
+    case singleChoice = "single_choice"
+    case multipleChoice = "multiple_choice"
+    case rating = "rating"
+    case linearScale = "linear_scale"
+
+    /// Tolerant decoder so the iOS app keeps working through backend
+    /// vocabulary changes (e.g. legacy Arabic raw values cached in
+    /// UserDefaults from earlier builds).
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "single_choice", "اختيار واحد", "singleChoice":
+            self = .singleChoice
+        case "multiple_choice", "متعدد الاختيار", "multipleChoice":
+            self = .multipleChoice
+        case "rating", "تقييم":
+            self = .rating
+        case "linear_scale", "مقياس خطي", "linearScale":
+            self = .linearScale
+        default:
+            self = .singleChoice
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .singleChoice:   return "اختيار واحد"
+        case .multipleChoice: return "متعدد الاختيار"
+        case .rating:         return "تقييم"
+        case .linearScale:    return "مقياس خطي"
+        }
+    }
 }
 
 enum PollStatus: String, Codable {
-    case active = "نشط"
-    case completed = "مكتمل"
-    case draft = "مسودة"
+    case active   = "active"
+    case completed = "ended"
+    case draft    = "draft"
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "active", "نشط":               self = .active
+        case "ended", "completed", "مكتمل": self = .completed
+        case "draft", "مسودة":              self = .draft
+        default:                             self = .active
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .active:    return "نشط"
+        case .completed: return "مكتمل"
+        case .draft:     return "مسودة"
+        }
+    }
 }
 
 struct Poll: Codable, Identifiable, Equatable {

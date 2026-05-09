@@ -109,14 +109,34 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func signUp(name: String, email: String, password: String) async {
+    func signUp(
+        name: String,
+        email: String,
+        password: String,
+        gender: UserGender = .unspecified,
+        birthYear: Int? = nil,
+        city: String? = nil,
+        region: String? = nil
+    ) async {
         await authenticate {
-            try await authRepository.signUp(name: name, email: email, password: password)
+            try await authRepository.signUp(
+                name: name,
+                email: email,
+                password: password,
+                gender: gender,
+                birthYear: birthYear,
+                city: city,
+                region: region
+            )
         }
         if isAuthenticated {
             currentUser.name = name
             currentUser.email = email
             currentUser.avatarInitial = String(name.prefix(1))
+            currentUser.gender = gender
+            currentUser.birthYear = birthYear
+            currentUser.city = city
+            currentUser.region = region
             persistUser()
         }
     }

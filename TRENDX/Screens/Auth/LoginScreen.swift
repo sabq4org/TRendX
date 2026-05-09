@@ -11,6 +11,15 @@ struct LoginScreen: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isSignUp = true
+    @State private var gender: UserGender = .unspecified
+    @State private var birthYearText = ""
+    @State private var city = ""
+
+    private static let saudiCities = [
+        "الرياض", "جدة", "مكة المكرمة", "المدينة المنورة", "الدمام",
+        "الخبر", "الظهران", "الطائف", "أبها", "تبوك", "بريدة", "حائل",
+        "الجبيل", "ينبع", "نجران", "الباحة", "جازان", "عرعر", "سكاكا"
+    ]
 
     var body: some View {
         ZStack {
@@ -43,6 +52,15 @@ struct LoginScreen: View {
                         AuthField(title: "البريد", text: $email, icon: "envelope.fill", keyboard: .emailAddress)
                         AuthSecureField(title: "كلمة المرور", text: $password)
 
+                        if isSignUp {
+                            DemographicsBlock(
+                                gender: $gender,
+                                birthYearText: $birthYearText,
+                                city: $city,
+                                cities: Self.saudiCities
+                            )
+                        }
+
                         if let message = store.appMessage {
                             Text(message)
                                 .font(.trendxSmall())
@@ -53,7 +71,16 @@ struct LoginScreen: View {
                         Button {
                             Task {
                                 if isSignUp {
-                                    await store.signUp(name: name, email: email, password: password)
+                                    let parsedYear = Int(birthYearText.trimmingCharacters(in: .whitespaces))
+                                    let trimmedCity = city.trimmingCharacters(in: .whitespaces)
+                                    await store.signUp(
+                                        name: name,
+                                        email: email,
+                                        password: password,
+                                        gender: gender,
+                                        birthYear: parsedYear,
+                                        city: trimmedCity.isEmpty ? nil : trimmedCity
+                                    )
                                 } else {
                                     await store.signIn(email: email, password: password)
                                 }
@@ -88,6 +115,83 @@ struct LoginScreen: View {
             }
         }
         .trendxRTL()
+    }
+}
+
+private struct DemographicsBlock: View {
+    @Binding var gender: UserGender
+    @Binding var birthYearText: String
+    @Binding var city: String
+    let cities: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("بياناتك الديموغرافية تساعد TRENDX يقيس النبض الحقيقي")
+                .font(.trendxSmall())
+                .foregroundStyle(TrendXTheme.tertiaryInk)
+                .padding(.top, 4)
+
+            HStack(spacing: 8) {
+                ForEach(UserGender.allCases.filter { $0 != .other }, id: \.self) { option in
+                    GenderChip(option: option, selected: gender == option) {
+                        gender = option
+                    }
+                }
+            }
+
+            HStack(spacing: 10) {
+                AuthField(
+                    title: "سنة الميلاد",
+                    text: $birthYearText,
+                    icon: "calendar",
+                    keyboard: .numberPad
+                )
+
+                Menu {
+                    ForEach(cities, id: \.self) { name in
+                        Button(name) { city = name }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .foregroundStyle(TrendXTheme.primary)
+                            .frame(width: 20)
+                        Text(city.isEmpty ? "المدينة" : city)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(city.isEmpty ? TrendXTheme.tertiaryInk : TrendXTheme.ink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                    .padding(14)
+                    .background(TrendXTheme.softFill)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+            }
+        }
+    }
+}
+
+private struct GenderChip: View {
+    let option: UserGender
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(option.displayName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(selected ? .white : TrendXTheme.secondaryInk)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(
+                    Capsule()
+                        .fill(selected ? AnyShapeStyle(TrendXTheme.primaryGradient) : AnyShapeStyle(TrendXTheme.softFill))
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 
