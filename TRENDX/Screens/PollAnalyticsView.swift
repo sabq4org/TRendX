@@ -38,10 +38,20 @@ struct PollAnalytics {
 
     static func mock(for poll: Poll) -> PollAnalytics {
         let base = max(poll.totalVotes, 1)
+
+        // Deterministic seed derived from poll.id so numbers stay stable
+        // across re-renders, sheet re-opens, and different devices.
+        var rng = SeededRandomGenerator(seed: poll.id.stableSeed)
+
+        let impressionNoise = Int.random(in: 40...120, using: &rng)
+        let conversionRate  = Double.random(in: 28...52, using: &rng)
+        let avgDecision     = Int.random(in: 8...18, using: &rng)
+        let benchmarkDelta  = Double(Int.random(in: -8...32, using: &rng))
+
         return PollAnalytics(
             totalVotes: base,
-            totalImpressions: base * 3 + Int.random(in: 40...120),
-            conversionRate: Double.random(in: 28...52),
+            totalImpressions: base * 3 + impressionNoise,
+            conversionRate: conversionRate,
             confidenceLevel: base > 200 ? 95 : base > 100 ? 90 : 82,
             marginOfError: base > 200 ? 3.2 : base > 100 ? 4.8 : 7.1,
             malePercent: 62,
@@ -62,7 +72,7 @@ struct PollAnalytics {
                 ("6ص",  0.15), ("9ص",  0.45), ("12م", 0.60),
                 ("3م",  0.55), ("6م",  0.70), ("9م",  1.00), ("12ل", 0.30)
             ],
-            avgDecisionSeconds: Int.random(in: 8...18),
+            avgDecisionSeconds: avgDecision,
             mobilePercent: 87,
             readBeforeVotePercent: 34,
             changeVotePercent: 8,
@@ -71,7 +81,7 @@ struct PollAnalytics {
             repostsCount: Int(Double(base) * 0.06),
             profileVisits: Int(Double(base) * 0.14),
             newFollowers: Int(Double(base) * 0.02),
-            sectorBenchmarkDelta: +23,
+            sectorBenchmarkDelta: benchmarkDelta,
             communityPointsEarned: base * 50,
             activeContributors: Int(Double(base) * 0.72),
             returnRatePercent: 64,
@@ -83,13 +93,67 @@ struct PollAnalytics {
     }
 }
 
+// MARK: - Seeded RNG (deterministic per poll)
+
+/// A small deterministic RNG so analytics tied to a `poll.id` stay
+/// identical between renders and app launches without persistence.
+struct SeededRandomGenerator: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        // Avoid a zero state which would lock SplitMix64.
+        self.state = seed == 0 ? 0x9E3779B97F4A7C15 : seed
+    }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+}
+
+private extension UUID {
+    /// Stable 64-bit seed derived from a UUID's first 8 bytes.
+    var stableSeed: UInt64 {
+        let bytes = uuid
+        var seed: UInt64 = 0
+        seed |= UInt64(bytes.0)  << 56
+        seed |= UInt64(bytes.1)  << 48
+        seed |= UInt64(bytes.2)  << 40
+        seed |= UInt64(bytes.3)  << 32
+        seed |= UInt64(bytes.4)  << 24
+        seed |= UInt64(bytes.5)  << 16
+        seed |= UInt64(bytes.6)  << 8
+        seed |= UInt64(bytes.7)
+        return seed
+    }
+}
+
 // MARK: - Main View
 
 struct PollAnalyticsView: View {
     let poll: Poll
     @Environment(\.dismiss) private var dismiss
 
-    private var analytics: PollAnalytics { .mock(for: poll) }
+    /// Generated once per `poll.id` so re-renders keep the same numbers.
+    private var analytics: PollAnalytics {
+        PollAnalytics.mock(for: poll)
+    }
+
+    private var shareSummary: String {
+        let leader = poll.options.max { $0.percentage < $1.percentage }
+        var lines: [String] = []
+        lines.append("استطلاع TRENDX: \(poll.title)")
+        lines.append("• إجمالي الأصوات: \(analytics.totalVotes)")
+        lines.append("• مستوى الثقة: \(Int(analytics.confidenceLevel))% (هامش ±\(String(format: "%.1f", analytics.marginOfError))%)")
+        if let leader {
+            lines.append("• الأعلى: «\(leader.text)» بنسبة \(Int(leader.percentage))%")
+        }
+        lines.append("مدعوم بـ TRENDX AI")
+        return lines.joined(separator: "\n")
+    }
 
     var body: some View {
         NavigationStack {
@@ -117,8 +181,11 @@ struct PollAnalyticsView: View {
                         .foregroundStyle(TrendXTheme.primary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                    } label: {
+                    ShareLink(
+                        item: shareSummary,
+                        subject: Text("ملخص استطلاع TRENDX"),
+                        message: Text(poll.title)
+                    ) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 14, weight: .semibold))
                     }
@@ -126,6 +193,7 @@ struct PollAnalyticsView: View {
                 }
             }
         }
+        .environment(\.layoutDirection, .rightToLeft)
     }
 
     // MARK: - Hero
@@ -134,13 +202,14 @@ struct PollAnalyticsView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("قراءة معمّقة")
-                    .font(.trendxSmall())
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                    .tracking(0.6)
                     .foregroundStyle(TrendXTheme.accent)
-                    .textCase(.uppercase)
                 Text(poll.title)
-                    .font(.trendxHeadline())
+                    .font(.system(size: 19, weight: .semibold, design: .serif))
                     .foregroundStyle(TrendXTheme.ink)
                     .lineLimit(2)
+                    .lineSpacing(2)
                 Label(poll.deadlineLabel, systemImage: "clock.fill")
                     .font(.trendxSmall())
                     .foregroundStyle(poll.isEndingSoon ? TrendXTheme.warning : TrendXTheme.tertiaryInk)
@@ -148,7 +217,7 @@ struct PollAnalyticsView: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
                 Text("\(analytics.totalVotes)")
-                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .font(.system(size: 28, weight: .heavy, design: .rounded))
                     .foregroundStyle(TrendXTheme.primary)
                 Text("صوت")
                     .font(.trendxSmall())
@@ -600,7 +669,7 @@ private struct AnalyticsSection<Content: View>: View {
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(TrendXTheme.primary.opacity(0.10)))
                 Text(title)
-                    .font(.trendxHeadline())
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(TrendXTheme.ink)
             }
             content()
@@ -624,13 +693,13 @@ private struct PerfTile: View {
                 .frame(width: 30, height: 30)
                 .background(Circle().fill(tint.opacity(0.12)))
             Text(value)
-                .font(.system(size: 22, weight: .black, design: .rounded))
+                .font(.system(size: 22, weight: .heavy, design: .rounded))
                 .foregroundStyle(tint)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(TrendXTheme.secondaryInk)
                 Text(sublabel)
                     .font(.trendxSmall())
@@ -658,11 +727,11 @@ private struct BehaviorStat: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(TrendXTheme.tertiaryInk)
                 Text(value)
-                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .font(.system(size: 18, weight: .heavy, design: .rounded))
                     .foregroundStyle(TrendXTheme.ink)
             }
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(TrendXTheme.secondaryInk)
                 .lineLimit(1)
             Text(note)
@@ -689,10 +758,10 @@ private struct ReachTile: View {
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(tint)
             Text("\(value)")
-                .font(.system(size: 16, weight: .black, design: .rounded))
+                .font(.system(size: 16, weight: .heavy, design: .rounded))
                 .foregroundStyle(TrendXTheme.ink)
             Text(label)
-                .font(.system(size: 9.5, weight: .semibold))
+                .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(TrendXTheme.tertiaryInk)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -719,12 +788,12 @@ private struct CommunityTile: View {
                 .background(Circle().fill(tint.opacity(0.12)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 16, weight: .black, design: .rounded))
+                    .font(.system(size: 16, weight: .heavy, design: .rounded))
                     .foregroundStyle(TrendXTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(label)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(TrendXTheme.tertiaryInk)
                     .lineLimit(2)
             }

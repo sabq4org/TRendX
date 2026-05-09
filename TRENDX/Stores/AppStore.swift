@@ -12,12 +12,14 @@ final class AppStore: ObservableObject {
     @Published var currentUser: TrendXUser
     @Published var topics: [Topic]
     @Published var polls: [Poll]
+    @Published var surveys: [Survey]
     @Published var gifts: [Gift]
     @Published var redemptions: [Redemption]
     @Published var selectedTab: TabItem = .home
     @Published var showCreatePoll: Bool = false
-    
-    private let userKey = "trendx_user_v1"
+
+    private let userKey      = "trendx_user_v1"
+    private let surveysKey   = "trendx_surveys_v1"
     private let topicsKey = "trendx_topics_v1"
     private let pollsKey = "trendx_polls_v1"
     private let redemptionsKey = "trendx_redemptions_v1"
@@ -53,6 +55,18 @@ final class AppStore: ObservableObject {
         }
         
         self.gifts = Gift.samples
+
+        // Load surveys
+        if let data = UserDefaults.standard.data(forKey: surveysKey),
+           let saved = try? JSONDecoder().decode([Survey].self, from: data),
+           !saved.isEmpty {
+            self.surveys = saved
+        } else {
+            self.surveys = Survey.techSamples
+            if let encoded = try? JSONEncoder().encode(Survey.techSamples) {
+                UserDefaults.standard.set(encoded, forKey: surveysKey)
+            }
+        }
 
         if let data = UserDefaults.standard.data(forKey: redemptionsKey),
            let redemptions = try? JSONDecoder().decode([Redemption].self, from: data) {

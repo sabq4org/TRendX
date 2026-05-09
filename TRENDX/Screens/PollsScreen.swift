@@ -10,6 +10,9 @@ struct PollsScreen: View {
     @State private var selectedSegment = 0
     @State private var searchText = ""
     @State private var selectedPoll: Poll?
+    @State private var selectedSurvey: Survey?
+    @State private var showSurveys = false
+    @State private var showCategoryInsight = false
 
     private var activeCount: Int { store.activePolls.count }
     private var votedCount: Int { store.votedPolls.count }
@@ -36,19 +39,40 @@ struct PollsScreen: View {
             VStack(spacing: 16) {
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("الاستطلاعات")
+                        Text(showSurveys ? "الاستبيانات" : "الاستطلاعات")
                             .font(.trendxHeadline())
                             .foregroundStyle(TrendXTheme.ink)
-
                         HStack(spacing: 5) {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(TrendXTheme.aiIndigo)
-                            Text("مرتّبة ذكياً بواسطة TRENDX AI")
+                            Text(showSurveys ? "استبيانات متعددة الأسئلة" : "مرتّبة ذكياً بواسطة TRENDX AI")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(TrendXTheme.tertiaryInk)
                         }
                     }
+                    Spacer()
+                    // Toggle بين استطلاعات واستبيانات
+                    HStack(spacing: 0) {
+                        Button { withAnimation { showSurveys = false } } label: {
+                            Text("استطلاعات")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(!showSurveys ? .white : TrendXTheme.secondaryInk)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(!showSurveys ? TrendXTheme.primary : Color.clear)
+                                .clipShape(Capsule())
+                        }.buttonStyle(.plain)
+                        Button { withAnimation { showSurveys = true } } label: {
+                            Text("استبيانات")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(showSurveys ? .white : TrendXTheme.secondaryInk)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(showSurveys ? TrendXTheme.primary : Color.clear)
+                                .clipShape(Capsule())
+                        }.buttonStyle(.plain)
+                    }
+                    .padding(3)
+                    .background(RoundedRectangle(cornerRadius: 20).fill(TrendXTheme.softFill))
                     Spacer()
                 }
 
@@ -98,18 +122,60 @@ struct PollsScreen: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 12) {
-                    TrendXSearchBar(text: $searchText, placeholder: "ابحث داخل الاستطلاعات…")
-
-                    if visiblePolls.isEmpty {
-                        EmptyStateView(
-                            icon: selectedSegment == 0 ? "sparkles" : "checkmark.seal",
-                            title: selectedSegment == 0 ? "لحظة هدوء قبل الاتجاه التالي" : "لا توجد نتائج هنا",
-                            message: selectedSegment == 0 ? "TRENDX AI يرصد الآن اتجاهات جديدة — ستظهر هنا قريباً لتكون أول من يشارك." : "جرّب تغيير البحث أو العودة إلى تبويب النشطة."
-                        )
+                    if !showSurveys {
+                        // استطلاعات
+                        TrendXSearchBar(text: $searchText, placeholder: "ابحث داخل الاستطلاعات…")
+                        if visiblePolls.isEmpty {
+                            EmptyStateView(
+                                icon: selectedSegment == 0 ? "sparkles" : "checkmark.seal",
+                                title: selectedSegment == 0 ? "لحظة هدوء قبل الاتجاه التالي" : "لا توجد نتائج هنا",
+                                message: selectedSegment == 0 ? "TRENDX AI يرصد الآن اتجاهات جديدة" : "جرّب تغيير البحث."
+                            )
+                        } else {
+                            ForEach(visiblePolls) { poll in
+                                PollListRow(poll: poll) { selectedPoll = poll }
+                            }
+                        }
                     } else {
-                        ForEach(visiblePolls) { poll in
-                            PollListRow(poll: poll) {
-                                selectedPoll = poll
+                        // استبيانات
+                        // زر مركز الذكاء القطاعي
+                        Button { showCategoryInsight = true } label: {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(TrendXTheme.primaryGradient)
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: "brain.head.profile")
+                                        .font(.system(size: 18, weight: .bold))
+                                        .foregroundStyle(.white)
+                                }
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("مركز الذكاء القطاعي")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(TrendXTheme.ink)
+                                    Text("تحليل شامل لكل استبيانات التقنية و AI")
+                                        .font(.trendxSmall())
+                                        .foregroundStyle(TrendXTheme.aiIndigo)
+                                }
+                                Spacer()
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(TrendXTheme.aiIndigo)
+                            }
+                            .padding(14)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(TrendXTheme.aiIndigo.opacity(0.07))
+                                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .stroke(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 1))
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        if store.surveys.isEmpty {
+                            EmptyStateView(icon: "doc.text.magnifyingglass", title: "لا توجد استبيانات", message: "ستظهر الاستبيانات المتعددة الأسئلة هنا")
+                        } else {
+                            ForEach(store.surveys) { survey in
+                                SurveyListRow(survey: survey) { selectedSurvey = survey }
                             }
                         }
                     }
@@ -125,6 +191,18 @@ struct PollsScreen: View {
             PollDetailView(pollId: poll.id)
                 .environmentObject(store)
                 .trendxRTL()
+        }
+        .sheet(item: $selectedSurvey) { survey in
+            SurveyDetailView(survey: survey)
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $showCategoryInsight) {
+            CategoryInsightView(insight: SectorInsight(
+                category: "التقنية والذكاء الاصطناعي",
+                emoji: "🧠",
+                coverStyle: .tech,
+                surveys: Survey.techSamples
+            ))
         }
     }
 }

@@ -624,13 +624,326 @@ extension Poll {
 
 extension Gift {
     static let samples: [Gift] = [
-        Gift(name: "قسيمة قهوة",       brandName: "Starbucks",        category: "مقاهي",     pointsRequired: 120, valueInRiyal: 20.0),
-        Gift(name: "حلويات مختارة",   brandName: "AANI & DANI",      category: "حلويات",    pointsRequired: 180, valueInRiyal: 30.0),
-        Gift(name: "قسيمة تسوّق",       brandName: "Amazon",           category: "تسوق",      pointsRequired: 300, valueInRiyal: 50.0),
-        Gift(name: "خدمة عناية بالسيارة", brandName: "3M AutoCare",   category: "سيارات",    pointsRequired: 360, valueInRiyal: 60.0),
-        Gift(name: "قسيمة مجوهرات",  brandName: "AbdulGhani Heritage", category: "Jewellery", pointsRequired: 480, valueInRiyal: 80.0),
-        Gift(name: "قطعة مميّزة",      brandName: "AbdulGhani",       category: "Jewellery", pointsRequired: 600, valueInRiyal: 100.0),
-        Gift(name: "فطور الصباح",      brandName: "Dose Café",        category: "مقاهي",     pointsRequired: 150, valueInRiyal: 25.0),
-        Gift(name: "سلة حلا",           brandName: "Bateel",           category: "حلويات",    pointsRequired: 420, valueInRiyal: 70.0)
+        Gift(name: "قسيمة قهوة",            brandName: "Starbucks",          category: "مقاهي",     pointsRequired: 120, valueInRiyal: 20.0),
+        Gift(name: "حلويات مختارة",      brandName: "AANI & DANI",        category: "حلويات",    pointsRequired: 180, valueInRiyal: 30.0),
+        Gift(name: "قسيمة تسوّق",            brandName: "Amazon",             category: "تسوق",      pointsRequired: 300, valueInRiyal: 50.0),
+        Gift(name: "خدمة عناية بالسيارة",  brandName: "3M AutoCare",        category: "سيارات",    pointsRequired: 360, valueInRiyal: 60.0),
+        Gift(name: "قسيمة مجوهرات",       brandName: "AbdulGhani Heritage",category: "Jewellery", pointsRequired: 480, valueInRiyal: 80.0),
+        Gift(name: "قطعة مميّزة",           brandName: "AbdulGhani",         category: "Jewellery", pointsRequired: 600, valueInRiyal: 100.0),
+        Gift(name: "فطور الصباح",           brandName: "Dose Café",          category: "مقاهي",     pointsRequired: 150, valueInRiyal: 25.0),
+        Gift(name: "سلة حلا",                brandName: "Bateel",             category: "حلويات",    pointsRequired: 420, valueInRiyal: 70.0)
     ]
+}
+
+// MARK: - Survey Model
+
+struct Survey: Codable, Identifiable {
+    let id: UUID
+    var title: String
+    var description: String
+    var authorName: String
+    var authorAvatar: String
+    var authorIsVerified: Bool
+    var coverStyle: PollCoverStyle
+    var questions: [Poll]
+    var topicName: String?
+    var totalResponses: Int
+    var completionRate: Double      // % من أكمل كل الأسئلة
+    var avgCompletionSeconds: Int   // متوسط وقت الإكمال
+    var status: PollStatus
+    var createdAt: Date
+    var expiresAt: Date
+    var rewardPoints: Int
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        description: String = "",
+        authorName: String = "TrendX Research",
+        authorAvatar: String = "T",
+        authorIsVerified: Bool = true,
+        coverStyle: PollCoverStyle = .generic,
+        questions: [Poll] = [],
+        topicName: String? = nil,
+        totalResponses: Int = 0,
+        completionRate: Double = 0,
+        avgCompletionSeconds: Int = 180,
+        status: PollStatus = .active,
+        createdAt: Date = Date(),
+        expiresAt: Date = Date().addingTimeInterval(14 * 24 * 60 * 60),
+        rewardPoints: Int = 150
+    ) {
+        self.id = id; self.title = title; self.description = description
+        self.authorName = authorName; self.authorAvatar = authorAvatar
+        self.authorIsVerified = authorIsVerified; self.coverStyle = coverStyle
+        self.questions = questions; self.topicName = topicName
+        self.totalResponses = totalResponses; self.completionRate = completionRate
+        self.avgCompletionSeconds = avgCompletionSeconds; self.status = status
+        self.createdAt = createdAt; self.expiresAt = expiresAt
+        self.rewardPoints = rewardPoints
+    }
+
+    var questionCount: Int { questions.count }
+    var isExpired: Bool { Date() > expiresAt }
+    var remainingDays: Int {
+        max(0, Calendar.current.dateComponents([.day], from: Date(), to: expiresAt).day ?? 0)
+    }
+}
+
+extension Survey {
+    static let samples: [Survey] = [
+        Survey(
+            title: "الذكاء الاصطناعي في حياتنا اليومية",
+            description: "دراسة شاملة حول تأثير تقنيات AI على سلوكيات وأولويات المجتمع السعودي",
+            coverStyle: .tech,
+            questions: [
+                Poll(title: "كم ساعة يومياً تستخدم أدوات الذكاء الاصطناعي؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "أقل من ساعة", votesCount: 180, percentage: 36),
+                        PollOption(text: "1-3 ساعات", votesCount: 225, percentage: 45),
+                        PollOption(text: "أكثر من 3 ساعات", votesCount: 95, percentage: 19)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
+                Poll(title: "ما مدى تأثير AI على إنتاجيتك المهنية؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "زاد إنتاجيتي كثيراً", votesCount: 220, percentage: 44),
+                        PollOption(text: "تحسن طفيف", votesCount: 175, percentage: 35),
+                        PollOption(text: "لم يتغيّر شيء", votesCount: 65, percentage: 13),
+                        PollOption(text: "أثّر سلباً", votesCount: 40, percentage: 8)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30,
+                     aiInsight: "مستخدمو AI المكثفون (+3ساعات) يرون زيادة أكبر في الإنتاجية"),
+                Poll(title: "هل تقلق من تأثير AI على سوق العمل؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "نعم، قلق شديد", votesCount: 130, percentage: 26),
+                        PollOption(text: "قلق متوسط", votesCount: 185, percentage: 37),
+                        PollOption(text: "لست قلقاً", votesCount: 145, percentage: 29),
+                        PollOption(text: "متفائل جداً", votesCount: 40, percentage: 8)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
+                Poll(title: "أي مجال ترى فيه AI التحول الأكبر؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "الصحة والطب",      votesCount: 165, percentage: 33),
+                        PollOption(text: "التعليم والتدريب", votesCount: 150, percentage: 30),
+                        PollOption(text: "الأعمال والاقتصاد",  votesCount: 110, percentage: 22),
+                        PollOption(text: "الإعلام والمحتوى",   votesCount: 75,  percentage: 15)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
+                Poll(title: "ما مدى استعدادك للدفع مقابل استخدام AI؟",
+                     coverStyle: .economy,
+                     options: [
+                        PollOption(text: "مستعد إذا كانت القيمة عادلة", votesCount: 195, percentage: 39),
+                        PollOption(text: "فقط باشتراك مدفوع مسبقاً",           votesCount: 120, percentage: 24),
+                        PollOption(text: "أفضل النماذج المجانية فقط",           votesCount: 110, percentage: 22),
+                        PollOption(text: "لست مستعداً للدفع",                         votesCount: 75,  percentage: 15)
+                     ], topicName: "اقتصاد", totalVotes: 500, rewardPoints: 30)
+            ],
+            topicName: "تقنية",
+            totalResponses: 500,
+            completionRate: 78,
+            avgCompletionSeconds: 210,
+            rewardPoints: 150
+        ),
+
+        // استبيان 2
+        Survey(
+            title: "ثقة المجتمع بتقنيات AI في اتخاذ القرار",
+            description: "هل يثق الجمهور بقرارات تتخذها أنظمة الذكاء الاصطناعي؟",
+            coverStyle: .tech,
+            questions: [
+                Poll(title: "هل تثق بقرار طبي AI بدون مراجعة بشرية؟",
+                     coverStyle: .health,
+                     options: [
+                        PollOption(text: "نعم، أثق به",      votesCount: 180, percentage: 36),
+                        PollOption(text: "بحذر، أحتاج مراجعة", votesCount: 245, percentage: 49),
+                        PollOption(text: "لا، لا أثق",     votesCount: 75,  percentage: 15)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
+                Poll(title: "هل تثق بحكم قضائي AI في قضية بسيطة؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "نعم",          votesCount: 140, percentage: 28),
+                        PollOption(text: "بشروط محددة", votesCount: 210, percentage: 42),
+                        PollOption(text: "لا إطلاقاً",   votesCount: 150, percentage: 30)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
+                Poll(title: "من يتحمل مسؤولية قرار AI الخاطئ؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "الشركة المطوّرة", votesCount: 225, percentage: 45),
+                        PollOption(text: "المستخدم",        votesCount: 100, percentage: 20),
+                        PollOption(text: "كلاهما معاً",    votesCount: 175, percentage: 35)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
+                Poll(title: "هل يجب تنظيم AI حكومياً في السعودية؟",
+                     coverStyle: .social,
+                     options: [
+                        PollOption(text: "نعم، تنظيم صارم",  votesCount: 310, percentage: 62),
+                        PollOption(text: "تنظيم خفيف فقط", votesCount: 140, percentage: 28),
+                        PollOption(text: "لا حاجة لتنظيم",   votesCount: 50,  percentage: 10)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30)
+            ],
+            topicName: "تقنية", totalResponses: 500, completionRate: 74,
+            avgCompletionSeconds: 195, rewardPoints: 130
+        ),
+
+        // استبيان 3
+        Survey(
+            title: "ذكاء اصطناعي في التعليم: تحوّل أم تهديد؟",
+            description: "تقييم مدى جاهزية المنظومة التعليمية لاستيعاب تقنيات الذكاء الاصطناعي",
+            coverStyle: .tech,
+            questions: [
+                Poll(title: "هل تستخدم AI في دراستك أو عملك؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "نعم، يومياً",     votesCount: 280, percentage: 56),
+                        PollOption(text: "أحياناً",         votesCount: 140, percentage: 28),
+                        PollOption(text: "لا، لم أجرّبه", votesCount: 80,  percentage: 16)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25),
+                Poll(title: "هل AI يساعد في الفهم أو يضعف التفكير؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "يساعد كثيراً",    votesCount: 220, percentage: 44),
+                        PollOption(text: "يساعد لكن بحذر", votesCount: 185, percentage: 37),
+                        PollOption(text: "يضعف التفكير",   votesCount: 95,  percentage: 19)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25,
+                     aiInsight: "فجوة جيلية واضحة: الطلاب أكثر إيجابية من المعلمين"),
+                Poll(title: "ما أكثر استخدامات AI في التعليم؟",
+                     coverStyle: .tech,
+                     options: [
+                        PollOption(text: "تلخيص المعلومات",  votesCount: 215, percentage: 43),
+                        PollOption(text: "كتابة التقارير",     votesCount: 160, percentage: 32),
+                        PollOption(text: "حل المسائل",       votesCount: 125, percentage: 25)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25),
+                Poll(title: "هل يجب تعليم AI كمادة مستقلة؟",
+                     coverStyle: .social,
+                     options: [
+                        PollOption(text: "نعم، ضروري", votesCount: 300, percentage: 60),
+                        PollOption(text: "يكفي ضمن مواد أخرى", votesCount: 150, percentage: 30),
+                        PollOption(text: "ليست ضرورة", votesCount: 50, percentage: 10)
+                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25)
+            ],
+            topicName: "تقنية", totalResponses: 420, completionRate: 81,
+            avgCompletionSeconds: 185, rewardPoints: 120
+        )
+    ]
+}
+
+struct SurveyAnalytics {
+    // الملخص التنفيذي
+    let totalResponses: Int
+    let completionRate: Double
+    let avgCompletionSeconds: Int
+    let confidenceLevel: Double
+    let marginOfError: Double
+
+    // بصمة المشارك
+    let malePercent: Double
+    let femalePercent: Double
+    let topAgeGroup: String
+    let topAgePercent: Double
+    let topCountry: String
+    let topCountryPercent: Double
+    let topCity: String
+    let topDevice: String
+    let deviceBreakdown: [(device: String, icon: String, percent: Double)]
+    let peakHour: String
+
+    // خريطة الإجماع — لكل سؤال: نسبة التوافق
+    let questionConsensus: [(questionShort: String, leadPercent: Double, label: String)]
+
+    // الروابط الخفية — Cross-question correlations
+    let correlations: [(q1: String, choice1: String, q2: String, choice2: String, percent: Double)]
+
+    // الشخصيات المكتشفة
+    let personas: [RespondentPersona]
+
+    // منحنى الرأي عبر الزمن
+    let sentimentTimeline: [(day: Int, positivePercent: Double)]
+
+    // الاكتشافات الرئيسية
+    let keyFindings: [String]
+
+    // التوصيات
+    let recommendations: [String]
+
+    static func mock(for survey: Survey) -> SurveyAnalytics {
+        let n = max(survey.totalResponses, 50)
+        return SurveyAnalytics(
+            totalResponses: n,
+            completionRate: survey.completionRate > 0 ? survey.completionRate : 78,
+            avgCompletionSeconds: survey.avgCompletionSeconds,
+            confidenceLevel: n > 300 ? 95 : n > 150 ? 90 : 85,
+            marginOfError: n > 300 ? 2.8 : n > 150 ? 4.2 : 6.1,
+            malePercent: 61,
+            femalePercent: 39,
+            topAgeGroup: "25–34",
+            topAgePercent: 43,
+            topCountry: "السعودية",
+            topCountryPercent: 67,
+            topCity: "الرياض",
+            topDevice: "iOS — 87%",
+            deviceBreakdown: [
+                (device: "iPhone / iOS", icon: "iphone",          percent: 57),
+                (device: "Android",      icon: "phone",            percent: 30),
+                (device: "iPad",         icon: "ipad",             percent: 8),
+                (device: "Web",          icon: "laptopcomputer",   percent: 5)
+            ],
+            peakHour: "9–11 مساءً",
+            questionConsensus: survey.questions.enumerated().map { i, q in
+                let lead = q.options.max(by: { $0.percentage < $1.percentage })?.percentage ?? 50
+                let label = lead > 70 ? "توافق قوي" : lead > 55 ? "ميل واضح" : "انقسام حاد"
+                let short = String(q.title.prefix(28)) + (q.title.count > 28 ? "…" : "")
+                return (questionShort: short, leadPercent: lead, label: label)
+            },
+            correlations: [
+                ("ساعات الاستخدام", "1-3 ساعات", "التأثير على العمل", "زاد إنتاجيتي", 71),
+                ("القلق من سوق العمل", "لست قلقاً", "مجال التحول", "التعليم والتدريب", 68),
+                ("ساعات الاستخدام", "+3 ساعات", "القلق", "متفائل جداً", 64),
+            ],
+            personas: [
+                RespondentPersona(name: "المتبنّي المبكّر", emoji: "⚡️",
+                    description: "شاب 25-34 من الرياض يستخدم AI +3 ساعات، متفائل جداً ولا يقلق من سوق العمل",
+                    percent: 38,
+                    traits: ["مستخدم مكثف", "متفائل", "رياضي"]),
+                RespondentPersona(name: "المتشكك المدروس", emoji: "ᾝ0",
+                    description: "محترف 35-44 يستخدم AI بحذر، يقلق من سوق العمل ويرى التحول في التعليم",
+                    percent: 29,
+                    traits: ["حذر", "متشكك", "مدروس"]),
+                RespondentPersona(name: "المتحفظ العملي", emoji: "🛡️",
+                    description: "مستخدم خفيف يقلق من أثر AI على وظيفته، إجاباته تدل على مقاومة للتغيير",
+                    percent: 33,
+                    traits: ["حذر", "محافظ", "عملي"])
+            ],
+            sentimentTimeline: [
+                (1, 58), (2, 61), (3, 59), (4, 63),
+                (5, 67), (6, 65), (7, 70), (8, 68),
+                (9, 72), (10, 69), (11, 74), (12, 76),
+                (13, 73), (14, 78)
+            ],
+            keyFindings: [
+                "٧٩% من المشاركين يستخدمون AI يومياً لأكثر من ساعة — اندماج عميق في الروتين اليومي",
+                "المستخدمون المكثفون (+3 ساعات) هم الأقل قلقاً من سوق العمل — علاقة عكسية واضحة",
+                "الصحة والطب تصدر مجالات التحول المتوقع بنسبة ٣٣% — يعكس قلق اجتماعياً حقيقياً",
+                "فجوة جيلية واضحة: فئة 18-24 أكثر تفاؤلاً بفارق ١٨ نقطة عن فئة +٤٥",
+                "الرياض أكثر تفاؤلاً من جدة بفارق ١٢% — يعكس تبايناً جغرافياً في تبني التقنية"
+            ],
+            recommendations: [
+                "استهدف الفئة 35+ بمحتوى تعليمي يخفف مخاوف سوق العمل",
+                "استثمر في جدة والمنطقة الغربية — نسبة التبني أقل بمراحل عن الرياض",
+                "تقطيع محتوى الصحة الرقمية لاستهداف المتشككين بحجج علمية"
+            ]
+        )
+    }
+}
+
+struct RespondentPersona: Codable, Identifiable {
+    let id: UUID
+    let name: String
+    let emoji: String
+    let description: String
+    let percent: Int
+    let traits: [String]
+
+    init(id: UUID = UUID(), name: String, emoji: String, description: String, percent: Int, traits: [String]) {
+        self.id = id; self.name = name; self.emoji = emoji
+        self.description = description; self.percent = percent; self.traits = traits
+    }
 }
