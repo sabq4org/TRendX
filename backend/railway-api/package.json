@@ -13,7 +13,7 @@
     "migrate": "prisma migrate deploy",
     "seed": "node dist/seed.js",
     "seed:dev": "tsx src/seed.ts",
-    "postdeploy": "prisma migrate deploy && node dist/seed.js",
+    "postdeploy": "node dist/bootstrap-db.js && prisma migrate deploy && node dist/seed.js",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },
