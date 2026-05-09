@@ -18,6 +18,7 @@ import {
   normalizeGender,
 } from "./lib/demographics.js";
 import { aiJSON } from "./lib/ai.js";
+import { PROMPT_VERSIONS, SYSTEM_PROMPTS } from "./lib/ai-prompts.js";
 import {
   giftDTO,
   pollDTO,
@@ -26,6 +27,15 @@ import {
   topicDTO,
   userDTO,
 } from "./lib/dto.js";
+import {
+  getCachedOrComputePoll,
+  getCachedOrComputeSurvey,
+} from "./lib/analytics.js";
+import {
+  runSnapshotsNow,
+  startSnapshotJob,
+} from "./jobs/snapshot.js";
+import { sseHandler, broadcastEvent } from "./events/sse.js";
 
 // MARK: - Types
 
@@ -508,6 +518,26 @@ app.post("/polls/vote", async (c) => {
         },
       }),
     ]);
+
+    // Broadcast to dashboard subscribers (best-effort; never blocks the user).
+    const newTotal = poll.totalVotes + 1;
+    broadcastEvent({
+      type: "vote_cast",
+      pollId,
+      pollTitle: poll.title,
+      city: user.city,
+      deviceType: user.deviceType,
+      total: newTotal,
+    });
+    if (newTotal % 100 === 0) {
+      broadcastEvent({
+        type: "vote_milestone",
+        pollId,
+        pollTitle: poll.title,
+        total: newTotal,
+        milestone: newTotal,
+      });
+    }
   }
 
   const fullPoll = await prisma.poll.findUnique({
@@ -882,80 +912,79 @@ app.post("/ai/poll-insight", async (c) => {
   return c.json(result);
 });
 
-// MARK: - Analytics (Phase 2 — basic synchronous version, replaced by jobs later)
+// MARK: - AI reports
 
-app.get("/analytics/poll/:id", async (c) => {
-  const pollId = c.req.param("id");
-  const [poll, votes] = await Promise.all([
-    prisma.poll.findUnique({
-      where: { id: pollId },
-      include: {
-        options: { orderBy: { displayOrder: "asc" } },
-        topic: true,
-      },
-    }),
-    prisma.vote.findMany({ where: { pollId } }),
-  ]);
-  if (!poll) return c.json({ error: "Poll not found" }, 404);
+type SurveyReportShape = {
+  executive_summary: string;
+  key_findings: Array<{ finding: string; supporting_stat: string }>;
+  persona_profiles: Array<{
+    name: string;
+    traits: string[];
+    percent: number;
+    representative_quote: string;
+  }>;
+  hidden_patterns: Array<{
+    pattern: string;
+    probability_pct: number;
+    implication: string;
+  }>;
+  strategic_recommendations: string[];
+  sector_position: string;
+};
 
-  // Demographic breakdown
-  const byGender = countBy(votes, (v) => v.gender);
-  const byAgeGroup = countBy(votes, (v) => v.ageGroup ?? "unknown");
-  const byCity = topN(countBy(votes, (v) => v.city ?? "غير محدد"), 10);
-  const byDevice = countBy(votes, (v) => v.deviceType);
+type SectorReportShape = {
+  sector_sentiment_score: number;
+  sentiment_direction: "rising" | "falling" | "stable";
+  consensus_map: Array<{ question: string; leading_pct: number; label: string }>;
+  sector_persona: { name: string; description: string; share_pct: number };
+  cross_survey_patterns: string[];
+  strategic_brief: string;
+  predicted_trend: string;
+};
 
-  // Behavioral
-  const decisionTimes = votes
-    .map((v) => v.secondsToVote)
-    .filter((v): v is number => typeof v === "number");
-  const avgDecisionSeconds =
-    decisionTimes.length > 0
-      ? Math.round(decisionTimes.reduce((a, b) => a + b, 0) / decisionTimes.length)
-      : null;
+const SURVEY_REPORT_FALLBACK: SurveyReportShape = {
+  executive_summary:
+    "هذا تقرير احتياطي يُعرض حين لا يتوفّر مفتاح OpenAI. سيظهر التقرير الكامل من GPT-4o فور تكوين المتغيّر OPENAI_API_KEY في Railway. البيانات الإحصائية الأساسية (الإكمال، الديموغرافيا، الإجماع) متاحة في تبويب الملخّص.",
+  key_findings: [
+    { finding: "حجم العيّنة كافٍ لاستنتاجات أوّلية", supporting_stat: "مرجع: completion_rate" },
+    { finding: "تنوع جغرافي حاضر في الاستجابات", supporting_stat: "مرجع: by_city_top" },
+  ],
+  persona_profiles: [],
+  hidden_patterns: [],
+  strategic_recommendations: [
+    "اربط مفتاح OpenAI لتفعيل تحليل الشخصيات والأنماط الخفية",
+  ],
+  sector_position: "بانتظار AI لإصدار قراءة قطاعية مقارنة.",
+};
 
-  // Consensus
-  const sortedOptions = [...poll.options].sort((a, b) => b.votesCount - a.votesCount);
-  const total = poll.totalVotes;
-  const leadingPct = total > 0 && sortedOptions[0] ? (sortedOptions[0].votesCount / total) * 100 : 0;
-  const secondPct = total > 0 && sortedOptions[1] ? (sortedOptions[1].votesCount / total) * 100 : 0;
-  const polarization = leadingPct - secondPct;
-  const consensusLabel =
-    polarization >= 40 ? "إجماع قوي" :
-    polarization >= 20 ? "ميل واضح" :
-    polarization >= 10 ? "اختلاف خفيف" :
-                          "انقسام حاد";
+const SECTOR_REPORT_FALLBACK: SectorReportShape = {
+  sector_sentiment_score: 60,
+  sentiment_direction: "stable",
+  consensus_map: [],
+  sector_persona: { name: "غير متوفّر", description: "بانتظار تفعيل AI", share_pct: 0 },
+  cross_survey_patterns: [],
+  strategic_brief: "تقرير احتياطي. اربط OpenAI لإصدار البريف الكامل.",
+  predicted_trend: "بانتظار التحليل التنبّؤي",
+};
 
-  return c.json({
-    sample_size: total,
-    confidence_level: total >= 1000 ? 99 : total >= 384 ? 95 : 90,
-    margin_of_error: total > 0 ? Number((1.96 * Math.sqrt(0.25 / total) * 100).toFixed(2)) : null,
-    data_freshness: new Date().toISOString(),
-    methodology_note:
-      "العيّنة محسوبة على المصوّتين الفعليين فقط. هامش الخطأ بافتراض أقصى تباين (p=0.5).",
-    poll: pollDTO(poll, { userId: c.get("userId") }),
-    breakdown: {
-      by_gender: byGender,
-      by_age_group: byAgeGroup,
-      by_city_top: byCity,
-      by_device: byDevice,
-    },
-    behavioral: {
-      avg_decision_seconds: avgDecisionSeconds,
-      change_vote_rate: total > 0
-        ? Math.round((votes.filter((v) => v.changedVote).length / total) * 100)
-        : 0,
-    },
-    consensus: {
-      leading_option_id: sortedOptions[0]?.id ?? null,
-      leading_percentage: Number(leadingPct.toFixed(2)),
-      polarization_index: Number(polarization.toFixed(2)),
-      label: consensusLabel,
-    },
-  });
-});
-
-app.get("/analytics/survey/:id", async (c) => {
+app.get("/surveys/:id/analytics/ai-report", async (c) => {
   const surveyId = c.req.param("id");
+  const cached = await prisma.aIInsight.findFirst({
+    where: { entityId: surveyId, entityType: "survey", insightType: "survey" },
+    orderBy: { generatedAt: "desc" },
+  });
+  // Cache for 6 hours
+  if (cached && Date.now() - cached.generatedAt.getTime() < 6 * 60 * 60 * 1000) {
+    return c.json({
+      cached: true,
+      generated_at: cached.generatedAt.toISOString(),
+      prompt_version: cached.promptVersion,
+      model: cached.modelUsed,
+      report: cached.content,
+    });
+  }
+
+  const analytics = await getCachedOrComputeSurvey(surveyId);
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
     include: {
@@ -963,67 +992,178 @@ app.get("/analytics/survey/:id", async (c) => {
         orderBy: { displayOrder: "asc" },
         include: { options: { orderBy: { displayOrder: "asc" } } },
       },
-      topic: true,
     },
   });
-  if (!survey) return c.json({ error: "Survey not found" }, 404);
+  if (!survey || !analytics) return c.json({ error: "Survey not found" }, 404);
 
-  const responses = await prisma.surveyResponse.findMany({
-    where: { surveyId },
-    include: { answers: true },
+  const report = await aiJSON<SurveyReportShape>({
+    promptVersion: PROMPT_VERSIONS.surveyReport,
+    system: SYSTEM_PROMPTS.surveyReport,
+    fallback: SURVEY_REPORT_FALLBACK,
+    input: {
+      title: survey.title,
+      description: survey.description,
+      sample_size: analytics.sample_size,
+      completion_rate: analytics.completion_rate,
+      breakdown: analytics.breakdown,
+      per_question: analytics.per_question,
+      correlations: analytics.correlations,
+    },
   });
 
-  const total = responses.length;
-  const completed = responses.filter((r) => r.isComplete).length;
-  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-  const completionTimes = responses
-    .map((r) => r.completionSeconds)
-    .filter((v): v is number => typeof v === "number");
-  const avgCompletionSeconds = completionTimes.length > 0
-    ? Math.round(completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length)
-    : null;
-
-  const byGender = countBy(responses, (r) => r.gender);
-  const byAgeGroup = countBy(responses, (r) => r.ageGroup ?? "unknown");
-  const byCity = topN(countBy(responses, (r) => r.city ?? "غير محدد"), 10);
-  const byDevice = countBy(responses, (r) => r.deviceType);
+  const insight = await prisma.aIInsight.create({
+    data: {
+      entityId: surveyId,
+      entityType: "survey",
+      insightType: "survey",
+      modelUsed: report.modelUsed ?? "fallback",
+      promptVersion: report.promptVersion ?? PROMPT_VERSIONS.surveyReport,
+      content: report as Prisma.InputJsonValue,
+      latencyMs: report.latencyMs ?? null,
+    },
+  });
 
   return c.json({
-    sample_size: total,
-    completion_rate: completionRate,
-    avg_completion_seconds: avgCompletionSeconds,
-    confidence_level: total >= 1000 ? 99 : total >= 384 ? 95 : 90,
-    margin_of_error: total > 0 ? Number((1.96 * Math.sqrt(0.25 / total) * 100).toFixed(2)) : null,
-    data_freshness: new Date().toISOString(),
-    methodology_note:
-      "العيّنة محسوبة على المستجيبين الفعليين. معدل الإكمال = مكتمل / مبدوء.",
-    survey: surveyDTO(survey),
-    breakdown: {
-      by_gender: byGender,
-      by_age_group: byAgeGroup,
-      by_city_top: byCity,
-      by_device: byDevice,
-    },
+    cached: false,
+    generated_at: insight.generatedAt.toISOString(),
+    prompt_version: insight.promptVersion,
+    model: insight.modelUsed,
+    report,
   });
 });
 
-// MARK: - Helpers
-
-function countBy<T>(items: T[], keyFn: (t: T) => string): Record<string, number> {
-  const result: Record<string, number> = {};
-  for (const item of items) {
-    const key = keyFn(item);
-    result[key] = (result[key] ?? 0) + 1;
+app.get("/topics/:id/insight", async (c) => {
+  const topicId = c.req.param("id");
+  const cached = await prisma.aIInsight.findFirst({
+    where: { entityId: topicId, entityType: "topic", insightType: "sector" },
+    orderBy: { generatedAt: "desc" },
+  });
+  if (cached && Date.now() - cached.generatedAt.getTime() < 6 * 60 * 60 * 1000) {
+    return c.json({
+      cached: true,
+      generated_at: cached.generatedAt.toISOString(),
+      prompt_version: cached.promptVersion,
+      model: cached.modelUsed,
+      report: cached.content,
+    });
   }
-  return result;
-}
 
-function topN(map: Record<string, number>, n: number): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, n),
-  );
-}
+  const topic = await prisma.topic.findUnique({ where: { id: topicId } });
+  if (!topic) return c.json({ error: "Topic not found" }, 404);
+
+  const [polls, surveys] = await Promise.all([
+    prisma.poll.findMany({
+      where: { topicId, status: "active" },
+      include: { options: true },
+    }),
+    prisma.survey.findMany({
+      where: { topicId, status: "active" },
+      include: {
+        questions: {
+          orderBy: { displayOrder: "asc" },
+          include: { options: true },
+        },
+      },
+    }),
+  ]);
+
+  const totalVotes = polls.reduce((acc, p) => acc + p.totalVotes, 0);
+  const totalResponses = surveys.reduce((acc, s) => acc + s.totalResponses, 0);
+
+  const report = await aiJSON<SectorReportShape>({
+    promptVersion: PROMPT_VERSIONS.sectorReport,
+    system: SYSTEM_PROMPTS.sectorReport,
+    fallback: SECTOR_REPORT_FALLBACK,
+    input: {
+      topic: topic.name,
+      polls_count: polls.length,
+      surveys_count: surveys.length,
+      total_votes: totalVotes,
+      total_responses: totalResponses,
+      polls_summary: polls.map((p) => ({
+        title: p.title,
+        total_votes: p.totalVotes,
+        leading_option: p.options
+          .slice()
+          .sort((a, b) => b.votesCount - a.votesCount)[0]?.text,
+      })),
+      surveys_summary: surveys.map((s) => ({
+        title: s.title,
+        total: s.totalResponses,
+        completion_rate: s.totalResponses > 0
+          ? Math.round((s.totalCompletes / s.totalResponses) * 100)
+          : 0,
+      })),
+    },
+  });
+
+  const insight = await prisma.aIInsight.create({
+    data: {
+      entityId: topicId,
+      entityType: "topic",
+      insightType: "sector",
+      modelUsed: report.modelUsed ?? "fallback",
+      promptVersion: report.promptVersion ?? PROMPT_VERSIONS.sectorReport,
+      content: report as Prisma.InputJsonValue,
+      latencyMs: report.latencyMs ?? null,
+    },
+  });
+
+  return c.json({
+    cached: false,
+    generated_at: insight.generatedAt.toISOString(),
+    prompt_version: insight.promptVersion,
+    model: insight.modelUsed,
+    polls_count: polls.length,
+    surveys_count: surveys.length,
+    total_votes: totalVotes,
+    total_responses: totalResponses,
+    report,
+  });
+});
+
+app.post("/ai/question-quality", async (c) => {
+  const body = await c.req.json<{ title?: string; options?: string[] }>();
+  const result = await aiJSON({
+    promptVersion: PROMPT_VERSIONS.questionQuality,
+    system: SYSTEM_PROMPTS.questionQuality,
+    input: { title: body.title, options: body.options ?? [] },
+    fallback: {
+      clarity_score: 70,
+      leading_bias: 30,
+      predicted_engagement: "medium",
+      issues: [],
+      suggestions: [],
+      rewrite: body.title ?? "",
+    },
+  });
+  return c.json(result);
+});
+
+// MARK: - Analytics
+
+app.get("/analytics/poll/:id", async (c) => {
+  const payload = await getCachedOrComputePoll(c.req.param("id"));
+  if (!payload) return c.json({ error: "Poll not found" }, 404);
+  return c.json(payload);
+});
+
+app.get("/analytics/survey/:id", async (c) => {
+  const payload = await getCachedOrComputeSurvey(c.req.param("id"));
+  if (!payload) return c.json({ error: "Survey not found" }, 404);
+  return c.json(payload);
+});
+
+app.post("/admin/snapshots/run", async (c) => {
+  await runSnapshotsNow();
+  return c.json({ ok: true, ranAt: new Date().toISOString() });
+});
+
+// MARK: - Realtime (SSE)
+
+app.get("/events/dashboard", (c) => sseHandler(c));
+
+// MARK: - Helpers
 
 function requireSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -1050,6 +1190,12 @@ const server = serve(
     );
   },
 );
+
+// Kick off the periodic analytics snapshot job. Disabled in test by setting
+// SNAPSHOT_DISABLED=1.
+if (process.env.SNAPSHOT_DISABLED !== "1") {
+  startSnapshotJob();
+}
 
 const shutdown = async () => {
   console.log("[trendx] shutting down…");

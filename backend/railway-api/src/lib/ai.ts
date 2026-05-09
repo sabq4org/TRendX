@@ -27,7 +27,7 @@ export async function aiJSON<T extends Record<string, unknown>>(
 
   const started = Date.now();
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -35,20 +35,26 @@ export async function aiJSON<T extends Record<string, unknown>>(
       },
       body: JSON.stringify({
         model,
-        input: [
+        response_format: { type: "json_object" },
+        messages: [
           { role: "system", content: options.system },
           { role: "user", content: JSON.stringify(options.input) },
         ],
+        temperature: 0.4,
       }),
     });
 
     if (!response.ok) {
-      console.warn(`[ai] non-200 response: ${response.status}`);
+      const text = await response.text().catch(() => "");
+      console.warn(`[ai] non-200 ${response.status}: ${text.slice(0, 240)}`);
       return { ...options.fallback, modelUsed: "fallback", promptVersion: options.promptVersion };
     }
 
-    const payload = (await response.json()) as { output_text?: string };
-    const parsed = JSON.parse(payload.output_text ?? "{}") as T;
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const text = payload.choices?.[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(text) as T;
     return {
       ...parsed,
       latencyMs: Date.now() - started,
