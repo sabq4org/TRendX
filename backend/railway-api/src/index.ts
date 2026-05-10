@@ -225,6 +225,7 @@ app.use("*", async (c, next) => {
     path.startsWith("/public/") ||  // TRENDX Index public endpoint
     path.startsWith("/embed/") ||   // embeddable widgets
     path === "/widget.js" ||
+    path === "/pulse/today/anon" || // unauthenticated pulse preview
     c.req.method === "OPTIONS";
   if (isPublic) return next();
 
