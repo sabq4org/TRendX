@@ -3,11 +3,16 @@
 -- All additive. No existing tables touched. Enum changes live in the
 -- previous migration (20260510084400_extend_enums) so the values are
 -- already committed and usable here.
+--
+-- IMPORTANT: this file is intentionally idempotent (IF NOT EXISTS / DO
+-- blocks for FKs) because an earlier revision shipped with an inline
+-- COMMIT/BEGIN that left a few of these tables half-created in some
+-- environments. Running this migration twice must be a safe no-op.
 
 -- =============================================================================
 -- daily_pulses
 -- =============================================================================
-CREATE TABLE "daily_pulses" (
+CREATE TABLE IF NOT EXISTS "daily_pulses" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "pulse_date" TEXT NOT NULL,
     "question" VARCHAR(500) NOT NULL,
@@ -23,16 +28,18 @@ CREATE TABLE "daily_pulses" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "daily_pulses_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "daily_pulses_pulse_date_key" ON "daily_pulses"("pulse_date");
-CREATE INDEX "daily_pulses_status_idx" ON "daily_pulses"("status");
-CREATE INDEX "daily_pulses_pulse_date_idx" ON "daily_pulses"("pulse_date");
-ALTER TABLE "daily_pulses"
-  ADD CONSTRAINT "daily_pulses_topic_id_fkey" FOREIGN KEY ("topic_id") REFERENCES "topics"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "daily_pulses_pulse_date_key" ON "daily_pulses"("pulse_date");
+CREATE INDEX IF NOT EXISTS "daily_pulses_status_idx" ON "daily_pulses"("status");
+CREATE INDEX IF NOT EXISTS "daily_pulses_pulse_date_idx" ON "daily_pulses"("pulse_date");
+DO $$ BEGIN
+  ALTER TABLE "daily_pulses"
+    ADD CONSTRAINT "daily_pulses_topic_id_fkey" FOREIGN KEY ("topic_id") REFERENCES "topics"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================================================
 -- daily_pulse_responses
 -- =============================================================================
-CREATE TABLE "daily_pulse_responses" (
+CREATE TABLE IF NOT EXISTS "daily_pulse_responses" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "pulse_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
@@ -47,17 +54,21 @@ CREATE TABLE "daily_pulse_responses" (
     "responded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "daily_pulse_responses_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "daily_pulse_responses_pulse_id_user_id_key" ON "daily_pulse_responses"("pulse_id", "user_id");
-CREATE INDEX "daily_pulse_responses_pulse_id_idx" ON "daily_pulse_responses"("pulse_id");
-ALTER TABLE "daily_pulse_responses"
-  ADD CONSTRAINT "daily_pulse_responses_pulse_id_fkey" FOREIGN KEY ("pulse_id") REFERENCES "daily_pulses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "daily_pulse_responses"
-  ADD CONSTRAINT "daily_pulse_responses_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "daily_pulse_responses_pulse_id_user_id_key" ON "daily_pulse_responses"("pulse_id", "user_id");
+CREATE INDEX IF NOT EXISTS "daily_pulse_responses_pulse_id_idx" ON "daily_pulse_responses"("pulse_id");
+DO $$ BEGIN
+  ALTER TABLE "daily_pulse_responses"
+    ADD CONSTRAINT "daily_pulse_responses_pulse_id_fkey" FOREIGN KEY ("pulse_id") REFERENCES "daily_pulses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "daily_pulse_responses"
+    ADD CONSTRAINT "daily_pulse_responses_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================================================
 -- user_streaks
 -- =============================================================================
-CREATE TABLE "user_streaks" (
+CREATE TABLE IF NOT EXISTS "user_streaks" (
     "user_id" UUID NOT NULL,
     "current_streak" INTEGER NOT NULL DEFAULT 0,
     "longest_streak" INTEGER NOT NULL DEFAULT 0,
@@ -67,13 +78,15 @@ CREATE TABLE "user_streaks" (
     "updated_at" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "user_streaks_pkey" PRIMARY KEY ("user_id")
 );
-ALTER TABLE "user_streaks"
-  ADD CONSTRAINT "user_streaks_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "user_streaks"
+    ADD CONSTRAINT "user_streaks_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================================================
 -- audiences
 -- =============================================================================
-CREATE TABLE "audiences" (
+CREATE TABLE IF NOT EXISTS "audiences" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "publisher_id" UUID NOT NULL,
     "name" TEXT NOT NULL,
@@ -87,14 +100,16 @@ CREATE TABLE "audiences" (
     "updated_at" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "audiences_pkey" PRIMARY KEY ("id")
 );
-CREATE INDEX "audiences_publisher_id_idx" ON "audiences"("publisher_id");
-ALTER TABLE "audiences"
-  ADD CONSTRAINT "audiences_publisher_id_fkey" FOREIGN KEY ("publisher_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE INDEX IF NOT EXISTS "audiences_publisher_id_idx" ON "audiences"("publisher_id");
+DO $$ BEGIN
+  ALTER TABLE "audiences"
+    ADD CONSTRAINT "audiences_publisher_id_fkey" FOREIGN KEY ("publisher_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================================================
 -- vote_predictions
 -- =============================================================================
-CREATE TABLE "vote_predictions" (
+CREATE TABLE IF NOT EXISTS "vote_predictions" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "user_id" UUID NOT NULL,
     "poll_id" UUID NOT NULL,
@@ -106,17 +121,21 @@ CREATE TABLE "vote_predictions" (
     "scored_at" TIMESTAMP(3),
     CONSTRAINT "vote_predictions_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "vote_predictions_poll_id_user_id_key" ON "vote_predictions"("poll_id", "user_id");
-CREATE INDEX "vote_predictions_user_id_idx" ON "vote_predictions"("user_id");
-ALTER TABLE "vote_predictions"
-  ADD CONSTRAINT "vote_predictions_poll_id_fkey" FOREIGN KEY ("poll_id") REFERENCES "polls"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "vote_predictions"
-  ADD CONSTRAINT "vote_predictions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "vote_predictions_poll_id_user_id_key" ON "vote_predictions"("poll_id", "user_id");
+CREATE INDEX IF NOT EXISTS "vote_predictions_user_id_idx" ON "vote_predictions"("user_id");
+DO $$ BEGIN
+  ALTER TABLE "vote_predictions"
+    ADD CONSTRAINT "vote_predictions_poll_id_fkey" FOREIGN KEY ("poll_id") REFERENCES "polls"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "vote_predictions"
+    ADD CONSTRAINT "vote_predictions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================================================
 -- weekly_challenges + predictions
 -- =============================================================================
-CREATE TABLE "weekly_challenges" (
+CREATE TABLE IF NOT EXISTS "weekly_challenges" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "week_start" TEXT NOT NULL,
     "question" VARCHAR(500) NOT NULL,
@@ -129,9 +148,9 @@ CREATE TABLE "weekly_challenges" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "weekly_challenges_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "weekly_challenges_week_start_key" ON "weekly_challenges"("week_start");
+CREATE UNIQUE INDEX IF NOT EXISTS "weekly_challenges_week_start_key" ON "weekly_challenges"("week_start");
 
-CREATE TABLE "weekly_challenge_predictions" (
+CREATE TABLE IF NOT EXISTS "weekly_challenge_predictions" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "challenge_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
@@ -141,17 +160,21 @@ CREATE TABLE "weekly_challenge_predictions" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "weekly_challenge_predictions_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "weekly_challenge_predictions_challenge_id_user_id_key" ON "weekly_challenge_predictions"("challenge_id", "user_id");
-CREATE INDEX "weekly_challenge_predictions_challenge_id_idx" ON "weekly_challenge_predictions"("challenge_id");
-ALTER TABLE "weekly_challenge_predictions"
-  ADD CONSTRAINT "weekly_challenge_predictions_challenge_id_fkey" FOREIGN KEY ("challenge_id") REFERENCES "weekly_challenges"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "weekly_challenge_predictions"
-  ADD CONSTRAINT "weekly_challenge_predictions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS "weekly_challenge_predictions_challenge_id_user_id_key" ON "weekly_challenge_predictions"("challenge_id", "user_id");
+CREATE INDEX IF NOT EXISTS "weekly_challenge_predictions_challenge_id_idx" ON "weekly_challenge_predictions"("challenge_id");
+DO $$ BEGIN
+  ALTER TABLE "weekly_challenge_predictions"
+    ADD CONSTRAINT "weekly_challenge_predictions_challenge_id_fkey" FOREIGN KEY ("challenge_id") REFERENCES "weekly_challenges"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "weekly_challenge_predictions"
+    ADD CONSTRAINT "weekly_challenge_predictions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- =============================================================================
 -- poll_comments + votes (الحوار)
 -- =============================================================================
-CREATE TABLE "poll_comments" (
+CREATE TABLE IF NOT EXISTS "poll_comments" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "poll_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
@@ -164,14 +187,18 @@ CREATE TABLE "poll_comments" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "poll_comments_pkey" PRIMARY KEY ("id")
 );
-CREATE INDEX "poll_comments_poll_id_idx" ON "poll_comments"("poll_id");
-CREATE INDEX "poll_comments_user_id_idx" ON "poll_comments"("user_id");
-ALTER TABLE "poll_comments"
-  ADD CONSTRAINT "poll_comments_poll_id_fkey" FOREIGN KEY ("poll_id") REFERENCES "polls"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "poll_comments"
-  ADD CONSTRAINT "poll_comments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+CREATE INDEX IF NOT EXISTS "poll_comments_poll_id_idx" ON "poll_comments"("poll_id");
+CREATE INDEX IF NOT EXISTS "poll_comments_user_id_idx" ON "poll_comments"("user_id");
+DO $$ BEGIN
+  ALTER TABLE "poll_comments"
+    ADD CONSTRAINT "poll_comments_poll_id_fkey" FOREIGN KEY ("poll_id") REFERENCES "polls"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "poll_comments"
+    ADD CONSTRAINT "poll_comments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TABLE "poll_comment_votes" (
+CREATE TABLE IF NOT EXISTS "poll_comment_votes" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "comment_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
@@ -179,4 +206,12 @@ CREATE TABLE "poll_comment_votes" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "poll_comment_votes_pkey" PRIMARY KEY ("id")
 );
-CREATE UNIQUE INDEX "poll_comment_votes_comment_id_user_id_key" ON "poll_comment_votes"("comment_id", "user_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "poll_comment_votes_comment_id_user_id_key" ON "poll_comment_votes"("comment_id", "user_id");
+DO $$ BEGIN
+  ALTER TABLE "poll_comment_votes"
+    ADD CONSTRAINT "poll_comment_votes_comment_id_fkey" FOREIGN KEY ("comment_id") REFERENCES "poll_comments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE "poll_comment_votes"
+    ADD CONSTRAINT "poll_comment_votes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
