@@ -59,6 +59,7 @@ struct TrendXIndexScreen: View {
             .padding(.bottom, 120)
         }
         .trendxScreenBackground()
+        .environment(\.layoutDirection, .rightToLeft)
         .task { await load() }
     }
 
@@ -197,14 +198,16 @@ struct TrendXIndexScreen: View {
             .padding(.horizontal, 20)
     }
 
+    @MainActor
     private func load() async {
         loading = true
-        defer { loading = false }
+        errorMessage = nil
         do {
             let res = try await store.apiClient.trendxIndex()
-            await MainActor.run { self.index = res }
+            self.index = res
         } catch {
-            errorMessage = error.localizedDescription
+            self.errorMessage = error.localizedDescription
         }
+        loading = false
     }
 }

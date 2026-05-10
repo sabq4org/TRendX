@@ -34,6 +34,7 @@ struct PredictionAccuracyScreen: View {
             .padding(.bottom, 120)
         }
         .trendxScreenBackground()
+        .environment(\.layoutDirection, .rightToLeft)
         .task { await load() }
     }
 
@@ -145,17 +146,16 @@ struct PredictionAccuracyScreen: View {
             .cornerRadius(TrendXTheme.cardRadius)
     }
 
+    @MainActor
     private func load() async {
         guard let token = store.accessToken else { loading = false; return }
         loading = true
         async let s = try? store.apiClient.myAccuracy(accessToken: token)
         async let b = try? store.apiClient.accuracyLeaderboard(limit: 25, accessToken: token)
         let (sV, bV) = await (s, b)
-        await MainActor.run {
-            self.stats = sV
-            self.board = bV
-            self.loading = false
-        }
+        self.stats = sV
+        self.board = bV
+        self.loading = false
     }
 }
 

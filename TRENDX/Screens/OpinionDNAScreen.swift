@@ -39,6 +39,7 @@ struct OpinionDNAScreen: View {
             .padding(.bottom, 120)
         }
         .trendxScreenBackground()
+        .environment(\.layoutDirection, .rightToLeft)
         .task { await load() }
     }
 
@@ -216,15 +217,17 @@ struct OpinionDNAScreen: View {
 
     // MARK: - Actions
 
+    @MainActor
     private func load() async {
         guard let token = store.accessToken else { loading = false; return }
         loading = true
-        defer { loading = false }
+        errorMessage = nil
         do {
             let res = try await store.apiClient.myOpinionDNA(accessToken: token)
-            await MainActor.run { self.dna = res }
+            self.dna = res
         } catch {
-            errorMessage = error.localizedDescription
+            self.errorMessage = error.localizedDescription
         }
+        loading = false
     }
 }
