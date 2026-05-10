@@ -9,7 +9,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var store = AppStore()
-    
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         Group {
             if store.isAuthenticated {
@@ -51,6 +52,13 @@ struct ContentView: View {
             CreatePollSheet()
                 .environmentObject(store)
                 .trendxRTL()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // When the user brings the app back to the foreground, pull
+            // the latest polls / surveys / pulse so anything published
+            // from the dashboard shows up without needing pull-to-refresh.
+            guard newPhase == .active, store.isAuthenticated else { return }
+            Task { await store.refreshBootstrap() }
         }
     }
 }

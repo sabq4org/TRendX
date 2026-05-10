@@ -13,6 +13,7 @@ import type {
   HeatmapDimension,
   JobsStatus,
   OpinionDNA,
+  Poll,
   PollAnalytics,
   PredictionLeaderboardItem,
   PulseHistoryItem,
@@ -76,6 +77,46 @@ export const api = {
 
   topics(token: string): Promise<Array<Topic & { is_following?: boolean }>> {
     return request("/topics", { token });
+  },
+
+  createPoll(
+    token: string,
+    body: {
+      poll: {
+        title: string;
+        description?: string;
+        cover_style?: string;
+        topic_id?: string;
+        type?: "single_choice" | "multiple_choice" | "rating" | "linear_scale";
+        reward_points?: number;
+        duration_days?: number;
+      };
+      options: Array<{ text: string }>;
+    },
+  ): Promise<{ poll: Poll }> {
+    return request("/polls/create", { method: "POST", body, token });
+  },
+
+  createSurvey(
+    token: string,
+    body: {
+      survey: {
+        title: string;
+        description?: string;
+        cover_style?: string;
+        topic_id?: string;
+        reward_points?: number;
+        duration_days?: number;
+      };
+      questions: Array<{
+        title: string;
+        type?: "single_choice" | "multiple_choice" | "rating" | "linear_scale";
+        reward_points?: number;
+        options: Array<{ text: string }>;
+      }>;
+    },
+  ): Promise<{ survey: Survey }> {
+    return request("/surveys/create", { method: "POST", body, token });
   },
 
   pollAnalytics(token: string, pollId: string): Promise<PollAnalytics> {

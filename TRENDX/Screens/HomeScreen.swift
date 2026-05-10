@@ -59,6 +59,7 @@ struct HomeScreen: View {
                 }
                 .padding(.bottom, 120)
             }
+            .refreshable { await store.refreshBootstrap() }
             .trendxScreenBackground()
             .sheet(item: $selectedPoll) { poll in
                 PollDetailView(pollId: poll.id)

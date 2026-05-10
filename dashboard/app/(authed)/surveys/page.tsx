@@ -1,16 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Header } from "@/components/Header";
+import { Modal } from "@/components/Modal";
+import { CreateSurveyModal } from "@/components/CreateSurveyModal";
 import { fmtInt, fmtPctRaw, fmtRelativeNow, fmtSeconds } from "@/lib/format";
-import { ArrowLeft } from "lucide-react";
 
 export default function SurveysListPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const bootstrap = useFetch((t) => api.bootstrap(t), token);
+
+  const [showCreate, setShowCreate] = useState(false);
+
+  const canCreate = user?.role === "publisher" || user?.role === "admin";
+
+  function handleCreated(surveyId: string) {
+    setShowCreate(false);
+    bootstrap.refresh();
+    router.push(`/surveys/${surveyId}`);
+  }
 
   return (
     <>
@@ -18,6 +33,17 @@ export default function SurveysListPage() {
         eyebrow="SURVEYS"
         title="الاستبيانات"
         subtitle="استبيانات متعدّدة الأسئلة تكشف الأنماط الخفية والشخصيات الكامنة."
+        right={
+          canCreate ? (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-chip bg-brand-600 text-canvas-card text-[13px] font-bold shadow-card hover:bg-brand-700 transition"
+            >
+              <Plus size={15} />
+              استبيان جديد
+            </button>
+          ) : undefined
+        }
       />
       <main className="flex-1 px-10 pb-10">
         {bootstrap.loading && (
@@ -71,10 +97,35 @@ export default function SurveysListPage() {
 
         {bootstrap.data && bootstrap.data.surveys.length === 0 && (
           <div className="bg-canvas-card rounded-card p-16 text-center text-ink-mute dotgrid">
-            <p className="text-sm">لا توجد استبيانات بعد.</p>
+            <p className="text-sm mb-4">لا توجد استبيانات بعد.</p>
+            {canCreate && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-chip bg-brand-600 text-canvas-card text-[13px] font-bold shadow-card hover:bg-brand-700 transition"
+              >
+                <Plus size={15} />
+                ابدأ بأول استبيان
+              </button>
+            )}
           </div>
         )}
       </main>
+
+      {token && (
+        <Modal
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          title="استبيان جديد"
+          subtitle="عرّف الأسئلة والخيارات. الأسئلة المكتملة فقط هي التي ستُنشر."
+          width="xl"
+        >
+          <CreateSurveyModal
+            token={token}
+            onClose={() => setShowCreate(false)}
+            onCreated={handleCreated}
+          />
+        </Modal>
+      )}
     </>
   );
 }

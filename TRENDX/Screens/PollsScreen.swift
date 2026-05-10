@@ -205,6 +205,7 @@ struct PollsScreen: View {
                 .padding(.vertical, 16)
                 .padding(.bottom, 120)
             }
+            .refreshable { await store.refreshBootstrap() }
             .background(Color.clear)
         }
         .trendxScreenBackground()

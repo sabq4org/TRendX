@@ -1,16 +1,31 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, ArrowLeft, Sparkles, Zap } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Header } from "@/components/Header";
+import { Modal } from "@/components/Modal";
+import { CreatePollModal } from "@/components/CreatePollModal";
 import { fmtInt, fmtRelativeNow } from "@/lib/format";
-import { ArrowLeft, Sparkles, Zap } from "lucide-react";
 
 export default function PollsListPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const bootstrap = useFetch((t) => api.bootstrap(t), token);
+
+  const [showCreate, setShowCreate] = useState(false);
+
+  const canCreate = user?.role === "publisher" || user?.role === "admin";
+
+  function handleCreated(pollId: string) {
+    setShowCreate(false);
+    bootstrap.refresh();
+    router.push(`/polls/${pollId}`);
+  }
 
   return (
     <>
@@ -21,6 +36,17 @@ export default function PollsListPage() {
           bootstrap.data
             ? `${fmtInt(bootstrap.data.polls.length)} استطلاعاً نشطاً تجمع ${fmtInt(bootstrap.data.polls.reduce((a, p) => a + p.total_votes, 0))} صوتاً.`
             : "بانتظار البيانات…"
+        }
+        right={
+          canCreate ? (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-chip bg-brand-600 text-canvas-card text-[13px] font-bold shadow-card hover:bg-brand-700 transition"
+            >
+              <Plus size={15} />
+              استطلاع جديد
+            </button>
+          ) : undefined
         }
       />
       <main className="flex-1 px-10 pb-10">
@@ -45,7 +71,6 @@ export default function PollsListPage() {
                   href={`/polls/${poll.id}`}
                   className="group bg-canvas-card rounded-card shadow-card hover:shadow-card-lift transition-all duration-500 ease-soft p-7 relative overflow-hidden"
                 >
-                  {/* Eyebrow numeral */}
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-[10px] font-mono font-bold tabular text-ink-mute">
                       {String(idx + 1).padStart(2, "0")}
@@ -106,7 +131,6 @@ export default function PollsListPage() {
                     </div>
                   </div>
 
-                  {/* Hover arrow */}
                   <div className="absolute top-7 inset-inline-end-7 opacity-0 group-hover:opacity-100 transition">
                     <ArrowLeft size={14} className="text-brand-600" />
                   </div>
@@ -118,10 +142,35 @@ export default function PollsListPage() {
 
         {bootstrap.data && bootstrap.data.polls.length === 0 && (
           <div className="bg-canvas-card rounded-card p-16 text-center text-ink-mute dotgrid">
-            <p className="text-sm">لا توجد استطلاعات بعد.</p>
+            <p className="text-sm mb-4">لا توجد استطلاعات بعد.</p>
+            {canCreate && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-chip bg-brand-600 text-canvas-card text-[13px] font-bold shadow-card hover:bg-brand-700 transition"
+              >
+                <Plus size={15} />
+                ابدأ بأول استطلاع
+              </button>
+            )}
           </div>
         )}
       </main>
+
+      {token && (
+        <Modal
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          title="استطلاع جديد"
+          subtitle="عرّف السؤال والخيارات وستُنشره في تطبيق iOS فوراً."
+          width="lg"
+        >
+          <CreatePollModal
+            token={token}
+            onClose={() => setShowCreate(false)}
+            onCreated={handleCreated}
+          />
+        </Modal>
+      )}
     </>
   );
 }
