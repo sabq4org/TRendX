@@ -70,6 +70,12 @@ struct SmartSignUpFlow: View {
     @State private var emailInput = ""
     @State private var passwordInput = ""
 
+    // Tracks the focused field so we can resign first responder
+    // whenever the conversation moves to a non-text step (chips,
+    // multi-select, etc.) and the soft keyboard would otherwise
+    // hover over the answer controls.
+    @FocusState private var focusedField: SignUpStep?
+
     private let saudiCities = [
         "الرياض", "جدة", "مكة المكرمة", "المدينة المنورة", "الدمام",
         "الخبر", "الظهران", "الطائف", "أبها", "تبوك", "بريدة", "حائل",
@@ -119,6 +125,7 @@ struct SmartSignUpFlow: View {
                         .padding(.top, 12)
                         .padding(.bottom, 18)
                     }
+                    .scrollDismissesKeyboard(.interactively)
                     .onChange(of: messages.count) { _, _ in
                         withAnimation(.easeOut(duration: 0.25)) {
                             if let last = messages.last {
@@ -211,6 +218,7 @@ struct SmartSignUpFlow: View {
                 Image(systemName: "person.fill")
                     .foregroundStyle(TrendXTheme.primary)
                 TextField("اسمك الأول", text: $nameInput)
+                    .focused($focusedField, equals: .askName)
                     .submitLabel(.send)
                     .onSubmit { commitName() }
                     .textInputAutocapitalization(.words)
@@ -223,6 +231,7 @@ struct SmartSignUpFlow: View {
                 Image(systemName: "envelope.fill")
                     .foregroundStyle(TrendXTheme.primary)
                 TextField("بريدك الإلكتروني", text: $emailInput)
+                    .focused($focusedField, equals: .askEmail)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -237,6 +246,7 @@ struct SmartSignUpFlow: View {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(TrendXTheme.primary)
                 SecureField("كلمة مرور (٦ خانات على الأقل)", text: $passwordInput)
+                    .focused($focusedField, equals: .askPassword)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.send)
@@ -319,6 +329,7 @@ struct SmartSignUpFlow: View {
                     Image(systemName: "quote.opening")
                         .foregroundStyle(TrendXTheme.primary)
                     TextField("كلمة واحدة، اختياري", text: $voiceLine, axis: .vertical)
+                        .focused($focusedField, equals: .askVoice)
                         .lineLimit(2)
                 }
                 .modifier(InputCardStyle())
@@ -359,6 +370,13 @@ struct SmartSignUpFlow: View {
     @MainActor
     private func runStep(_ next: SignUpStep) async {
         step = next
+
+        // Always drop the soft keyboard on any step transition. For
+        // text-input steps we re-focus the right field once the AI has
+        // finished "typing" — but starting from a clean slate prevents
+        // a previous field's keyboard from hovering over chips/buttons.
+        dismissKeyboard()
+
         switch next {
         case .greeting:
             await aiTypeAndSay("أهلاً 👋 أنا TRENDX AI.")
@@ -367,12 +385,15 @@ struct SmartSignUpFlow: View {
 
         case .askName:
             await aiTypeAndSay("لنبدأ — كيف تحبّ أن أناديك؟")
+            focusedField = .askName
 
         case .askEmail:
             await aiTypeAndSay("أهلاً \(name) 🌟 — على أيّ بريد إلكتروني نُسجّلك؟")
+            focusedField = .askEmail
 
         case .askPassword:
             await aiTypeAndSay("اختر كلمة مرور آمنة لك — ستحتاجها للدخول لاحقاً.")
+            focusedField = .askPassword
 
         case .askGender:
             await aiTypeAndSay("لمَن أُخاطب الآن؟ هذا يساعدني أعرض لك بيانات ممثّلة.")
@@ -388,6 +409,7 @@ struct SmartSignUpFlow: View {
 
         case .askVoice:
             await aiTypeAndSay("سؤال أخير — في كلمة واحدة، ما الذي يهمّك أكثر هذه السنة؟")
+            focusedField = .askVoice
 
         case .finishing:
             await aiTypeAndSay("ممتاز \(name) — أُعدّ ملفّك الآن…")
@@ -399,11 +421,24 @@ struct SmartSignUpFlow: View {
         }
     }
 
+    /// Force the on-screen keyboard down regardless of which field
+    /// currently holds first responder. We clear `@FocusState` (the
+    /// SwiftUI-friendly path) AND fall back to `resignFirstResponder`
+    /// in case a text view that we don't track is somehow active.
+    private func dismissKeyboard() {
+        focusedField = nil
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil, from: nil, for: nil
+        )
+    }
+
     // MARK: - Commit handlers
 
     private func commitName() {
         let value = trimmed(nameInput)
         guard !value.isEmpty else { return }
+        dismissKeyboard()
         name = value
         userSay(value)
         nameInput = ""
@@ -413,6 +448,7 @@ struct SmartSignUpFlow: View {
     private func commitEmail() {
         let value = trimmed(emailInput)
         guard isValidEmail(value) else { return }
+        dismissKeyboard()
         email = value.lowercased()
         userSay(email)
         emailInput = ""
@@ -421,6 +457,7 @@ struct SmartSignUpFlow: View {
 
     private func commitPassword() {
         guard passwordInput.count >= 6 else { return }
+        dismissKeyboard()
         password = passwordInput
         userSay(String(repeating: "•", count: passwordInput.count))
         passwordInput = ""
@@ -428,18 +465,21 @@ struct SmartSignUpFlow: View {
     }
 
     private func commitGender(_ value: UserGender) {
+        dismissKeyboard()
         gender = value
         userSay(value.displayName)
         Task { await runStep(.askBirthDecade) }
     }
 
     private func commitDecade(_ year: Int?) {
+        dismissKeyboard()
         birthYear = year
         userSay(year != nil ? labelForYear(year!) : "أفضّل لا أقول")
         Task { await runStep(.askCity) }
     }
 
     private func commitCity(_ value: String) {
+        dismissKeyboard()
         city = value
         userSay(value)
         Task { await runStep(.askInterests) }
@@ -451,12 +491,14 @@ struct SmartSignUpFlow: View {
     }
 
     private func commitInterests() {
+        dismissKeyboard()
         let summary = interests.isEmpty ? "تخطّيت" : interests.joined(separator: " · ")
         userSay(summary)
         Task { await runStep(.askVoice) }
     }
 
     private func commitVoice(_ value: String) {
+        dismissKeyboard()
         let trimmedValue = trimmed(value)
         voiceLine = trimmedValue
         if !trimmedValue.isEmpty {
