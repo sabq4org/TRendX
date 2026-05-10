@@ -1,36 +1,42 @@
 /**
- * Centralized data color palette. Picked so two adjacent series never read
- * as "the same blue", and so the color order is consistent across every
- * chart and tab in the dashboard.
+ * Chart palette — derived from the Saudi-rooted brand system in
+ * `tailwind.config.ts`. We export hex strings (rather than `tailwind`
+ * tokens) because Recharts consumes raw colours, not utility classes.
+ *
+ * Order matters: the first colour is reserved for the primary series
+ * (the "leading" data point), and successive colours fall back to
+ * supporting hues that don't fight for attention.
  */
 
 export const DATA_COLORS = {
-  indigo: "#5C6BD0",
-  violet: "#8869C9",
-  rose: "#D26A8B",
-  amber: "#E0A04B",
-  teal: "#3CA597",
-  emerald: "#3DA565",
-  slate: "#6E7889",
+  sage:        "#3F6B4D", // primary
+  gold:        "#C9A961",
+  copper:      "#B86F4A",
+  sageLight:   "#7FA088",
+  goldDark:    "#9F8240",
+  copperDark:  "#8B5435",
+  sageDeep:    "#1F4630",
+  inkSoft:     "#34392F",
 };
 
 export const DATA_PALETTE = [
-  DATA_COLORS.indigo,
-  DATA_COLORS.violet,
-  DATA_COLORS.amber,
-  DATA_COLORS.teal,
-  DATA_COLORS.rose,
-  DATA_COLORS.emerald,
-  DATA_COLORS.slate,
+  DATA_COLORS.sage,
+  DATA_COLORS.gold,
+  DATA_COLORS.copper,
+  DATA_COLORS.sageLight,
+  DATA_COLORS.goldDark,
+  DATA_COLORS.copperDark,
+  DATA_COLORS.sageDeep,
+  DATA_COLORS.inkSoft,
 ];
 
 export const HEATMAP_RAMP = [
-  "#F4F6FB", // empty
-  "#E0E5F8",
-  "#C9D1F4",
-  "#A8B5EC",
-  "#8290DE",
-  "#5C6BD0", // hot
+  "#F2EDDF", // empty
+  "#E0E0CB",
+  "#C2CBB4",
+  "#9DB59A",
+  "#6E957A",
+  "#3F6B4D", // hot
 ];
 
 export function colorAt(index: number): string {

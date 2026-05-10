@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Header } from "@/components/Header";
 import { fmtInt, fmtPctRaw, fmtRelativeNow, fmtSeconds } from "@/lib/format";
+import { ArrowLeft } from "lucide-react";
 
 export default function SurveysListPage() {
   const { token } = useAuth();
@@ -14,50 +15,54 @@ export default function SurveysListPage() {
   return (
     <>
       <Header
+        eyebrow="SURVEYS"
         title="الاستبيانات"
-        subtitle="استبيانات متعدّدة الأسئلة تكشف الأنماط الخفية والشخصيات."
+        subtitle="استبيانات متعدّدة الأسئلة تكشف الأنماط الخفية والشخصيات الكامنة."
       />
-      <main className="flex-1 px-9 py-6">
+      <main className="flex-1 px-10 pb-10">
         {bootstrap.loading && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-48 rounded-card shimmer" />
-            ))}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[0, 1, 2].map((i) => <div key={i} className="h-56 rounded-card shimmer" />)}
           </div>
         )}
 
         {bootstrap.data && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {bootstrap.data.surveys.map((s) => (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger">
+            {bootstrap.data.surveys.map((s, idx) => (
               <Link
                 key={s.id}
                 href={`/surveys/${s.id}`}
-                className="bg-canvas-card rounded-card shadow-card hover:shadow-card-hover transition p-6 group"
+                className="group bg-canvas-card rounded-card shadow-card hover:shadow-card-lift transition-all duration-500 ease-soft p-8 relative overflow-hidden"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-ink-mute">
-                    {s.topic_name ?? "بدون قطاع"}
-                  </span>
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[10px] font-mono font-bold tabular text-ink-mute">
+                      {String(idx + 1).padStart(2, "0")}
+                    </span>
+                    <span className="text-eyebrow text-sage-700">
+                      {s.topic_name ?? "بدون قطاع"}
+                    </span>
+                  </div>
                   <span className="text-[10px] text-ink-mute">{fmtRelativeNow(s.created_at)}</span>
                 </div>
 
-                <h3 className="text-lg font-bold text-ink leading-snug mb-2 group-hover:text-brand-600 transition">
+                <h3 className="text-2xl font-display font-black text-ink leading-tight tracking-tight mb-3 group-hover:text-sage-700 transition">
                   {s.title}
                 </h3>
                 {s.description && (
-                  <p className="text-xs text-ink-mute leading-relaxed mb-4 line-clamp-2">
+                  <p className="text-[13px] text-ink-mute leading-relaxed mb-6 line-clamp-2 font-light">
                     {s.description}
                   </p>
                 )}
 
-                <div className="grid grid-cols-3 gap-3 pt-4 border-t border-ink-line">
-                  <Stat label="مستجيب" value={fmtInt(s.total_responses)} />
-                  <Stat label="معدل الإكمال" value={fmtPctRaw(s.completion_rate, 0)} />
-                  <Stat label="وقت الإكمال" value={fmtSeconds(s.avg_completion_seconds)} />
+                <div className="grid grid-cols-3 gap-6 pt-5 border-t border-ink-line/40">
+                  <Stat label="مستجيب" value={fmtInt(s.total_responses)} tone="sage" />
+                  <Stat label="معدل الإكمال" value={fmtPctRaw(s.completion_rate, 0)} tone="gold" />
+                  <Stat label="وقت الإكمال" value={fmtSeconds(s.avg_completion_seconds)} tone="copper" />
                 </div>
 
-                <div className="mt-4 text-[11px] text-brand-600 font-bold flex items-center gap-1 group-hover:gap-2 transition-all">
-                  افتح Survey Intelligence ←
+                <div className="absolute top-8 inset-inline-end-8 opacity-0 group-hover:opacity-100 transition flex items-center gap-1 text-[12px] font-bold text-sage-700">
+                  Survey Intelligence <ArrowLeft size={13} />
                 </div>
               </Link>
             ))}
@@ -65,8 +70,8 @@ export default function SurveysListPage() {
         )}
 
         {bootstrap.data && bootstrap.data.surveys.length === 0 && (
-          <div className="bg-canvas-card rounded-card p-12 text-center text-ink-mute">
-            لا توجد استبيانات بعد.
+          <div className="bg-canvas-card rounded-card p-16 text-center text-ink-mute dotgrid">
+            <p className="text-sm">لا توجد استبيانات بعد.</p>
           </div>
         )}
       </main>
@@ -74,11 +79,15 @@ export default function SurveysListPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone: "sage" | "gold" | "copper" }) {
+  const color =
+    tone === "sage"   ? "text-sage-700" :
+    tone === "gold"   ? "text-gold-700" :
+    "text-copper-700";
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-mute">{label}</div>
-      <div className="text-base font-bold tabular text-ink mt-0.5">{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-mute">{label}</div>
+      <div className={`text-2xl font-display font-black tabular ${color} mt-1.5 leading-none`}>{value}</div>
     </div>
   );
 }

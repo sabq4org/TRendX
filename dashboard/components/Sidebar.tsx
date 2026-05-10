@@ -8,7 +8,6 @@ import {
   ClipboardList,
   Layers,
   UserCircle,
-  TrendingUp,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -24,50 +23,63 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 shrink-0 border-l border-ink-line bg-canvas-card min-h-screen flex flex-col">
-      <div className="px-6 pt-7 pb-8">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-brand-500 text-white grid place-items-center shadow-card">
-            <TrendingUp size={17} strokeWidth={2.6} />
+    <aside className="w-72 shrink-0 min-h-screen sticky top-0 h-screen flex flex-col p-5">
+      {/* Glass surface */}
+      <div className="glass rounded-card flex-1 flex flex-col p-6">
+        {/* Brand mark */}
+        <Link href="/overview" className="block mb-9 group">
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-display font-black tracking-tight text-ink leading-none">
+              TRENDX
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-sage-500 mt-1 group-hover:scale-125 transition" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-base font-bold tracking-tight">TRENDX</span>
-            <span className="text-[10px] text-ink-mute -mt-0.5 font-medium">Publisher Console</span>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700 mt-2">
+            ذكاء الرأي السعودي
+          </p>
+        </Link>
+
+        {/* Nav */}
+        <nav className="flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-mute mb-3 px-3">
+            القائمة
           </div>
-        </div>
-      </div>
+          <ul className="space-y-1">
+            {NAV.map((item) => {
+              const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+              const Icon = item.icon;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={clsx(
+                      "relative flex items-center gap-3 px-3.5 py-3 rounded-chip text-sm font-medium transition group",
+                      active
+                        ? "bg-sage-700 text-canvas-card shadow-card-lift"
+                        : "text-ink-soft hover:bg-canvas-well/70 hover:text-ink",
+                    )}
+                  >
+                    <Icon size={17} strokeWidth={active ? 2.4 : 2} />
+                    <span className="font-semibold">{item.label}</span>
+                    {active && (
+                      <span className="ms-auto w-1.5 h-1.5 rounded-full bg-gold-500 shadow-[0_0_0_3px_rgba(201,169,97,0.25)]" />
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-      <nav className="px-3 flex-1">
-        <ul className="space-y-0.5">
-          {NAV.map((item) => {
-            const active = pathname === item.href || pathname?.startsWith(item.href + "/");
-            const Icon = item.icon;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={clsx(
-                    "flex items-center gap-3 px-3.5 py-2.5 rounded-chip text-sm font-medium transition",
-                    active
-                      ? "bg-brand-50 text-brand-700"
-                      : "text-ink-soft hover:bg-canvas-well hover:text-ink",
-                  )}
-                >
-                  <Icon size={17} strokeWidth={active ? 2.4 : 2} />
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <div className="px-5 pb-6 pt-4 border-t border-ink-line">
-        <div className="bg-canvas-well rounded-chip p-3.5">
-          <div className="text-[11px] font-semibold text-ink-soft mb-1.5">حالة النظام</div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span className="text-xs text-ink-soft">متصل بـ Railway API</span>
+        {/* Live status pill */}
+        <div className="mt-6 pt-6 border-t border-ink-line/60">
+          <div className="flex items-center gap-2.5 px-2">
+            <span className="relative flex w-2 h-2">
+              <span className="absolute inset-0 rounded-full bg-sage-500 animate-ping opacity-60" />
+              <span className="relative w-2 h-2 rounded-full bg-sage-600" />
+            </span>
+            <span className="text-[11px] font-bold text-sage-700">متصل بـ Railway</span>
+            <span className="text-[10px] text-ink-mute ms-auto">v0.2</span>
           </div>
         </div>
       </div>

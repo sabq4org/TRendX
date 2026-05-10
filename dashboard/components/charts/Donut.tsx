@@ -47,10 +47,12 @@ export function Donut({ data, totalLabel = "إجمالي" }: { data: Datum[]; to
 
       {/* Center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
+        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-mute">
           {totalLabel}
         </div>
-        <div className="text-2xl font-bold tabular text-ink mt-0.5">{fmtInt(total)}</div>
+        <div className="text-3xl font-display font-black tabular text-ink mt-1 leading-none tracking-tight">
+          {fmtInt(total)}
+        </div>
       </div>
 
       {/* Legend below — proper RTL */}

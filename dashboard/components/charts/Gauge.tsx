@@ -28,8 +28,8 @@ export function Gauge({
   const end = polar(endAngle);
   const largeArc = angle > 180 ? 1 : 0;
 
-  // Colour ramp: red → amber → green
-  const color = clamped >= 70 ? "#3DA565" : clamped >= 40 ? "#E0A04B" : "#D26A8B";
+  // Colour ramp: copper (low) → gold (mid) → sage (high)
+  const color = clamped >= 70 ? "#3F6B4D" : clamped >= 40 ? "#C9A961" : "#B86F4A";
 
   return (
     <div className="flex flex-col items-center justify-center">
@@ -38,7 +38,7 @@ export function Gauge({
         <path
           d={`M ${polar(180).x} ${polar(180).y} A ${radius} ${radius} 0 0 1 ${polar(0).x} ${polar(0).y}`}
           fill="none"
-          stroke="#EBEEF5"
+          stroke="#E5E1D5"
           strokeWidth={14}
           strokeLinecap="round"
         />
@@ -52,18 +52,19 @@ export function Gauge({
         />
         {/* Center value */}
         <text
-          x="50%" y="78%"
+          x="50%" y="80%"
           textAnchor="middle"
-          fontSize="34"
-          fontWeight="700"
-          fontFamily="var(--font-cairo)"
-          fill="#1A1B25"
+          fontSize="44"
+          fontWeight="900"
+          fontFamily="var(--font-tajawal)"
+          letterSpacing="-0.025em"
+          fill="#1A1F1B"
         >
           {clamped.toFixed(0)}
         </text>
       </svg>
-      <div className="text-xs font-semibold text-ink-soft mt-1">{label}</div>
-      {sub && <div className="text-[11px] text-ink-mute">{sub}</div>}
+      <div className="text-[13px] font-bold text-ink-soft mt-1">{label}</div>
+      {sub && <div className="text-[10px] font-mono tabular text-ink-mute mt-0.5">{sub}</div>}
     </div>
   );
 }

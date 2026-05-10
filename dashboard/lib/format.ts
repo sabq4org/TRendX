@@ -1,8 +1,13 @@
-/** Formatters used across the dashboard. Locale fixed to ar-SA so the numbers
- *  read naturally to the publisher. */
+/** Formatters used across the dashboard.
+ *
+ *  Numbers/percent: Latin digits with thousands separators (e.g. "65,443")
+ *  because publishers want to scan figures quickly without re-mapping
+ *  Arabic-Indic numerals. Relative time stays in Arabic so it reads as
+ *  natural prose ("قبل 5 دقائق").
+ */
 
-const FORMATTER_INT = new Intl.NumberFormat("ar-SA");
-const FORMATTER_PCT = new Intl.NumberFormat("ar-SA", {
+const FORMATTER_INT = new Intl.NumberFormat("en-US");
+const FORMATTER_PCT = new Intl.NumberFormat("en-US", {
   style: "percent",
   maximumFractionDigits: 1,
 });

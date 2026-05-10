@@ -8,7 +8,7 @@ import { Header } from "@/components/Header";
 import { KPICard } from "@/components/KPICard";
 import { LiveTicker } from "@/components/LiveTicker";
 import { fmtInt, fmtPctRaw, fmtRelativeNow } from "@/lib/format";
-import { TrendingUp, Sparkles, ChevronLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 
 export default function OverviewPage() {
   const { token, user } = useAuth();
@@ -17,11 +17,11 @@ export default function OverviewPage() {
   if (bootstrap.loading) {
     return (
       <>
-        <Header title="النظرة العامة" subtitle="بانتظار البيانات…" />
-        <main className="flex-1 px-9 py-6">
-          <div className="grid grid-cols-4 gap-5 mb-6">
+        <Header eyebrow="OVERVIEW" title="النظرة العامة" subtitle="بانتظار البيانات…" />
+        <main className="flex-1 px-10 pb-10">
+          <div className="grid grid-cols-4 gap-6 mb-8">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-32 rounded-card shimmer" />
+              <div key={i} className="h-44 rounded-card shimmer" />
             ))}
           </div>
         </main>
@@ -31,9 +31,9 @@ export default function OverviewPage() {
   if (bootstrap.error) {
     return (
       <>
-        <Header title="النظرة العامة" />
-        <main className="px-9 py-8">
-          <div className="bg-canvas-card rounded-card p-6 text-center text-danger">
+        <Header eyebrow="OVERVIEW" title="النظرة العامة" />
+        <main className="px-10 pb-10">
+          <div className="bg-canvas-card rounded-card p-8 text-center text-negative">
             تعذّر جلب البيانات: {bootstrap.error}
           </div>
         </main>
@@ -47,169 +47,202 @@ export default function OverviewPage() {
   const myVotes = myPolls.reduce((acc, p) => acc + p.total_votes, 0);
   const totalVotesAcrossAll = data.polls.reduce((acc, p) => acc + p.total_votes, 0);
   const totalSurveyResponses = data.surveys.reduce((acc, s) => acc + s.total_responses, 0);
-  const avgConversion = data.polls.length > 0
-    ? Math.round((data.polls.reduce((acc, p) => acc + p.total_votes, 0) / Math.max(1, data.polls.length)) / 50 * 100)
+  const avgEngagementPct = data.polls.length > 0
+    ? Math.round(totalVotesAcrossAll / data.polls.length)
     : 0;
 
-  // Find most engaging poll (max votes)
   const topPoll = [...data.polls].sort((a, b) => b.total_votes - a.total_votes)[0];
+  const topPollLeading = topPoll
+    ? [...topPoll.options].sort((a, b) => b.votes_count - a.votes_count)[0]
+    : null;
 
   return (
     <>
       <Header
-        title="النظرة العامة"
-        subtitle={`أهلاً ${user?.name ?? ""} — ${data.polls.length} استطلاعاً نشطاً، ${fmtInt(totalVotesAcrossAll)} صوتاً مسجّلاً عبر القطاعات.`}
+        eyebrow="OVERVIEW"
+        title={`أهلاً ${user?.name?.split(" ")[0] ?? ""}.`}
+        subtitle={`اليوم لديك ${fmtInt(data.polls.length)} استطلاعاً نشطاً عبر ${fmtInt(data.topics.length)} قطاعات، تجمع ${fmtInt(totalVotesAcrossAll)} صوتاً تتدفّق لحظياً.`}
       />
 
-      <main className="flex-1 px-9 py-6 space-y-6">
-        {/* KPI strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+      <main className="flex-1 px-10 pb-10 space-y-8">
+        {/* KPI Strip */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger">
           <KPICard
+            index={0}
+            tone="sage"
             label="استطلاعاتك النشطة"
             value={fmtInt(myPolls.length)}
-            hint={`${fmtInt(myVotes)} صوتاً جمعتها`}
+            hint={`${fmtInt(myVotes)} صوتاً جمعتها حتى الآن`}
           />
           <KPICard
+            index={1}
+            tone="gold"
             label="استبياناتك"
             value={fmtInt(mySurveys.length)}
             hint={`${fmtInt(mySurveys.reduce((a, s) => a + s.total_responses, 0))} مستجيب`}
-            accent="brand"
           />
           <KPICard
-            label="إجمالي الأصوات (المنصّة)"
+            index={2}
+            tone="copper"
+            label="إجمالي أصوات المنصّة"
             value={fmtInt(totalVotesAcrossAll)}
-            hint={`من ${fmtInt(data.polls.length)} استطلاع`}
+            hint={`عبر ${fmtInt(data.polls.length)} استطلاعاً`}
           />
           <KPICard
-            label="متوسط التحويل"
-            value={fmtPctRaw(avgConversion, 0)}
-            hint="مُعدّل التصويت لكل استطلاع"
+            index={3}
+            tone="sage"
+            label="متوسّط التفاعل"
+            value={fmtInt(avgEngagementPct)}
+            hint="صوت لكل استطلاع"
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Live ticker */}
-          <div className="lg:col-span-1">
-            <LiveTicker />
-          </div>
+        {/* Spotlight + Live ticker */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger">
+          {/* Top poll spotlight (2/3 width) */}
+          <div className="lg:col-span-2 bg-canvas-card rounded-card shadow-card overflow-hidden">
+            <div className="bg-hero p-8 lg:p-10 border-b border-ink-line/40">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles size={13} className="text-sage-600" />
+                <span className="text-eyebrow text-sage-700">SPOTLIGHT</span>
+              </div>
 
-          {/* Top poll spotlight */}
-          <div className="lg:col-span-2 bg-canvas-card rounded-card shadow-card p-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-ink flex items-center gap-2">
-                <Sparkles size={15} className="text-brand-500" />
-                الاستطلاع الأكثر تفاعلاً الآن
-              </h3>
-              {topPoll && (
-                <Link
-                  href={`/polls/${topPoll.id}`}
-                  className="text-[11px] font-bold text-brand-600 flex items-center gap-1 hover:gap-2 transition-all"
-                >
-                  افتح التحليل الكامل
-                  <ChevronLeft size={13} />
-                </Link>
+              {topPoll ? (
+                <>
+                  <h2 className="text-2xl lg:text-3xl font-display font-black text-ink leading-tight tracking-tight">
+                    {topPoll.title}
+                  </h2>
+                  <div className="flex items-center gap-3 text-[12px] text-ink-mute mt-3">
+                    <span className="font-bold">{topPoll.author_name}</span>
+                    <span>•</span>
+                    <span>{topPoll.topic_name ?? "بدون قطاع"}</span>
+                    <span>•</span>
+                    <span className="tabular font-bold text-ink">{fmtInt(topPoll.total_votes)} صوت</span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-ink-mute">لا توجد استطلاعات بعد.</p>
               )}
             </div>
 
-            {topPoll ? (
-              <>
-                <h2 className="text-lg font-bold text-ink leading-snug mb-1">{topPoll.title}</h2>
-                <div className="flex items-center gap-3 text-[11px] text-ink-mute mb-5">
-                  <span>{topPoll.author_name}</span>
-                  <span>·</span>
-                  <span>{topPoll.topic_name ?? "بدون قطاع"}</span>
-                  <span>·</span>
-                  <span className="tabular">{fmtInt(topPoll.total_votes)} صوت</span>
-                </div>
-                <ul className="space-y-2.5">
-                  {topPoll.options.map((opt) => {
-                    const max = Math.max(1, ...topPoll.options.map((o) => o.votes_count));
-                    const widthPct = (opt.votes_count / max) * 100;
-                    const sharePct = topPoll.total_votes > 0
-                      ? (opt.votes_count / topPoll.total_votes) * 100
-                      : 0;
-                    return (
-                      <li key={opt.id}>
-                        <div className="flex items-center justify-between text-xs mb-1.5">
-                          <span className="font-medium text-ink-soft">{opt.text}</span>
-                          <span className="font-bold tabular text-ink">
-                            {fmtInt(opt.votes_count)}
-                            <span className="text-ink-mute font-medium me-1">
-                              {" "}· {fmtPctRaw(sharePct, 1)}
-                            </span>
+            {topPoll && (
+              <div className="p-8 lg:p-10 space-y-4">
+                {topPoll.options.map((opt) => {
+                  const isLeader = opt.id === topPollLeading?.id;
+                  const sharePct = topPoll.total_votes > 0
+                    ? (opt.votes_count / topPoll.total_votes) * 100
+                    : 0;
+                  return (
+                    <div key={opt.id}>
+                      <div className="flex items-baseline justify-between mb-2 gap-3">
+                        <span className={`text-sm leading-snug ${isLeader ? "font-bold text-ink" : "font-medium text-ink-soft"}`}>
+                          {opt.text}
+                        </span>
+                        <div className="flex items-baseline gap-2 shrink-0">
+                          <span className={`font-display font-black tabular tracking-tight ${isLeader ? "text-2xl text-sage-700" : "text-lg text-ink"}`}>
+                            {sharePct.toFixed(1)}<span className="text-[12px] font-medium text-ink-mute">%</span>
                           </span>
+                          <span className="text-[11px] tabular text-ink-mute">{fmtInt(opt.votes_count)}</span>
                         </div>
-                        <div className="h-2 rounded-full bg-canvas-well overflow-hidden">
-                          <div
-                            className="h-full bg-brand-500 transition-all"
-                            style={{ width: `${widthPct}%` }}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                      </div>
+                      <div className="h-2 rounded-pill bg-canvas-well overflow-hidden">
+                        <div
+                          className={`h-full rounded-pill transition-all duration-700 ease-soft ${isLeader ? "bg-sage-700" : "bg-sage-300"}`}
+                          style={{ width: `${sharePct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
                 {topPoll.ai_insight && (
-                  <div className="mt-5 p-3.5 rounded-chip bg-brand-50/60 border border-brand-100 text-[13px] leading-relaxed text-ink-soft">
-                    <span className="font-bold text-brand-700 me-1">رؤية TRENDX AI:</span>
-                    {topPoll.ai_insight}
+                  <div className="mt-6 p-5 rounded-chip bg-gold-50/60 border border-gold-100">
+                    <div className="text-eyebrow text-gold-700 mb-2 flex items-center gap-1.5">
+                      <Sparkles size={11} />
+                      رؤية TRENDX AI
+                    </div>
+                    <p className="text-[13px] leading-relaxed text-ink-soft">{topPoll.ai_insight}</p>
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="text-sm text-ink-mute py-8 text-center">
-                لا توجد استطلاعات بعد — أنشئ أولها من تطبيق iOS.
+
+                <Link
+                  href={`/polls/${topPoll.id}`}
+                  className="inline-flex items-center gap-2 text-[12px] font-bold text-sage-700 hover:gap-3 transition-all mt-2"
+                >
+                  افتح التحليل الكامل
+                  <ArrowLeft size={13} />
+                </Link>
               </div>
             )}
           </div>
+
+          {/* Live ticker (1/3 width) */}
+          <div>
+            <LiveTicker />
+          </div>
         </div>
 
-        {/* Recent activity feed: list of polls with totals */}
-        <div className="bg-canvas-card rounded-card shadow-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
-              <TrendingUp size={15} className="text-ink-mute" />
-              نشاط حديث عبر المنصّة
-            </h3>
-            <span className="text-[11px] text-ink-mute">{fmtInt(data.polls.length)} استطلاعاً</span>
+        {/* Activity table — editorial style */}
+        <div className="bg-canvas-card rounded-card shadow-card overflow-hidden">
+          <div className="px-8 lg:px-10 py-7 border-b border-ink-line/40 flex items-baseline justify-between">
+            <div>
+              <div className="text-eyebrow text-sage-700 mb-1.5">RECENT ACTIVITY</div>
+              <h3 className="text-xl font-display font-black text-ink tracking-tight">
+                الأكثر تفاعلاً عبر المنصّة
+              </h3>
+            </div>
+            <span className="text-[11px] tabular text-ink-mute">
+              {fmtInt(data.polls.length)} استطلاعاً مُتتبَّعاً
+            </span>
           </div>
 
-          <ul className="divide-y divide-ink-line">
+          <div>
             {data.polls
               .slice()
               .sort((a, b) => b.total_votes - a.total_votes)
               .slice(0, 8)
-              .map((poll) => (
-                <li key={poll.id}>
-                  <Link
-                    href={`/polls/${poll.id}`}
-                    className="flex items-center gap-4 py-3 hover:bg-canvas-well/50 -mx-2 px-2 rounded-chip transition"
-                  >
-                    <div className="w-9 h-9 rounded-chip bg-brand-50 text-brand-700 grid place-items-center font-bold text-sm">
-                      {poll.author_avatar}
+              .map((poll, idx) => (
+                <Link
+                  key={poll.id}
+                  href={`/polls/${poll.id}`}
+                  className="flex items-center gap-5 px-8 lg:px-10 py-5 hover:bg-canvas-well/50 transition group border-b border-ink-line/30 last:border-0"
+                >
+                  <span className="text-[11px] font-mono font-bold tabular text-ink-mute w-8">
+                    {String(idx + 1).padStart(2, "0")}
+                  </span>
+
+                  <div className="w-11 h-11 rounded-chip bg-sage-50 text-sage-700 grid place-items-center font-display font-bold text-base shrink-0">
+                    {poll.author_avatar}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-medium text-ink truncate group-hover:text-sage-700 transition">
+                      {poll.title}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-ink truncate">{poll.title}</div>
-                      <div className="flex items-center gap-2 text-[11px] text-ink-mute mt-0.5">
-                        <span>{poll.author_name}</span>
-                        <span>·</span>
-                        <span>{fmtRelativeNow(poll.created_at)}</span>
-                        {poll.topic_name && (
-                          <>
-                            <span>·</span>
-                            <span>{poll.topic_name}</span>
-                          </>
-                        )}
-                      </div>
+                    <div className="flex items-center gap-2 text-[11px] text-ink-mute mt-1">
+                      <span>{poll.author_name}</span>
+                      <span>•</span>
+                      <span>{fmtRelativeNow(poll.created_at)}</span>
+                      {poll.topic_name && (
+                        <>
+                          <span>•</span>
+                          <span className="font-bold text-sage-700">{poll.topic_name}</span>
+                        </>
+                      )}
                     </div>
-                    <div className="text-end">
-                      <div className="text-sm font-bold tabular text-ink">{fmtInt(poll.total_votes)}</div>
-                      <div className="text-[10px] text-ink-mute">صوت</div>
+                  </div>
+
+                  <div className="text-end shrink-0">
+                    <div className="text-2xl font-display font-black tabular text-ink leading-none">
+                      {fmtInt(poll.total_votes)}
                     </div>
-                  </Link>
-                </li>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-ink-mute mt-1">
+                      صوت
+                    </div>
+                  </div>
+                </Link>
               ))}
-          </ul>
+          </div>
         </div>
       </main>
     </>

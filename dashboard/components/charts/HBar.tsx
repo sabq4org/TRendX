@@ -11,7 +11,7 @@ type Datum = { label: string; value: number; subValue?: string };
  *
  * RTL-aware: bars grow from the right edge.
  */
-export function HBar({ data, accent = "#5C6BD0" }: { data: Datum[]; accent?: string }) {
+export function HBar({ data, accent = "#3F6B4D" }: { data: Datum[]; accent?: string }) {
   const max = Math.max(1, ...data.map((d) => d.value));
   const total = data.reduce((acc, d) => acc + d.value, 0);
 

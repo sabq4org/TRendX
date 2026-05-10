@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
 import { Header } from "@/components/Header";
 import { fmtInt, fmtRelativeNow } from "@/lib/format";
+import { ArrowLeft, Sparkles, Zap } from "lucide-react";
 
 export default function PollsListPage() {
   const { token } = useAuth();
@@ -14,21 +15,26 @@ export default function PollsListPage() {
   return (
     <>
       <Header
+        eyebrow="POLLS"
         title="الاستطلاعات"
-        subtitle="جميع الاستطلاعات النشطة في المنصّة. اختر استطلاعاً لتحليله."
+        subtitle={
+          bootstrap.data
+            ? `${fmtInt(bootstrap.data.polls.length)} استطلاعاً نشطاً تجمع ${fmtInt(bootstrap.data.polls.reduce((a, p) => a + p.total_votes, 0))} صوتاً.`
+            : "بانتظار البيانات…"
+        }
       />
-      <main className="flex-1 px-9 py-6">
+      <main className="flex-1 px-10 pb-10">
         {bootstrap.loading && (
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-44 rounded-card shimmer" />
+              <div key={i} className="h-52 rounded-card shimmer" />
             ))}
           </div>
         )}
 
         {bootstrap.data && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {bootstrap.data.polls.map((poll) => {
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger">
+            {bootstrap.data.polls.map((poll, idx) => {
               const leading = [...poll.options].sort((a, b) => b.votes_count - a.votes_count)[0];
               const leadingPct = poll.total_votes > 0 && leading
                 ? Math.round((leading.votes_count / poll.total_votes) * 100)
@@ -37,53 +43,72 @@ export default function PollsListPage() {
                 <Link
                   key={poll.id}
                   href={`/polls/${poll.id}`}
-                  className="bg-canvas-card rounded-card shadow-card hover:shadow-card-hover transition p-5 group"
+                  className="group bg-canvas-card rounded-card shadow-card hover:shadow-card-lift transition-all duration-500 ease-soft p-7 relative overflow-hidden"
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    {poll.is_featured && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-bold">
-                        مميّز
-                      </span>
-                    )}
-                    {poll.is_breaking && (
-                      <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold">
-                        عاجل
-                      </span>
-                    )}
-                    <span className="ms-auto text-[10px] text-ink-mute">{fmtRelativeNow(poll.created_at)}</span>
+                  {/* Eyebrow numeral */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[10px] font-mono font-bold tabular text-ink-mute">
+                      {String(idx + 1).padStart(2, "0")}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {poll.is_breaking && (
+                        <span className="px-2 py-0.5 rounded-pill bg-negative-soft text-negative text-[10px] font-bold flex items-center gap-1">
+                          <Zap size={9} /> عاجل
+                        </span>
+                      )}
+                      {poll.is_featured && (
+                        <span className="px-2 py-0.5 rounded-pill bg-gold-50 text-gold-700 text-[10px] font-bold flex items-center gap-1">
+                          <Sparkles size={9} /> مميّز
+                        </span>
+                      )}
+                      <span className="text-[10px] text-ink-mute">{fmtRelativeNow(poll.created_at)}</span>
+                    </div>
                   </div>
 
-                  <h3 className="text-base font-bold text-ink leading-snug mb-2 line-clamp-2 group-hover:text-brand-600 transition">
+                  <h3 className="text-lg font-display font-bold text-ink leading-snug mb-3 line-clamp-2 group-hover:text-sage-700 transition tracking-tight">
                     {poll.title}
                   </h3>
 
                   {poll.topic_name && (
-                    <span className="inline-block px-2 py-0.5 rounded-chip bg-canvas-well text-[10px] font-semibold text-ink-soft mb-3">
+                    <span className="inline-block px-2.5 py-1 rounded-pill bg-canvas-well text-[10px] font-bold uppercase tracking-[0.1em] text-ink-soft mb-4">
                       {poll.topic_name}
                     </span>
                   )}
 
                   {leading && (
-                    <div className="space-y-1 mb-3">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="font-medium text-ink-soft truncate">{leading.text}</span>
-                        <span className="font-bold tabular text-ink">{leadingPct}%</span>
+                    <div className="space-y-1.5 mb-5">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[12px] font-medium text-ink-soft truncate me-3">
+                          {leading.text}
+                        </span>
+                        <span className="font-display font-black tabular text-2xl text-sage-700 leading-none">
+                          {leadingPct}<span className="text-[12px] font-medium text-ink-mute">%</span>
+                        </span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-canvas-well overflow-hidden">
+                      <div className="h-1.5 rounded-pill bg-canvas-well overflow-hidden">
                         <div
-                          className="h-full bg-brand-500 transition-all"
+                          className="h-full bg-sage-700 transition-all duration-700 ease-soft"
                           style={{ width: `${leadingPct}%` }}
                         />
                       </div>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pt-3 border-t border-ink-line">
-                    <span className="text-[11px] text-ink-mute">{poll.author_name}</span>
-                    <span className="text-sm font-bold tabular text-ink">
-                      {fmtInt(poll.total_votes)}
-                      <span className="text-[10px] text-ink-mute font-medium me-1"> صوت</span>
-                    </span>
+                  <div className="flex items-end justify-between pt-4 border-t border-ink-line/40">
+                    <span className="text-[11px] text-ink-mute font-medium">{poll.author_name}</span>
+                    <div className="text-end">
+                      <div className="text-2xl font-display font-black tabular text-ink leading-none">
+                        {fmtInt(poll.total_votes)}
+                      </div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-ink-mute mt-0.5">
+                        صوت
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Hover arrow */}
+                  <div className="absolute top-7 inset-inline-end-7 opacity-0 group-hover:opacity-100 transition">
+                    <ArrowLeft size={14} className="text-sage-700" />
                   </div>
                 </Link>
               );
@@ -92,8 +117,8 @@ export default function PollsListPage() {
         )}
 
         {bootstrap.data && bootstrap.data.polls.length === 0 && (
-          <div className="bg-canvas-card rounded-card p-12 text-center text-ink-mute">
-            لا توجد استطلاعات بعد. سيظهر العرض التجريبي هنا فور تفعيل SEED_DEMO=1 في Railway.
+          <div className="bg-canvas-card rounded-card p-16 text-center text-ink-mute dotgrid">
+            <p className="text-sm">لا توجد استطلاعات بعد.</p>
           </div>
         )}
       </main>

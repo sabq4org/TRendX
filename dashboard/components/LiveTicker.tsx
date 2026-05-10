@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity } from "lucide-react";
+import { Activity, Zap } from "lucide-react";
 import { fmtInt } from "@/lib/format";
 
 type Event =
@@ -23,58 +23,73 @@ export function LiveTicker() {
       try {
         const parsed = JSON.parse(raw);
         setEvents((prev) => [{ ...parsed, ts: Date.now() }, ...prev].slice(0, 12));
-      } catch {
-        // ignore malformed event
-      }
+      } catch {/* ignore */}
     };
 
     source.addEventListener("vote_cast", (ev) => ingest((ev as MessageEvent).data));
     source.addEventListener("vote_milestone", (ev) => ingest((ev as MessageEvent).data));
     source.onerror = () => setConnected(false);
 
-    return () => {
-      source.close();
-    };
+    return () => source.close();
   }, []);
 
   return (
-    <div className="bg-canvas-card rounded-card shadow-card p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-bold text-ink flex items-center gap-2">
-          <Activity size={15} className="text-success" />
-          النبض الحيّ
-        </h3>
+    <div className="bg-canvas-card rounded-card shadow-card p-6 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <div className="text-eyebrow text-sage-700 mb-1.5">REAL TIME</div>
+          <h3 className="text-base font-display font-bold text-ink flex items-center gap-2">
+            <Activity size={16} className="text-sage-600" />
+            النبض الحيّ
+          </h3>
+        </div>
         <span
-          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-            connected ? "bg-success/10 text-success" : "bg-ink-line text-ink-mute"
+          className={`text-[10px] font-bold px-2.5 py-1 rounded-pill flex items-center gap-1.5 ${
+            connected ? "bg-positive-soft text-positive" : "bg-canvas-well text-ink-mute"
           }`}
         >
-          {connected ? "متصل" : "بانتظار"}
+          <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-positive animate-pulse" : "bg-ink-mute"}`} />
+          {connected ? "متّصل" : "بانتظار"}
         </span>
       </div>
 
       {events.length === 0 ? (
-        <div className="text-xs text-ink-mute py-8 text-center">
-          بانتظار أوّل صوت يصل لحظياً…
+        <div className="flex-1 dotgrid rounded-chip flex flex-col items-center justify-center text-center py-12">
+          <Zap size={28} className="text-ink-ghost mb-3" />
+          <p className="text-xs text-ink-mute">بانتظار أوّل صوت يصل لحظياً…</p>
         </div>
       ) : (
-        <ul className="space-y-2 max-h-72 overflow-y-auto">
+        <ul className="space-y-2 max-h-[360px] overflow-y-auto -mx-2 px-2">
           {events.map((event, i) => (
             <li
               key={`${event.ts}-${i}`}
-              className="flex items-start gap-3 p-2.5 rounded-chip hover:bg-canvas-well transition"
+              className="flex items-start gap-3 p-3 rounded-chip hover:bg-canvas-well/60 transition group animate-fade-up"
             >
               <span
-                className={`shrink-0 w-1.5 h-1.5 rounded-full mt-2 ${
-                  event.type === "vote_milestone" ? "bg-warn" : "bg-brand-500"
+                className={`shrink-0 w-2 h-2 rounded-full mt-2 ${
+                  event.type === "vote_milestone"
+                    ? "bg-gold-500 shadow-[0_0_0_3px_rgba(201,169,97,0.25)]"
+                    : "bg-sage-500"
                 }`}
               />
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-ink truncate font-medium">{event.pollTitle}</div>
-                <div className="text-[10px] text-ink-mute mt-0.5">
-                  {event.type === "vote_milestone"
-                    ? `الوصول إلى ${fmtInt(event.milestone)} صوت`
-                    : `صوت من ${(event as Extract<Event, { type: "vote_cast" }>).city ?? "غير محدد"}  ·  ${fmtInt(event.total)} مجموع`}
+                <div className="text-[13px] text-ink font-medium leading-snug truncate">
+                  {event.pollTitle}
+                </div>
+                <div className="text-[11px] text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
+                  {event.type === "vote_milestone" ? (
+                    <>
+                      <span className="font-bold text-gold-700">
+                        وصل إلى {fmtInt(event.milestone)} صوت
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>صوت من {(event as Extract<Event, { type: "vote_cast" }>).city ?? "غير محدد"}</span>
+                      <span>•</span>
+                      <span className="tabular">{fmtInt(event.total)} مجموع</span>
+                    </>
+                  )}
                 </div>
               </div>
             </li>

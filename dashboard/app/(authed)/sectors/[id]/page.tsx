@@ -12,6 +12,7 @@ import { BubbleScatter } from "@/components/charts/Bubble";
 import { fmtInt } from "@/lib/format";
 import clsx from "clsx";
 import type { SectorAIReport } from "@/lib/types";
+import { Sparkles } from "lucide-react";
 
 export default function SectorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -34,115 +35,108 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
       const data = await api.topicInsight(token, id);
       setReport({ loading: false, data, error: null });
     } catch (err) {
-      setReport({
-        loading: false,
-        data: null,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      setReport({ loading: false, data: null, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
   if (bootstrap.loading) {
     return (
       <>
-        <Header title="بانتظار…" />
-        <main className="px-9 py-6 grid gap-5 grid-cols-3">
+        <Header eyebrow="SECTOR INTELLIGENCE" title="بانتظار…" />
+        <main className="px-10 pb-10 grid gap-6 grid-cols-3">
           {[0, 1, 2].map((i) => <div key={i} className="h-72 rounded-card shimmer" />)}
         </main>
       </>
     );
   }
 
-  // Bubble chart: each poll as a bubble (x=total_votes, y=leading%, size=total_votes)
   const bubbles = polls.map((p) => {
     const leading = [...p.options].sort((a, b) => b.votes_count - a.votes_count)[0];
     const leadingPct = p.total_votes > 0 && leading ? (leading.votes_count / p.total_votes) * 100 : 0;
     return {
-      name: p.title,
-      x: p.total_votes,
-      y: Math.round(leadingPct),
-      size: p.total_votes,
+      name: p.title, x: p.total_votes, y: Math.round(leadingPct), size: p.total_votes,
     };
   });
 
   return (
     <>
       <Header
-        title={topic ? `قطاع — ${topic.name}` : "قطاع"}
-        subtitle="الذكاء القطاعي العابر — اتّجاه، إجماع، شخصية، تنبّؤ."
+        eyebrow="SECTOR INTELLIGENCE"
+        title={topic ? topic.name : "قطاع"}
+        subtitle="ذكاء عابر للقطاع — اتّجاه، إجماع، شخصية، تنبّؤ."
       />
 
-      <main className="flex-1 px-9 py-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-          <KPICard label="استطلاعات" value={fmtInt(polls.length)} accent="brand" />
-          <KPICard label="استبيانات" value={fmtInt(surveys.length)} />
-          <KPICard label="إجمالي الأصوات" value={fmtInt(totalVotes)} />
-          <KPICard label="إجمالي الاستجابات" value={fmtInt(totalResponses)} />
+      <main className="flex-1 px-10 pb-10 space-y-7">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 stagger">
+          <KPICard index={0} tone="sage" label="استطلاعات" value={fmtInt(polls.length)} />
+          <KPICard index={1} tone="gold" label="استبيانات" value={fmtInt(surveys.length)} />
+          <KPICard index={2} tone="copper" label="إجمالي الأصوات" value={fmtInt(totalVotes)} />
+          <KPICard index={3} tone="sage" label="إجمالي الاستجابات" value={fmtInt(totalResponses)} />
         </div>
 
-        {/* Gauge + Bubble */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger">
           <ChartCard
+            eyebrow="SENTIMENT"
             title="مزاج القطاع"
             subtitle="مؤشر تجميعي 0-100 من تقرير AI"
-            height={240}
+            height={260}
           >
             {report.data ? (
               <Gauge
                 value={report.data.report.sector_sentiment_score}
                 label={
-                  report.data.report.sentiment_direction === "rising"
-                    ? "صعودي"
-                    : report.data.report.sentiment_direction === "falling"
-                      ? "هبوطي"
-                      : "مستقرّ"
+                  report.data.report.sentiment_direction === "rising" ? "صعودي" :
+                  report.data.report.sentiment_direction === "falling" ? "هبوطي" : "مستقرّ"
                 }
-                sub={`نسخة Prompt: ${report.data.prompt_version}`}
+                sub={report.data.prompt_version}
               />
             ) : (
-              <div className="h-full grid place-items-center text-xs text-ink-mute">
+              <div className="h-full grid place-items-center text-[12px] text-ink-mute dotgrid rounded-chip">
                 ولّد تقرير AI لرؤية مؤشّر المزاج.
               </div>
             )}
           </ChartCard>
 
           <ChartCard
-            title="استطلاعات القطاع — حصص الإجماع"
-            subtitle="X: حجم الأصوات · Y: نسبة الخيار الرائد · حجم الفقاعة: العيّنة"
             className="lg:col-span-2"
+            eyebrow="DISTRIBUTION"
+            title="استطلاعات القطاع — حصص الإجماع"
+            subtitle="X: حجم الأصوات • Y: نسبة الخيار الرائد • حجم الفقاعة: العيّنة"
             height={300}
           >
             {bubbles.length > 0 ? (
               <BubbleScatter data={bubbles} xLabel="إجمالي الأصوات" yLabel="نسبة الخيار الرائد %" />
             ) : (
-              <div className="h-full grid place-items-center text-xs text-ink-mute">
+              <div className="h-full grid place-items-center text-[12px] text-ink-mute">
                 لا توجد استطلاعات في هذا القطاع.
               </div>
             )}
           </ChartCard>
         </div>
 
-        {/* AI Report */}
-        <div className="bg-canvas-card rounded-card shadow-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-ink">تقرير الذكاء القطاعي</h3>
+        <div className="bg-canvas-card rounded-card shadow-card p-8">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <div className="text-eyebrow text-sage-700 mb-1.5">SECTOR REPORT</div>
+              <h3 className="text-xl font-display font-black text-ink tracking-tight">
+                تقرير الذكاء القطاعي
+              </h3>
+            </div>
             <button
               onClick={loadReport}
               disabled={report.loading}
-              className="bg-brand-500 hover:bg-brand-600 disabled:bg-brand-300 text-white font-bold py-2 px-4 rounded-chip text-xs transition"
+              className="bg-sage-700 hover:bg-sage-900 disabled:bg-sage-300 text-canvas-card font-bold py-2.5 px-5 rounded-chip text-xs transition shadow-card hover:shadow-card-lift inline-flex items-center gap-2"
             >
-              {report.loading ? "جارٍ التوليد…" : report.data ? "إعادة التوليد" : "✨ توليد التقرير"}
+              <Sparkles size={12} /> {report.loading ? "جارٍ التوليد…" : report.data ? "إعادة التوليد" : "توليد التقرير"}
             </button>
           </div>
 
-          {report.error && (
-            <div className="text-xs text-danger mb-4">{report.error}</div>
-          )}
+          {report.error && <div className="text-xs text-negative mb-4">{report.error}</div>}
 
           {report.data ? (
             <SectorReportBody report={report.data} />
           ) : !report.loading ? (
-            <p className="text-xs text-ink-mute leading-relaxed">
+            <p className="text-[13px] text-ink-mute leading-relaxed font-light">
               يحلّل التقرير القطاعي جميع الاستطلاعات والاستبيانات في هذا القطاع ويُصدر:
               مؤشّر مزاج (0-100)، خريطة إجماع، شخصية القطاع الغالبة، أنماط مشتركة بين الاستبيانات،
               بريف استراتيجي مكوّن من 4-5 فقرات، وتوقّع لاتّجاه القطاع خلال 30 يوماً.
@@ -150,20 +144,25 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
           ) : null}
         </div>
 
-        {/* Polls in sector */}
-        <div className="bg-canvas-card rounded-card shadow-card p-6">
-          <h3 className="text-sm font-bold text-ink mb-4">استطلاعات القطاع</h3>
-          <ul className="divide-y divide-ink-line">
-            {polls.map((p) => (
-              <li key={p.id}>
+        <div className="bg-canvas-card rounded-card shadow-card overflow-hidden">
+          <div className="px-8 py-6 border-b border-ink-line/40">
+            <div className="text-eyebrow text-sage-700 mb-1">POLLS IN SECTOR</div>
+            <h3 className="text-xl font-display font-black text-ink tracking-tight">استطلاعات القطاع</h3>
+          </div>
+          <ul>
+            {polls.map((p, idx) => (
+              <li key={p.id} className="border-b border-ink-line/30 last:border-0">
                 <a
                   href={`/polls/${p.id}`}
-                  className="flex items-center justify-between py-3 hover:bg-canvas-well/50 -mx-2 px-2 rounded-chip transition"
+                  className="flex items-center gap-5 px-8 py-4 hover:bg-canvas-well/50 transition group"
                 >
-                  <span className="text-sm text-ink truncate flex-1 ms-3">{p.title}</span>
-                  <span className="text-sm font-bold tabular text-ink shrink-0">
-                    {fmtInt(p.total_votes)}
-                    <span className="text-[10px] text-ink-mute font-medium me-1"> صوت</span>
+                  <span className="text-[11px] font-mono font-bold tabular text-ink-mute w-7">
+                    {String(idx + 1).padStart(2, "0")}
+                  </span>
+                  <span className="text-[14px] text-ink truncate flex-1 group-hover:text-sage-700 transition">{p.title}</span>
+                  <span className="shrink-0 text-end">
+                    <span className="text-xl font-display font-black tabular text-ink">{fmtInt(p.total_votes)}</span>
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-ink-mute ms-2">صوت</span>
                   </span>
                 </a>
               </li>
@@ -179,50 +178,47 @@ function SectorReportBody({ report }: { report: SectorAIReport }) {
   const r = report.report;
   return (
     <div className="space-y-5">
-      <div className="bg-canvas-well rounded-chip p-4">
-        <div className="text-[10px] font-bold uppercase tracking-wide text-ink-mute mb-1.5">
-          البريف الاستراتيجي
-        </div>
-        <p className="text-sm text-ink-soft leading-relaxed whitespace-pre-line">{r.strategic_brief}</p>
+      <div className="bg-canvas-well rounded-chip p-6">
+        <div className="text-eyebrow text-sage-700 mb-2">STRATEGIC BRIEF</div>
+        <p className="text-[15px] text-ink-soft leading-loose whitespace-pre-line font-light">
+          {r.strategic_brief}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-canvas-well rounded-chip p-4">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-ink-mute mb-2">
-            شخصية القطاع
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="bg-canvas-well rounded-chip p-5">
+          <div className="text-eyebrow text-sage-700 mb-2">SECTOR PERSONA</div>
+          <div className="font-display font-black text-xl text-ink tracking-tight mb-1">
+            {r.sector_persona.name}
+            <span className="font-display font-black tabular text-sage-700 text-base ms-2">
+              {r.sector_persona.share_pct}%
+            </span>
           </div>
-          <div className="text-base font-bold text-ink mb-1">
-            {r.sector_persona.name} <span className="text-sm tabular text-brand-600">({r.sector_persona.share_pct}%)</span>
-          </div>
-          <p className="text-xs text-ink-soft leading-relaxed">{r.sector_persona.description}</p>
+          <p className="text-[13px] text-ink-soft leading-relaxed font-light">{r.sector_persona.description}</p>
         </div>
-        <div className="bg-canvas-well rounded-chip p-4">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-ink-mute mb-2">
-            توقّع 30 يوم
-          </div>
-          <p className="text-sm text-ink-soft leading-relaxed">{r.predicted_trend}</p>
+        <div className="bg-canvas-well rounded-chip p-5">
+          <div className="text-eyebrow text-sage-700 mb-2">30-DAY FORECAST</div>
+          <p className="text-[14px] text-ink-soft leading-relaxed font-light">{r.predicted_trend}</p>
         </div>
       </div>
 
       {r.consensus_map.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-ink-mute mb-2">
-            خريطة الإجماع
-          </div>
+          <div className="text-eyebrow text-sage-700 mb-3">CONSENSUS MAP</div>
           <ul className="space-y-2">
             {r.consensus_map.map((c, i) => (
-              <li key={i} className="flex items-center gap-3 text-sm">
+              <li key={i} className="flex items-center gap-3 text-[14px] p-3 rounded-chip hover:bg-canvas-well/50 transition">
                 <span className={clsx(
-                  "shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold",
-                  c.label === "إجماع قوي" && "bg-success/10 text-success",
-                  c.label === "ميل واضح" && "bg-brand-50 text-brand-700",
-                  c.label === "اختلاف خفيف" && "bg-amber-50 text-amber-700",
-                  c.label === "انقسام حاد" && "bg-danger/10 text-danger",
+                  "shrink-0 px-2.5 py-0.5 rounded-pill text-[10px] font-bold",
+                  c.label === "إجماع قوي" && "bg-positive-soft text-positive",
+                  c.label === "ميل واضح" && "bg-sage-50 text-sage-700",
+                  c.label === "اختلاف خفيف" && "bg-gold-50 text-gold-700",
+                  c.label === "انقسام حاد" && "bg-negative-soft text-negative",
                 )}>
                   {c.label}
                 </span>
                 <span className="text-ink-soft flex-1">{c.question}</span>
-                <span className="font-bold tabular text-ink">{c.leading_pct}%</span>
+                <span className="font-display font-black tabular text-ink">{c.leading_pct}%</span>
               </li>
             ))}
           </ul>
@@ -231,13 +227,11 @@ function SectorReportBody({ report }: { report: SectorAIReport }) {
 
       {r.cross_survey_patterns.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wide text-ink-mute mb-2">
-            أنماط عابرة للاستبيانات
-          </div>
-          <ul className="space-y-1.5">
+          <div className="text-eyebrow text-sage-700 mb-3">CROSS-SURVEY PATTERNS</div>
+          <ul className="space-y-2">
             {r.cross_survey_patterns.map((p, i) => (
-              <li key={i} className="text-sm text-ink-soft flex items-start gap-2 leading-relaxed">
-                <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-500" />
+              <li key={i} className="text-[14px] text-ink-soft flex items-start gap-3 leading-relaxed">
+                <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-sage-600" />
                 <span>{p}</span>
               </li>
             ))}

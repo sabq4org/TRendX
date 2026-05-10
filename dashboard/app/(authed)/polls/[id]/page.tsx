@@ -15,6 +15,7 @@ import { StackedBar } from "@/components/charts/StackedBar";
 import { AreaTrend } from "@/components/charts/Area";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { fmtInt, fmtSeconds, fmtPctRaw, deviceLabel, genderLabel } from "@/lib/format";
+import { Sparkles } from "lucide-react";
 
 const AGE_BUCKETS_ORDER = ["18-24", "25-34", "35-44", "45-54", "55+"];
 
@@ -29,8 +30,8 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
   if (analytics.loading) {
     return (
       <>
-        <Header title="بانتظار التحليل…" />
-        <main className="px-9 py-6 grid gap-5 grid-cols-3">
+        <Header eyebrow="POLL ANALYTICS" title="بانتظار التحليل…" />
+        <main className="px-10 pb-10 grid gap-6 grid-cols-3">
           {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-72 rounded-card shimmer" />)}
         </main>
       </>
@@ -39,9 +40,9 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
   if (analytics.error || !analytics.data) {
     return (
       <>
-        <Header title="خطأ" />
-        <main className="px-9 py-8">
-          <div className="bg-canvas-card rounded-card p-6 text-center text-danger">
+        <Header eyebrow="POLL ANALYTICS" title="خطأ" />
+        <main className="px-10 pb-10">
+          <div className="bg-canvas-card rounded-card p-8 text-center text-negative">
             {analytics.error ?? "تعذّر جلب التحليل."}
           </div>
         </main>
@@ -52,16 +53,13 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
   const a = analytics.data;
   const optionsForDonut = a.options.map((o) => ({ label: o.text, value: o.votes_count }));
 
-  // Cities (HBar)
   const cities = Object.entries(a.breakdown.by_city_top).map(([label, value]) => ({ label, value }));
 
-  // Devices (HBar)
   const devices = Object.entries(a.breakdown.by_device).map(([label, value]) => ({
     label: deviceLabel(label),
     value,
   }));
 
-  // Grouped: option × age
   const groupedByAge = AGE_BUCKETS_ORDER.map((bucket) => {
     const row: Record<string, string | number> = { group: bucket };
     a.cross_demographic.forEach((cross, idx) => {
@@ -72,7 +70,6 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
     return row;
   });
 
-  // Stacked: option × gender
   const stackedByGender = a.options.map((opt, idx) => {
     const cross = a.cross_demographic[idx];
     return {
@@ -83,12 +80,8 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
     } as Record<string, string | number>;
   });
 
-  // Area trend
   const trend = a.timeline.daily_cumulative.map((p) => ({ day: p.day.slice(5), value: p.cumulative_votes }));
 
-  // Heatmap: hour × (day-of-week derived from votes — simplified to single day for the Beta)
-  // For the in-process demo we group by hour only; the dashboard frame still
-  // looks correct because the same shape will populate when day-of-week is added.
   const hourCells = Object.entries(a.timeline.by_hour_of_day).map(([hour, value]) => ({
     row: "اليوم",
     col: `${hour}h`,
@@ -99,12 +92,12 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <>
       <Header
+        eyebrow="POLL ANALYTICS"
         title={poll?.title ?? "تحليل الاستطلاع"}
-        subtitle={poll?.description ?? "تحليل ديموغرافي وسلوكي كامل"}
+        subtitle={poll?.description ?? "تحليل ديموغرافي وسلوكي كامل مع جودة العيّنة."}
       />
 
-      <main className="flex-1 px-9 py-6 space-y-6">
-        {/* Quality + KPI strip */}
+      <main className="flex-1 px-10 pb-10 space-y-7">
         <QualityBadge
           sampleSize={a.sample_size}
           confidenceLevel={a.confidence_level}
@@ -114,91 +107,81 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
           methodologyNote={a.methodology_note}
         />
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 stagger">
           <KPICard
+            index={0} tone="sage"
             label="إجمالي الأصوات"
             value={fmtInt(a.sample_size)}
             hint={a.consensus.label}
-            accent="brand"
           />
           <KPICard
+            index={1} tone="gold"
             label="الخيار الرائد"
             value={fmtPctRaw(a.consensus.leading_percentage, 1)}
-            hint={`فجوة استقطاب ${a.consensus.polarization_index.toFixed(1)}%`}
+            hint={`فجوة الاستقطاب ${a.consensus.polarization_index.toFixed(1)}%`}
           />
           <KPICard
-            label="متوسط القرار"
+            index={2} tone="copper"
+            size="small"
+            label="متوسّط القرار"
             value={fmtSeconds(a.behavioral.avg_decision_seconds)}
             hint={`نسبة تغيير الصوت ${a.behavioral.change_vote_rate_pct}%`}
-            size="small"
           />
           <KPICard
+            index={3} tone="sage"
+            size="small"
             label="ساعة الذروة"
             value={a.timeline.peak_hour ? `${a.timeline.peak_hour}:00` : "—"}
             hint="بتوقيت UTC"
-            size="small"
           />
         </div>
 
-        {/* Row 1: Donut + Cities */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <ChartCard title="توزيع الخيارات" subtitle="نسبة كل خيار من إجمالي الأصوات">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger">
+          <ChartCard eyebrow="DISTRIBUTION" title="توزيع الخيارات" subtitle="نسبة كل خيار من إجمالي الأصوات">
             <Donut data={optionsForDonut} totalLabel="صوت" />
           </ChartCard>
 
-          <ChartCard
-            title="التوزيع الجغرافي"
-            subtitle="أعلى المدن (الشرائط بنسبة لأكبر قيمة في الجدول)"
-          >
-            {cities.length > 0 ? <HBar data={cities} accent="#3CA597" /> : <Empty />}
+          <ChartCard eyebrow="GEOGRAPHY" title="التوزيع الجغرافي" subtitle="أعلى المدن (نسبة لأكبر قيمة في الجدول)">
+            {cities.length > 0 ? <HBar data={cities} accent="#3F6B4D" /> : <Empty />}
           </ChartCard>
         </div>
 
-        {/* Row 2: Grouped (age) + Stacked (gender) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <ChartCard
-            title="تفضيل الخيارات حسب الفئة العمرية"
-            subtitle="أعمدة متراصّة تكشف فروقات الأجيال"
-          >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger">
+          <ChartCard eyebrow="AGE × OPTION" title="تفضيل الخيارات حسب الفئة العمرية" subtitle="يكشف فروقات الأجيال">
             <GroupedBar data={groupedByAge} seriesKeys={a.options.map((o) => o.text)} />
           </ChartCard>
 
-          <ChartCard
-            title="تفضيل الخيارات حسب الجنس"
-            subtitle="تركيب مكدّس يبيّن الحصة لكل خيار"
-          >
+          <ChartCard eyebrow="GENDER × OPTION" title="تفضيل الخيارات حسب الجنس" subtitle="تركيب مكدّس لحصص كل خيار">
             <StackedBar data={stackedByGender} seriesKeys={["ذكور", "إناث", "غير محدد"]} />
           </ChartCard>
         </div>
 
-        {/* Row 3: Area + Devices */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger">
           <ChartCard
             className="lg:col-span-2"
+            eyebrow="MOMENTUM"
             title="منحنى الأصوات التراكمي"
-            subtitle="مع تظليل تدرّجي لقراءة الزخم"
+            subtitle="اقرأ زخم الانتشار عبر الأيام"
             height={280}
           >
             {trend.length > 0 ? <AreaTrend data={trend} /> : <Empty />}
           </ChartCard>
 
-          <ChartCard title="الأجهزة" subtitle="أيّ جهاز يصوّت من أين">
-            {devices.length > 0 ? <HBar data={devices} accent="#8869C9" /> : <Empty />}
+          <ChartCard eyebrow="DEVICES" title="الأجهزة" subtitle="من أيّ نظام يصوّت الجمهور">
+            {devices.length > 0 ? <HBar data={devices} accent="#C9A961" /> : <Empty />}
           </ChartCard>
         </div>
 
-        {/* Row 4: Heatmap + Demographics donuts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <ChartCard className="lg:col-span-2" title="الكثافة الزمنية" subtitle="عدد الأصوات حسب ساعة اليوم">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger">
+          <ChartCard className="lg:col-span-2" eyebrow="HEATMAP" title="الكثافة الزمنية" subtitle="عدد الأصوات حسب ساعة اليوم">
             {hourCells.length > 0 ? <Heatmap cells={hourCells} rowLabels={["اليوم"]} colLabels={hourCols} /> : <Empty />}
           </ChartCard>
 
-          <ChartCard title="توزيع الجنس" subtitle="نسبة كل فئة من العيّنة">
+          <ChartCard eyebrow="GENDER" title="توزيع الجنس" subtitle="نسبة كل فئة من العيّنة">
             {Object.keys(a.breakdown.by_gender).length > 0 ? (
               <Donut
                 data={Object.entries(a.breakdown.by_gender).map(([k, v]) => ({
-                  label: genderLabel(k),
-                  value: v,
+                  label: genderLabel(k), value: v,
                 }))}
                 totalLabel="مصوّت"
               />
@@ -208,13 +191,13 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
           </ChartCard>
         </div>
 
-        {/* AI insight, if any */}
         {poll?.ai_insight && (
-          <div className="bg-gradient-to-l from-brand-50/60 to-brand-50/20 border border-brand-100 rounded-card p-6">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-brand-600 mb-2">
-              رؤية TRENDX AI
+          <div className="bg-gold-50/40 border border-gold-100 rounded-card p-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles size={14} className="text-gold-700" />
+              <span className="text-eyebrow text-gold-700">TRENDX AI INSIGHT</span>
             </div>
-            <p className="text-base text-ink leading-relaxed">{poll.ai_insight}</p>
+            <p className="text-lg font-display font-light text-ink leading-relaxed">{poll.ai_insight}</p>
           </div>
         )}
       </main>
@@ -224,8 +207,8 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
 
 function Empty() {
   return (
-    <div className="h-full grid place-items-center text-xs text-ink-mute">
-      لا توجد بيانات كافية بعد لرسم هذه اللوحة.
+    <div className="h-full grid place-items-center text-[12px] text-ink-mute dotgrid rounded-chip">
+      لا توجد بيانات كافية بعد.
     </div>
   );
 }

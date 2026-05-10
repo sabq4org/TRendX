@@ -7,7 +7,7 @@ import { fmtInt } from "@/lib/format";
 
 type Datum = { day: string; value: number };
 
-export function AreaTrend({ data, accent = "#5C6BD0" }: { data: Datum[]; accent?: string }) {
+export function AreaTrend({ data, accent = "#3F6B4D" }: { data: Datum[]; accent?: string }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
