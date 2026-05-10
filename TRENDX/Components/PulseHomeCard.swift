@@ -29,12 +29,19 @@ struct PulseHomeCard: View {
                 )
 
             HStack(spacing: 14) {
-                // Trailing chevron (RTL — leading in screen sense)
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.primary)
-
-                Spacer()
+                // Leading icon — first child of an HStack always lands
+                // on the leading edge, which is the *right* side in
+                // RTL. (The previous order placed `chevron` first,
+                // which flipped the layout left-to-right.)
+                ZStack {
+                    Circle()
+                        .fill(TrendXTheme.primaryGradient)
+                        .frame(width: 52, height: 52)
+                        .shadow(color: TrendXTheme.primary.opacity(0.4), radius: 12, x: 0, y: 4)
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 22, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
 
                 VStack(alignment: .trailing, spacing: 6) {
                     HStack(spacing: 6) {
@@ -64,6 +71,7 @@ struct PulseHomeCard: View {
                         .foregroundStyle(TrendXTheme.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                     HStack(spacing: 4) {
                         Text("\(pulse?.totalResponses ?? 0) مشارك")
                             .monospacedDigit()
@@ -74,15 +82,13 @@ struct PulseHomeCard: View {
                     .foregroundStyle(TrendXTheme.tertiaryInk)
                 }
 
-                ZStack {
-                    Circle()
-                        .fill(TrendXTheme.primaryGradient)
-                        .frame(width: 52, height: 52)
-                        .shadow(color: TrendXTheme.primary.opacity(0.4), radius: 12, x: 0, y: 4)
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 22, weight: .heavy))
-                        .foregroundStyle(.white)
-                }
+                Spacer(minLength: 0)
+
+                // Trailing chevron — points toward the leading edge
+                // (right side in RTL) to suggest "tap to drill in".
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.primary)
             }
             .padding(18)
         }
@@ -124,12 +130,20 @@ struct TrendXIndexHomeCard: View {
                 )
 
             HStack(spacing: 14) {
-                // Trailing chevron → ends up on the screen's left in RTL.
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.aiViolet)
-
-                Spacer()
+                // Leading icon (right side in RTL) — see PulseHomeCard.
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [TrendXTheme.aiIndigo, TrendXTheme.aiViolet, TrendXTheme.aiCyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 52, height: 52)
+                        .shadow(color: TrendXTheme.aiViolet.opacity(0.4), radius: 12, x: 0, y: 4)
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 20, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
 
                 VStack(alignment: .trailing, spacing: 6) {
                     HStack(spacing: 6) {
@@ -157,25 +171,19 @@ struct TrendXIndexHomeCard: View {
                             .foregroundColor(TrendXTheme.tertiaryInk)
                     )
                     .monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
                     Text("نبض الرأي العام · يُحدَّث يوميّاً")
                         .font(.system(size: 11))
                         .foregroundStyle(TrendXTheme.tertiaryInk)
                 }
 
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: [TrendXTheme.aiIndigo, TrendXTheme.aiViolet, TrendXTheme.aiCyan],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 52, height: 52)
-                        .shadow(color: TrendXTheme.aiViolet.opacity(0.4), radius: 12, x: 0, y: 4)
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(.system(size: 20, weight: .heavy))
-                        .foregroundStyle(.white)
-                }
+                Spacer(minLength: 0)
+
+                // Trailing chevron (left side in RTL).
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.aiViolet)
             }
             .padding(18)
         }
