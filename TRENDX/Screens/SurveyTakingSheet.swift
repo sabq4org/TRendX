@@ -104,7 +104,7 @@ struct SurveyTakingSheet: View {
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(TrendXTheme.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .multilineTextAlignment(.trailing)
+                        .multilineTextAlignment(.leading)
 
                     if let description = q.description, !description.isEmpty {
                         Text(description)
@@ -205,7 +205,7 @@ struct SurveyTakingSheet: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(selected ? TrendXTheme.ink : TrendXTheme.secondaryInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(.leading)
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
             .background(

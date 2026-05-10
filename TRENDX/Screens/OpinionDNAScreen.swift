@@ -39,51 +39,44 @@ struct OpinionDNAScreen: View {
             .padding(.bottom, 120)
         }
         .trendxScreenBackground()
-        .environment(\.layoutDirection, .rightToLeft)
         .task { await load() }
     }
 
     private var header: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            HStack {
-                Spacer()
-                Text("OPINION DNA")
-                    .font(.system(size: 13, weight: .heavy))
-                    .tracking(2)
-                    .foregroundStyle(TrendXTheme.aiViolet)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("OPINION DNA")
+                .font(.system(size: 13, weight: .heavy))
+                .tracking(2)
+                .foregroundStyle(TrendXTheme.aiViolet)
             Text("هويّتك في الرأي")
                 .font(.system(size: 32, weight: .black))
                 .foregroundStyle(TrendXTheme.ink)
             Text("سِتّ محاور تكشف هويّتك الفكريّة من تصويتاتك على TRENDX.")
                 .font(.system(size: 13))
                 .foregroundStyle(TrendXTheme.secondaryInk)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 8)
     }
 
     private func archetypeCard(dna: TrendXOpinionDNA) -> some View {
-        VStack(alignment: .trailing, spacing: 12) {
-            HStack {
-                Spacer()
-                Text("شخصيّتك في الرأي")
-                    .font(.system(size: 11, weight: .heavy))
-                    .tracking(1.6)
-                    .foregroundStyle(TrendXTheme.aiViolet)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("شخصيّتك في الرأي")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.6)
+                .foregroundStyle(TrendXTheme.aiViolet)
             Text(dna.archetype.title)
                 .font(.system(size: 36, weight: .black))
                 .foregroundStyle(TrendXTheme.aiViolet)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
             Text(dna.archetype.blurb)
                 .font(.system(size: 14))
                 .foregroundStyle(TrendXTheme.secondaryInk)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .background(
             LinearGradient(
@@ -109,23 +102,23 @@ struct OpinionDNAScreen: View {
         let tilt = a.score - 50
         let label = tilt > 0 ? a.labelHigh : a.labelLow
         let intensity: String = abs(tilt) >= 25 ? "قوي" : abs(tilt) >= 10 ? "معتدل" : "متوازن"
-        return VStack(alignment: .trailing, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\(a.score)/100")
-                    .font(.system(size: 11, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.tertiaryInk)
-                    .monospacedDigit()
-                Spacer()
                 Text(intensity)
                     .font(.system(size: 10, weight: .heavy))
                     .tracking(1.2)
                     .foregroundStyle(TrendXTheme.aiViolet)
+                Spacer()
+                Text("\(a.score)/100")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .monospacedDigit()
             }
             Text(label)
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(TrendXTheme.ink)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // Bipolar bar
             GeometryReader { geo in
@@ -167,7 +160,7 @@ struct OpinionDNAScreen: View {
     }
 
     private func shareCard(dna: TrendXOpinionDNA) -> some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("جملة المشاركة")
                 .font(.system(size: 11, weight: .heavy))
                 .tracking(1.2)
@@ -175,7 +168,7 @@ struct OpinionDNAScreen: View {
             Text("«\(dna.shareCaption)»")
                 .font(.system(size: 14))
                 .foregroundStyle(TrendXTheme.ink)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
             ShareLink(item: dna.shareCaption) {
                 HStack {
                     Spacer()
@@ -190,7 +183,7 @@ struct OpinionDNAScreen: View {
                 .cornerRadius(TrendXTheme.buttonRadius)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .background(TrendXTheme.aiViolet.opacity(0.06))
         .cornerRadius(TrendXTheme.cardRadius)

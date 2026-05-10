@@ -319,7 +319,7 @@ struct AIInsightChip: View {
                     Text(text)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(TrendXTheme.ink)
-                        .multilineTextAlignment(.trailing)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(isExpanded ? nil : 1)
                         .fixedSize(horizontal: false, vertical: isExpanded)
                 }
@@ -601,7 +601,8 @@ struct PollCard: View {
             Text(poll.title)
                 .font(.system(size: 17, weight: .semibold, design: .serif))
                 .foregroundStyle(TrendXTheme.ink)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -725,7 +726,7 @@ struct PollOptionRow: View {
                 Text(option.text)
                     .font(.system(size: 14.5, weight: isUserChoice ? .semibold : .medium))
                     .foregroundStyle(isUserChoice ? tint : TrendXTheme.ink)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Spacer(minLength: 8)
@@ -1346,7 +1347,8 @@ struct MiniPollCard: View {
                     Text(poll.title)
                         .font(.system(size: 14.5, weight: .semibold))
                         .foregroundStyle(TrendXTheme.ink)
-                        .multilineTextAlignment(.trailing)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .lineLimit(3)
                         .lineSpacing(2)
 

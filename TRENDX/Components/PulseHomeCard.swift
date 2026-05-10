@@ -43,7 +43,7 @@ struct PulseHomeCard: View {
                         .foregroundStyle(.white)
                 }
 
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         if let s = streak, s.currentStreak > 0 {
                             Label("سلسلة \(s.currentStreak)", systemImage: "flame.fill")
@@ -70,8 +70,8 @@ struct PulseHomeCard: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(TrendXTheme.ink)
                         .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     HStack(spacing: 4) {
                         Text("\(pulse?.totalResponses ?? 0) مشارك")
                             .monospacedDigit()
@@ -145,7 +145,7 @@ struct TrendXIndexHomeCard: View {
                         .foregroundStyle(.white)
                 }
 
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Text("نبض السعودية")
                             .font(.system(size: 10, weight: .heavy))
@@ -171,7 +171,7 @@ struct TrendXIndexHomeCard: View {
                             .foregroundColor(TrendXTheme.tertiaryInk)
                     )
                     .monospacedDigit()
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Text("نبض الرأي العام · يُحدَّث يوميّاً")
                         .font(.system(size: 11))

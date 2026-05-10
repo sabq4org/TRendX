@@ -39,14 +39,11 @@ struct PredictionAccuracyScreen: View {
     }
 
     private var header: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            HStack {
-                Spacer()
-                Text("PREDICTIVE ACCURACY")
-                    .font(.system(size: 13, weight: .heavy))
-                    .tracking(2)
-                    .foregroundStyle(TrendXTheme.aiViolet)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("PREDICTIVE ACCURACY")
+                .font(.system(size: 13, weight: .heavy))
+                .tracking(2)
+                .foregroundStyle(TrendXTheme.aiViolet)
             Text("دقّة التنبّؤ")
                 .font(.system(size: 32, weight: .black))
                 .foregroundStyle(TrendXTheme.ink)
@@ -54,7 +51,7 @@ struct PredictionAccuracyScreen: View {
                 .font(.system(size: 13))
                 .foregroundStyle(TrendXTheme.secondaryInk)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 8)
     }
@@ -70,7 +67,7 @@ struct PredictionAccuracyScreen: View {
     }
 
     private func statCell(label: String, value: String, tint: Color) -> some View {
-        VStack(alignment: .trailing, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.system(size: 10, weight: .heavy))
                 .tracking(1.2)
@@ -80,7 +77,7 @@ struct PredictionAccuracyScreen: View {
                 .foregroundStyle(tint)
                 .monospacedDigit()
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(TrendXTheme.surface)
         .cornerRadius(TrendXTheme.cardRadius)
@@ -88,14 +85,11 @@ struct PredictionAccuracyScreen: View {
     }
 
     private func leaderboardCard(items: [TrendXAccuracyLeaderItem]) -> some View {
-        VStack(alignment: .trailing, spacing: 12) {
-            HStack {
-                Spacer()
-                Text("لوحة الشرف")
-                    .font(.system(size: 11, weight: .heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(TrendXTheme.accent)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("لوحة الشرف")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.4)
+                .foregroundStyle(TrendXTheme.accent)
             VStack(spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { idx, it in
                     HStack {
@@ -139,8 +133,8 @@ struct PredictionAccuracyScreen: View {
         Text("الدقّة = 100 - |تخمينك - النسبة الحقيقيّة|. مثال: تنبّأت بـ 60٪ والنتيجة 67٪ → دقّتك 93/100.")
             .font(.system(size: 12))
             .foregroundStyle(TrendXTheme.secondaryInk)
-            .multilineTextAlignment(.trailing)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
             .background(TrendXTheme.aiViolet.opacity(0.05))
             .cornerRadius(TrendXTheme.cardRadius)
@@ -186,7 +180,7 @@ struct OpinionDNAEntryCard: View {
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(.white)
                 }
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("OPINION DNA")
                         .font(.system(size: 11, weight: .heavy))
                         .tracking(1.4)
@@ -198,7 +192,7 @@ struct OpinionDNAEntryCard: View {
                         .font(.system(size: 11))
                         .foregroundStyle(TrendXTheme.secondaryInk)
                         .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
+                        .multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Image(systemName: "chevron.left")
@@ -240,7 +234,7 @@ struct AccuracyEntryCard: View {
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(.white)
                 }
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("ACCURACY")
                         .font(.system(size: 11, weight: .heavy))
                         .tracking(1.4)

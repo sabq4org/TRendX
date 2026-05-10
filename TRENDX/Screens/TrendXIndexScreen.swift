@@ -59,19 +59,15 @@ struct TrendXIndexScreen: View {
             .padding(.bottom, 120)
         }
         .trendxScreenBackground()
-        .environment(\.layoutDirection, .rightToLeft)
         .task { await load() }
     }
 
     private var header: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            HStack {
-                Spacer()
-                Text("TRENDX INDEX")
-                    .font(.system(size: 13, weight: .heavy))
-                    .tracking(2)
-                    .foregroundStyle(TrendXTheme.primary)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("TRENDX INDEX")
+                .font(.system(size: 13, weight: .heavy))
+                .tracking(2)
+                .foregroundStyle(TrendXTheme.primary)
             Text("نبض السعودية")
                 .font(.system(size: 32, weight: .black))
                 .foregroundStyle(TrendXTheme.ink)
@@ -79,7 +75,7 @@ struct TrendXIndexScreen: View {
                 .font(.system(size: 13))
                 .foregroundStyle(TrendXTheme.secondaryInk)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 8)
     }
@@ -87,39 +83,36 @@ struct TrendXIndexScreen: View {
     private func composite(index: TrendXIndex) -> some View {
         let dirSymbol = index.compositeChange24h > 0 ? "arrow.up.right" : index.compositeChange24h < 0 ? "arrow.down.right" : "minus"
         let dirColor: Color = index.compositeChange24h > 0 ? TrendXTheme.success : index.compositeChange24h < 0 ? TrendXTheme.error : TrendXTheme.tertiaryInk
-        return VStack(alignment: .trailing, spacing: 10) {
-            HStack {
-                Spacer()
-                Text("المؤشّر المركّب")
-                    .font(.system(size: 11, weight: .heavy))
-                    .tracking(1.6)
-                    .foregroundStyle(TrendXTheme.primary)
-            }
-            HStack(alignment: .firstTextBaseline) {
-                Spacer()
-                Text("/ 100")
-                    .font(.system(size: 18))
-                    .foregroundStyle(TrendXTheme.tertiaryInk)
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("المؤشّر المركّب")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.6)
+                .foregroundStyle(TrendXTheme.primary)
+
+            (
                 Text("\(index.composite)")
                     .font(.system(size: 84, weight: .black))
-                    .foregroundStyle(TrendXTheme.primary)
-                    .monospacedDigit()
-            }
+                    .foregroundColor(TrendXTheme.primary)
+                +
+                Text(" / 100")
+                    .font(.system(size: 18))
+                    .foregroundColor(TrendXTheme.tertiaryInk)
+            )
+            .monospacedDigit()
+
             HStack(spacing: 6) {
-                Spacer()
                 Image(systemName: dirSymbol)
                     .foregroundStyle(dirColor)
                 Text("\(index.compositeChange24h > 0 ? "+" : "")\(index.compositeChange24h) عن الأمس")
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(dirColor)
             }
-            HStack {
-                Spacer()
-                Text("استناداً إلى \(index.totalResponses) إجابة في آخر 7 أيام")
-                    .font(.system(size: 11))
-                    .foregroundStyle(TrendXTheme.tertiaryInk)
-            }
+
+            Text("استناداً إلى \(index.totalResponses) إجابة في آخر 7 أيام")
+                .font(.system(size: 11))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .background(TrendXTheme.surface)
         .cornerRadius(TrendXTheme.cardRadius)
@@ -137,27 +130,28 @@ struct TrendXIndexScreen: View {
     private func metricCard(m: TrendXIndexMetric) -> some View {
         let dirSymbol = m.direction == "up" ? "arrow.up.right" : m.direction == "down" ? "arrow.down.right" : "minus"
         let dirColor: Color = m.direction == "up" ? TrendXTheme.success : m.direction == "down" ? TrendXTheme.error : TrendXTheme.tertiaryInk
-        return VStack(alignment: .trailing, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: dirSymbol)
-                    .foregroundStyle(dirColor)
-                Spacer()
                 Text(m.name)
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(TrendXTheme.primary)
-            }
-            HStack(alignment: .firstTextBaseline) {
                 Spacer()
-                Text("/100")
-                    .font(.system(size: 14))
-                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                Image(systemName: dirSymbol)
+                    .foregroundStyle(dirColor)
+            }
+
+            (
                 Text("\(m.value)")
                     .font(.system(size: 40, weight: .black))
-                    .foregroundStyle(TrendXTheme.ink)
-                    .monospacedDigit()
-            }
-            HStack {
-                Spacer()
+                    .foregroundColor(TrendXTheme.ink)
+                +
+                Text(" / 100")
+                    .font(.system(size: 14))
+                    .foregroundColor(TrendXTheme.tertiaryInk)
+            )
+            .monospacedDigit()
+
+            HStack(spacing: 4) {
                 Text("\(m.sampleSize) إجابة")
                     .font(.system(size: 11))
                     .foregroundStyle(TrendXTheme.tertiaryInk)
@@ -167,14 +161,17 @@ struct TrendXIndexScreen: View {
                     .font(.system(size: 11, weight: .heavy))
                     .foregroundStyle(dirColor)
             }
+
             Text(m.blurb)
                 .font(.system(size: 12))
                 .foregroundStyle(TrendXTheme.secondaryInk)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            // Sparkbar
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Sparkbar — bar fills from the leading edge so RTL flows
+            // right-to-left automatically; no need to pin alignment.
             GeometryReader { geo in
-                ZStack(alignment: .trailing) {
+                ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 99)
                         .fill(TrendXTheme.paleFill)
                     RoundedRectangle(cornerRadius: 99)

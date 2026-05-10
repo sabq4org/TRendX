@@ -53,7 +53,7 @@ struct PulseTodayScreen: View {
     }
 
     private var header: some View {
-        VStack(alignment: .trailing, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("نبض اليوم")
                 .font(.system(size: 13, weight: .heavy))
                 .tracking(2)
@@ -65,7 +65,7 @@ struct PulseTodayScreen: View {
                 .font(.system(size: 13))
                 .foregroundStyle(TrendXTheme.secondaryInk)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 8)
     }
@@ -95,7 +95,7 @@ struct PulseTodayScreen: View {
     }
 
     private func statCard(icon: String, tint: Color, value: String, label: String) -> some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 14))
                 .foregroundStyle(tint)
@@ -115,22 +115,22 @@ struct PulseTodayScreen: View {
     }
 
     private func pulseCard(pulse: TrendXDailyPulse) -> some View {
-        VStack(alignment: .trailing, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
+                Image(systemName: "bolt.heart.fill")
+                    .foregroundStyle(TrendXTheme.primary)
                 Text("سؤال اليوم")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(1.4)
                     .foregroundStyle(TrendXTheme.primary)
                 Spacer()
-                Image(systemName: "bolt.heart.fill")
-                    .foregroundStyle(TrendXTheme.primary)
             }
 
             Text(pulse.question)
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(TrendXTheme.ink)
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             if pulse.userResponded == true || lastResponse != nil {
                 resultsList(pulse: lastResponse?.pulse ?? pulse)
@@ -202,14 +202,11 @@ struct PulseTodayScreen: View {
     }
 
     private var predictionSlider: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            HStack {
-                Text("لعبة التنبّؤ — اختياري")
-                    .font(.system(size: 11, weight: .heavy))
-                    .tracking(1.2)
-                    .foregroundStyle(TrendXTheme.aiViolet)
-                Spacer()
-            }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("لعبة التنبّؤ — اختياري")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.2)
+                .foregroundStyle(TrendXTheme.aiViolet)
             Text("كم نسبة من تتوقّع أن يختار الخيار الأكثر تصويتاً؟")
                 .font(.system(size: 12))
                 .foregroundStyle(TrendXTheme.secondaryInk)
@@ -233,13 +230,11 @@ struct PulseTodayScreen: View {
             ForEach(pulse.options) { o in
                 let mine = (lastResponse != nil ? picked : pulse.userChoice) == o.index
                 let leading = pulse.options.allSatisfy { $0.votes <= o.votes }
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("\(Int(o.percentage))%  \(Text("(\(o.votes))").font(.system(size: 11)).foregroundStyle(TrendXTheme.tertiaryInk))")
-                            .font(.system(size: 14, weight: .heavy))
-                            .foregroundStyle(TrendXTheme.ink)
-                            .monospacedDigit()
-                        Spacer()
+                        Text(o.text)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(mine ? TrendXTheme.primary : TrendXTheme.ink)
                         if mine {
                             Text("صوتك")
                                 .font(.system(size: 9, weight: .heavy))
@@ -248,12 +243,14 @@ struct PulseTodayScreen: View {
                                 .foregroundStyle(TrendXTheme.primary)
                                 .cornerRadius(4)
                         }
-                        Text(o.text)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(mine ? TrendXTheme.primary : TrendXTheme.ink)
+                        Spacer()
+                        Text("\(Int(o.percentage))%  \(Text("(\(o.votes))").font(.system(size: 11)).foregroundStyle(TrendXTheme.tertiaryInk))")
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.ink)
+                            .monospacedDigit()
                     }
                     GeometryReader { geo in
-                        ZStack(alignment: .trailing) {
+                        ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 99)
                                 .fill(TrendXTheme.paleFill)
                             RoundedRectangle(cornerRadius: 99)
@@ -268,7 +265,7 @@ struct PulseTodayScreen: View {
     }
 
     private func rewardBanner(r: TrendXPulseResponse) -> some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("شُكراً لمشاركتك! +\(r.reward) نقطة")
                 .font(.system(size: 14, weight: .heavy))
                 .foregroundStyle(TrendXTheme.success)
@@ -285,21 +282,18 @@ struct PulseTodayScreen: View {
             .font(.system(size: 11))
             .foregroundStyle(TrendXTheme.secondaryInk)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(TrendXTheme.success.opacity(0.08))
         .cornerRadius(TrendXTheme.chipRadius)
     }
 
     private func yesterdayCard(yesterday: TrendXDailyPulse) -> some View {
-        VStack(alignment: .trailing, spacing: 10) {
-            HStack {
-                Spacer()
-                Text("نبض الأمس")
-                    .font(.system(size: 11, weight: .heavy))
-                    .tracking(1.4)
-                    .foregroundStyle(TrendXTheme.aiViolet)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("نبض الأمس")
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.4)
+                .foregroundStyle(TrendXTheme.aiViolet)
             Text(yesterday.question)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(TrendXTheme.ink)
@@ -307,10 +301,10 @@ struct PulseTodayScreen: View {
                 Text(summary)
                     .font(.system(size: 13))
                     .foregroundStyle(TrendXTheme.secondaryInk)
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(.leading)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
         .background(TrendXTheme.aiViolet.opacity(0.06))
         .cornerRadius(TrendXTheme.cardRadius)
