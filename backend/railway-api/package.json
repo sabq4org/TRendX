@@ -15,7 +15,7 @@
     "seed:demo": "node dist/seed-demo.js",
     "seed:dev": "tsx src/seed.ts",
     "seed:demo:dev": "tsx src/seed-demo.ts",
-    "postdeploy": "node dist/bootstrap-db.js && prisma migrate deploy && node dist/seed.js && (test \"$SEED_DEMO\" = \"1\" && node dist/seed-demo.js || echo 'SEED_DEMO!=1, skipping demo seeder')",
+    "postdeploy": "node dist/bootstrap-db.js && prisma migrate deploy && node dist/seed.js",
     "studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },

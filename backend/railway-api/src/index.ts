@@ -1197,6 +1197,23 @@ if (process.env.SNAPSHOT_DISABLED !== "1") {
   startSnapshotJob();
 }
 
+// Optional one-time demo seeder. We run it in the background **after** the
+// API server has started so Railway's healthcheck succeeds immediately;
+// the heavy lifting (50 respondents + ~500 votes + 3 surveys) finishes a
+// minute or two later without anyone noticing. Idempotent on re-run.
+if (process.env.SEED_DEMO === "1") {
+  setTimeout(async () => {
+    try {
+      console.log("[trendx] launching demo seeder in the background…");
+      const { runDemoSeed } = await import("./seed-demo.js");
+      await runDemoSeed();
+      console.log("[trendx] demo seeder finished.");
+    } catch (error) {
+      console.error("[trendx] demo seeder failed (non-fatal):", error);
+    }
+  }, 5_000);
+}
+
 const shutdown = async () => {
   console.log("[trendx] shutting down…");
   server.close();

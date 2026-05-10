@@ -21,7 +21,16 @@ import {
 } from "@prisma/client";
 import { hashPassword, makeSalt } from "./auth.js";
 
-const prisma = new PrismaClient();
+// Reuse the shared singleton when imported from the API process; fall back
+// to a fresh client when invoked as a standalone CLI.
+let prisma: PrismaClient;
+try {
+  // Lazy-load to avoid a circular import when bundlers see this file.
+  const mod = await import("./db.js");
+  prisma = mod.prisma;
+} catch {
+  prisma = new PrismaClient();
+}
 
 // --- Publishers --------------------------------------------------------------
 
@@ -392,7 +401,7 @@ function randomInt(min: number, max: number): number {
 
 // --- Main --------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function runDemoSeed(): Promise<void> {
   console.log("[seed-demo] starting…");
 
   // 1) Publishers
@@ -736,11 +745,18 @@ async function main(): Promise<void> {
   console.log("[seed-demo] complete.");
 }
 
-main()
-  .catch((error) => {
-    console.error("[seed-demo] failed:", error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// CLI entry point — only runs when this file is invoked directly via
+// `node dist/seed-demo.js`. Importing the module from the API process is
+// a no-op, which lets us call `runDemoSeed()` from `index.ts` after the
+// healthcheck has succeeded.
+const isCli = import.meta.url === `file://${process.argv[1]}`;
+if (isCli) {
+  runDemoSeed()
+    .catch((error) => {
+      console.error("[seed-demo] failed:", error);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
