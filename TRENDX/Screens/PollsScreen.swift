@@ -13,6 +13,7 @@ struct PollsScreen: View {
     @State private var selectedSurvey: Survey?
     @State private var showSurveys = false
     @State private var showCategoryInsight = false
+    @State private var showCreateSurvey = false
 
     private var activeCount: Int { store.activePolls.count }
     private var votedCount: Int { store.votedPolls.count }
@@ -73,6 +74,26 @@ struct PollsScreen: View {
                     }
                     .padding(3)
                     .background(RoundedRectangle(cornerRadius: 20).fill(TrendXTheme.softFill))
+
+                    // "+" — create poll / survey
+                    Button {
+                        if showSurveys {
+                            showCreateSurvey = true
+                        } else {
+                            store.showCreatePoll = true
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(TrendXTheme.primaryGradient))
+                            .shadow(color: TrendXTheme.primary.opacity(0.30),
+                                    radius: 8, x: 0, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showSurveys ? "استبيان جديد" : "استطلاع جديد")
+
                     Spacer()
                 }
 
@@ -195,6 +216,11 @@ struct PollsScreen: View {
         .sheet(item: $selectedSurvey) { survey in
             SurveyDetailView(survey: survey)
                 .environmentObject(store)
+        }
+        .sheet(isPresented: $showCreateSurvey) {
+            CreateSurveySheet()
+                .environmentObject(store)
+                .trendxRTL()
         }
         .sheet(isPresented: $showCategoryInsight) {
             CategoryInsightView(insight: SectorInsight(

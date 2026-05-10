@@ -67,8 +67,10 @@ struct SurveyListRow: View {
 
 struct SurveyDetailView: View {
     let survey: Survey
+    @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var showAnalytics = false
+    @State private var showTakingSheet = false
     @State private var selectedPoll: Poll?
 
     var body: some View {
@@ -77,6 +79,30 @@ struct SurveyDetailView: View {
                 VStack(spacing: 16) {
                     // Hero
                     surveyHero
+
+                    // CTA: ابدأ الاستبيان
+                    Button { showTakingSheet = true } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "play.circle.fill")
+                                .font(.system(size: 18, weight: .bold))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("ابدأ الإجابة")
+                                    .font(.system(size: 15, weight: .bold))
+                                Text("\(survey.questionCount) أسئلة · مكافأة \(survey.rewardPoints) نقطة")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(16)
+                        .background(TrendXTheme.primaryGradient)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: TrendXTheme.primary.opacity(0.3), radius: 14, x: 0, y: 8)
+                    }
+                    .buttonStyle(.plain)
 
                     // الأسئلة
                     VStack(alignment: .leading, spacing: 12) {
@@ -97,22 +123,21 @@ struct SurveyDetailView: View {
                     }
                     .surfaceCard(padding: 18, radius: 24)
 
-                    // زر التحليل الشامل
+                    // زر التحليل الشامل (ثانوي)
                     Button { showAnalytics = true } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "chart.bar.xaxis.ascending.badge.clock")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.system(size: 14, weight: .bold))
                             Text("فتح التحليل الشامل للاستبيان")
-                                .font(.system(size: 15, weight: .bold))
+                                .font(.system(size: 13, weight: .bold))
                             Spacer()
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                         }
-                        .foregroundStyle(.white)
-                        .padding(18)
-                        .background(TrendXTheme.primaryGradient)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .shadow(color: TrendXTheme.primary.opacity(0.3), radius: 12, x: 0, y: 6)
+                        .foregroundStyle(TrendXTheme.primary)
+                        .padding(14)
+                        .background(TrendXTheme.primary.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -131,9 +156,14 @@ struct SurveyDetailView: View {
             .sheet(isPresented: $showAnalytics) {
                 SurveyAnalyticsView(survey: survey)
             }
+            .sheet(isPresented: $showTakingSheet) {
+                SurveyTakingSheet(survey: survey)
+                    .environmentObject(store)
+                    .trendxRTL()
+            }
             .sheet(item: $selectedPoll) { poll in
                 PollDetailView(pollId: poll.id)
-                    .environmentObject(AppStore())
+                    .environmentObject(store)
                     .trendxRTL()
             }
         }

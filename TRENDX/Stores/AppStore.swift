@@ -29,6 +29,7 @@ final class AppStore: ObservableObject {
     private let client: TrendXAPIClient
     private let authRepository: AuthRepository
     private let pollRepository: PollRepository
+    private let surveyRepository: SurveyRepository
     private let rewardsRepository: RewardsRepository
     private let aiRepository: AIRepository
     private var authSession: AuthSession?
@@ -47,6 +48,7 @@ final class AppStore: ObservableObject {
         self.client = client
         self.authRepository = AuthRepository(client: client)
         self.pollRepository = PollRepository(client: client)
+        self.surveyRepository = SurveyRepository(client: client)
         self.rewardsRepository = RewardsRepository(client: client)
         self.aiRepository = AIRepository(client: client)
         self.authSession = authRepository.restoreSession()
@@ -179,6 +181,7 @@ final class AppStore: ObservableObject {
         defer { isLoading = false }
 
         async let bootstrapTask = pollRepository.loadBootstrap(session: authSession)
+        async let surveysTask = (try? surveyRepository.loadSurveys(session: authSession)) ?? []
         async let giftsTask = rewardsRepository.loadGifts(session: authSession)
         async let redemptionsTask = rewardsRepository.loadRedemptions(session: authSession)
 
@@ -186,6 +189,11 @@ final class AppStore: ObservableObject {
             let bootstrap = try await bootstrapTask
             topics = bootstrap.topics
             polls = bootstrap.polls.isEmpty ? polls : bootstrap.polls
+            let remoteSurveys = await surveysTask
+            if !remoteSurveys.isEmpty {
+                surveys = remoteSurveys
+                persistSurveys()
+            }
             gifts = await giftsTask
             redemptions = await redemptionsTask
             persistTopics()
@@ -406,7 +414,98 @@ final class AppStore: ObservableObject {
             polls.insert(poll, at: 0)
         }
     }
-    
+
+    private func replaceSurvey(_ survey: Survey) {
+        if let index = surveys.firstIndex(where: { $0.id == survey.id }) {
+            surveys[index] = survey
+        } else {
+            surveys.insert(survey, at: 0)
+        }
+    }
+
+    // MARK: - Survey Actions
+
+    /// Submit a respondent's answers to a survey. The optimistic
+    /// counter bump is applied immediately; if the network call
+    /// succeeds we award the survey reward and refresh the cached
+    /// row. Failure is non-fatal — same offline-first contract as
+    /// `voteOnPoll`.
+    func submitSurveyResponse(
+        surveyId: UUID,
+        answers: [SurveyAnswerInput],
+        completionSeconds: Int?
+    ) {
+        guard let surveyIndex = surveys.firstIndex(where: { $0.id == surveyId }) else { return }
+
+        // Optimistic local update
+        surveys[surveyIndex].totalResponses += 1
+        let isComplete = answers.count >= surveys[surveyIndex].questions.count
+        if isComplete {
+            let total = surveys[surveyIndex].totalResponses
+            let completes = Int((surveys[surveyIndex].completionRate / 100) * Double(total - 1)) + 1
+            surveys[surveyIndex].completionRate = total > 0
+                ? (Double(completes) / Double(total)) * 100
+                : 0
+        }
+        persistSurveys()
+
+        let reward = isComplete ? surveys[surveyIndex].rewardPoints : 0
+        if reward > 0 {
+            addPoints(reward)
+        }
+
+        guard isRemoteEnabled else { return }
+        Task {
+            do {
+                _ = try await surveyRepository.submitResponse(
+                    surveyId: surveyId,
+                    answers: answers,
+                    completionSeconds: completionSeconds,
+                    session: authSession
+                )
+                if let fresh = try? await surveyRepository.loadSurvey(
+                    id: surveyId,
+                    session: authSession
+                ) {
+                    replaceSurvey(fresh)
+                    persistSurveys()
+                }
+            } catch {
+                appMessage = "تم حفظ إجاباتك محلياً، وستتم محاولة المزامنة لاحقاً."
+            }
+        }
+    }
+
+    /// Create a new survey from a domain Survey value (used by the
+    /// CreateSurveySheet). Optimistically prepends to the local list
+    /// then syncs with the backend.
+    func createSurvey(_ survey: Survey) {
+        var newSurvey = survey
+        newSurvey.authorName = currentUser.name
+        newSurvey.authorAvatar = currentUser.avatarInitial
+        surveys.insert(newSurvey, at: 0)
+        persistSurveys()
+
+        guard isRemoteEnabled else { return }
+        Task {
+            do {
+                let remote = try await surveyRepository.createSurvey(newSurvey, session: authSession)
+                replaceSurvey(remote)
+                persistSurveys()
+            } catch {
+                appMessage = "تم نشر الاستبيان محلياً، ولم تكتمل مزامنته بعد."
+            }
+        }
+    }
+
+    var activeSurveys: [Survey] {
+        surveys.filter { $0.status == .active && !$0.isExpired }
+    }
+
+    func survey(withId id: UUID) -> Survey? {
+        surveys.first { $0.id == id }
+    }
+
     // MARK: - Persistence
     
     private func persistUser() {
@@ -424,6 +523,12 @@ final class AppStore: ObservableObject {
     private func persistPolls() {
         if let data = try? JSONEncoder().encode(polls) {
             UserDefaults.standard.set(data, forKey: pollsKey)
+        }
+    }
+
+    private func persistSurveys() {
+        if let data = try? JSONEncoder().encode(surveys) {
+            UserDefaults.standard.set(data, forKey: surveysKey)
         }
     }
 
