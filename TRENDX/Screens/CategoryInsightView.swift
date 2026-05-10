@@ -262,7 +262,7 @@ struct CategoryInsightView: View {
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(TrendXTheme.ink)
                                 .lineLimit(2)
-                                .multilineTextAlignment(.leading)
+                                .multilineTextAlignment(.trailing)
                             HStack(spacing: 8) {
                                 Label("\(survey.totalResponses)", systemImage: "person.2")
                                 Label("\(survey.questionCount) أسئلة", systemImage: "list.bullet")

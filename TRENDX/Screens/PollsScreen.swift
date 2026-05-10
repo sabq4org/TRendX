@@ -325,7 +325,7 @@ struct PollListRow: View {
                         Text(poll.title)
                             .font(.system(size: 15, weight: .semibold, design: .serif))
                             .foregroundStyle(TrendXTheme.ink)
-                            .multilineTextAlignment(.leading)
+                            .multilineTextAlignment(.trailing)
                             .lineLimit(3)
                             .lineSpacing(2)
                             .fixedSize(horizontal: false, vertical: true)

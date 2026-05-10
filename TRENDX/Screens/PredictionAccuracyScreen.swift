@@ -174,10 +174,18 @@ struct OpinionDNAEntryCard: View {
                     endPoint: .bottomLeading
                 ))
             HStack(spacing: 14) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.aiViolet)
-                Spacer()
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [TrendXTheme.aiIndigo, TrendXTheme.aiViolet, TrendXTheme.aiCyan],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 52, height: 52)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 22, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
                 VStack(alignment: .trailing, spacing: 4) {
                     Text("OPINION DNA")
                         .font(.system(size: 11, weight: .heavy))
@@ -192,18 +200,10 @@ struct OpinionDNAEntryCard: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                 }
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: [TrendXTheme.aiIndigo, TrendXTheme.aiViolet, TrendXTheme.aiCyan],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 52, height: 52)
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 22, weight: .heavy))
-                        .foregroundStyle(.white)
-                }
+                Spacer()
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.aiViolet)
             }
             .padding(18)
         }
@@ -228,28 +228,6 @@ struct AccuracyEntryCard: View {
             RoundedRectangle(cornerRadius: TrendXTheme.cardRadius)
                 .fill(TrendXTheme.surface)
             HStack(spacing: 14) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.accent)
-                Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("ACCURACY")
-                        .font(.system(size: 11, weight: .heavy))
-                        .tracking(1.4)
-                        .foregroundStyle(TrendXTheme.accent)
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("/100")
-                            .font(.system(size: 12))
-                            .foregroundStyle(TrendXTheme.tertiaryInk)
-                        Text("\(stats?.averageAccuracy ?? 0)")
-                            .font(.system(size: 28, weight: .black))
-                            .foregroundStyle(TrendXTheme.accent)
-                            .monospacedDigit()
-                    }
-                    Text("أعلى من \(stats?.rankPercentile ?? 0)% من المتنبّئين")
-                        .font(.system(size: 11))
-                        .foregroundStyle(TrendXTheme.tertiaryInk)
-                }
                 ZStack {
                     Circle()
                         .fill(LinearGradient(
@@ -262,6 +240,28 @@ struct AccuracyEntryCard: View {
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(.white)
                 }
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("ACCURACY")
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(1.4)
+                        .foregroundStyle(TrendXTheme.accent)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(stats?.averageAccuracy ?? 0)")
+                            .font(.system(size: 28, weight: .black))
+                            .foregroundStyle(TrendXTheme.accent)
+                            .monospacedDigit()
+                        Text("/100")
+                            .font(.system(size: 12))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                    Text("أعلى من \(stats?.rankPercentile ?? 0)% من المتنبّئين")
+                        .font(.system(size: 11))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                }
+                Spacer()
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.accent)
             }
             .padding(18)
         }

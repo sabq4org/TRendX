@@ -248,7 +248,7 @@ private struct QuestionRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(TrendXTheme.ink)
                         .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+                        .multilineTextAlignment(.trailing)
 
                     HStack(spacing: 6) {
                         Text("\(poll.options.count) خيارات")
