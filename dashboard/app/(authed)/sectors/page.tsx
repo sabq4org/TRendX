@@ -44,12 +44,12 @@ export default function SectorsListPage() {
                     </span>
                     <ArrowLeft
                       size={14}
-                      className="text-ink-ghost group-hover:text-sage-700 group-hover:-translate-x-1 transition-all"
+                      className="text-ink-ghost group-hover:text-brand-600 group-hover:-translate-x-1 transition-all"
                     />
                   </div>
 
-                  <div className="text-eyebrow text-sage-700 mb-2">SECTOR</div>
-                  <h3 className="text-3xl font-display font-black text-ink mb-1 tracking-tight group-hover:text-sage-700 transition leading-tight">
+                  <div className="text-eyebrow text-brand-600 mb-2">SECTOR</div>
+                  <h3 className="text-3xl font-display font-black text-ink mb-1 tracking-tight group-hover:text-brand-600 transition leading-tight">
                     {t.name}
                   </h3>
                   <p className="text-[11px] text-ink-mute font-mono mb-6">{t.slug}</p>

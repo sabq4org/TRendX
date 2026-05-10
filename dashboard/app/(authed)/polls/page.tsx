@@ -57,7 +57,7 @@ export default function PollsListPage() {
                         </span>
                       )}
                       {poll.is_featured && (
-                        <span className="px-2 py-0.5 rounded-pill bg-gold-50 text-gold-700 text-[10px] font-bold flex items-center gap-1">
+                        <span className="px-2 py-0.5 rounded-pill bg-accent-50 text-accent-700 text-[10px] font-bold flex items-center gap-1">
                           <Sparkles size={9} /> مميّز
                         </span>
                       )}
@@ -65,7 +65,7 @@ export default function PollsListPage() {
                     </div>
                   </div>
 
-                  <h3 className="text-lg font-display font-bold text-ink leading-snug mb-3 line-clamp-2 group-hover:text-sage-700 transition tracking-tight">
+                  <h3 className="text-lg font-display font-bold text-ink leading-snug mb-3 line-clamp-2 group-hover:text-brand-600 transition tracking-tight">
                     {poll.title}
                   </h3>
 
@@ -81,13 +81,13 @@ export default function PollsListPage() {
                         <span className="text-[12px] font-medium text-ink-soft truncate me-3">
                           {leading.text}
                         </span>
-                        <span className="font-display font-black tabular text-2xl text-sage-700 leading-none">
+                        <span className="font-display font-black tabular text-2xl text-brand-600 leading-none">
                           {leadingPct}<span className="text-[12px] font-medium text-ink-mute">%</span>
                         </span>
                       </div>
                       <div className="h-1.5 rounded-pill bg-canvas-well overflow-hidden">
                         <div
-                          className="h-full bg-sage-700 transition-all duration-700 ease-soft"
+                          className="h-full bg-brand-600 transition-all duration-700 ease-soft"
                           style={{ width: `${leadingPct}%` }}
                         />
                       </div>
@@ -108,7 +108,7 @@ export default function PollsListPage() {
 
                   {/* Hover arrow */}
                   <div className="absolute top-7 inset-inline-end-7 opacity-0 group-hover:opacity-100 transition">
-                    <ArrowLeft size={14} className="text-sage-700" />
+                    <ArrowLeft size={14} className="text-brand-600" />
                   </div>
                 </Link>
               );

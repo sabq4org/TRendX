@@ -69,28 +69,28 @@ export default function OverviewPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger">
           <KPICard
             index={0}
-            tone="sage"
+            tone="brand"
             label="استطلاعاتك النشطة"
             value={fmtInt(myPolls.length)}
             hint={`${fmtInt(myVotes)} صوتاً جمعتها حتى الآن`}
           />
           <KPICard
             index={1}
-            tone="gold"
+            tone="accent"
             label="استبياناتك"
             value={fmtInt(mySurveys.length)}
             hint={`${fmtInt(mySurveys.reduce((a, s) => a + s.total_responses, 0))} مستجيب`}
           />
           <KPICard
             index={2}
-            tone="copper"
+            tone="ai"
             label="إجمالي أصوات المنصّة"
             value={fmtInt(totalVotesAcrossAll)}
             hint={`عبر ${fmtInt(data.polls.length)} استطلاعاً`}
           />
           <KPICard
             index={3}
-            tone="sage"
+            tone="brand"
             label="متوسّط التفاعل"
             value={fmtInt(avgEngagementPct)}
             hint="صوت لكل استطلاع"
@@ -103,8 +103,8 @@ export default function OverviewPage() {
           <div className="lg:col-span-2 bg-canvas-card rounded-card shadow-card overflow-hidden">
             <div className="bg-hero p-8 lg:p-10 border-b border-ink-line/40">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles size={13} className="text-sage-600" />
-                <span className="text-eyebrow text-sage-700">SPOTLIGHT</span>
+                <Sparkles size={13} className="text-brand-500" />
+                <span className="text-eyebrow text-brand-600">SPOTLIGHT</span>
               </div>
 
               {topPoll ? (
@@ -139,7 +139,7 @@ export default function OverviewPage() {
                           {opt.text}
                         </span>
                         <div className="flex items-baseline gap-2 shrink-0">
-                          <span className={`font-display font-black tabular tracking-tight ${isLeader ? "text-2xl text-sage-700" : "text-lg text-ink"}`}>
+                          <span className={`font-display font-black tabular tracking-tight ${isLeader ? "text-2xl text-brand-600" : "text-lg text-ink"}`}>
                             {sharePct.toFixed(1)}<span className="text-[12px] font-medium text-ink-mute">%</span>
                           </span>
                           <span className="text-[11px] tabular text-ink-mute">{fmtInt(opt.votes_count)}</span>
@@ -147,7 +147,7 @@ export default function OverviewPage() {
                       </div>
                       <div className="h-2 rounded-pill bg-canvas-well overflow-hidden">
                         <div
-                          className={`h-full rounded-pill transition-all duration-700 ease-soft ${isLeader ? "bg-sage-700" : "bg-sage-300"}`}
+                          className={`h-full rounded-pill transition-all duration-700 ease-soft ${isLeader ? "bg-brand-600" : "bg-brand-300"}`}
                           style={{ width: `${sharePct}%` }}
                         />
                       </div>
@@ -156,8 +156,8 @@ export default function OverviewPage() {
                 })}
 
                 {topPoll.ai_insight && (
-                  <div className="mt-6 p-5 rounded-chip bg-gold-50/60 border border-gold-100">
-                    <div className="text-eyebrow text-gold-700 mb-2 flex items-center gap-1.5">
+                  <div className="mt-6 p-5 rounded-chip bg-accent-50/60 border border-accent-100">
+                    <div className="text-eyebrow text-accent-700 mb-2 flex items-center gap-1.5">
                       <Sparkles size={11} />
                       رؤية TRENDX AI
                     </div>
@@ -167,7 +167,7 @@ export default function OverviewPage() {
 
                 <Link
                   href={`/polls/${topPoll.id}`}
-                  className="inline-flex items-center gap-2 text-[12px] font-bold text-sage-700 hover:gap-3 transition-all mt-2"
+                  className="inline-flex items-center gap-2 text-[12px] font-bold text-brand-600 hover:gap-3 transition-all mt-2"
                 >
                   افتح التحليل الكامل
                   <ArrowLeft size={13} />
@@ -186,7 +186,7 @@ export default function OverviewPage() {
         <div className="bg-canvas-card rounded-card shadow-card overflow-hidden">
           <div className="px-8 lg:px-10 py-7 border-b border-ink-line/40 flex items-baseline justify-between">
             <div>
-              <div className="text-eyebrow text-sage-700 mb-1.5">RECENT ACTIVITY</div>
+              <div className="text-eyebrow text-brand-600 mb-1.5">RECENT ACTIVITY</div>
               <h3 className="text-xl font-display font-black text-ink tracking-tight">
                 الأكثر تفاعلاً عبر المنصّة
               </h3>
@@ -211,12 +211,12 @@ export default function OverviewPage() {
                     {String(idx + 1).padStart(2, "0")}
                   </span>
 
-                  <div className="w-11 h-11 rounded-chip bg-sage-50 text-sage-700 grid place-items-center font-display font-bold text-base shrink-0">
+                  <div className="w-11 h-11 rounded-chip bg-brand-50 text-brand-600 grid place-items-center font-display font-bold text-base shrink-0">
                     {poll.author_avatar}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-medium text-ink truncate group-hover:text-sage-700 transition">
+                    <div className="text-[14px] font-medium text-ink truncate group-hover:text-brand-600 transition">
                       {poll.title}
                     </div>
                     <div className="flex items-center gap-2 text-[11px] text-ink-mute mt-1">
@@ -226,7 +226,7 @@ export default function OverviewPage() {
                       {poll.topic_name && (
                         <>
                           <span>•</span>
-                          <span className="font-bold text-sage-700">{poll.topic_name}</span>
+                          <span className="font-bold text-brand-600">{poll.topic_name}</span>
                         </>
                       )}
                     </div>

@@ -1,42 +1,44 @@
 /**
- * Chart palette — derived from the Saudi-rooted brand system in
- * `tailwind.config.ts`. We export hex strings (rather than `tailwind`
- * tokens) because Recharts consumes raw colours, not utility classes.
- *
- * Order matters: the first colour is reserved for the primary series
- * (the "leading" data point), and successive colours fall back to
- * supporting hues that don't fight for attention.
+ * Chart palette — locked to the iOS TRENDX identity:
+ *   1. brand blue    (#3B5BDB) — primary
+ *   2. accent orange (#FA7C12) — secondary
+ *   3. AI violet     (#7048E8) — tertiary, AI-touched
+ *   4. AI cyan       (#1098AD) — quaternary, info accents
+ *   5. brand light   (#4C6EF5) — supporting series
+ *   6. accent deep   (#E8590C) — supporting warm
+ *   7. AI indigo     (#4263EB) — supporting cool
+ *   8. ink-soft      (#495057) — neutral fallback
  */
 
 export const DATA_COLORS = {
-  sage:        "#3F6B4D", // primary
-  gold:        "#C9A961",
-  copper:      "#B86F4A",
-  sageLight:   "#7FA088",
-  goldDark:    "#9F8240",
-  copperDark:  "#8B5435",
-  sageDeep:    "#1F4630",
-  inkSoft:     "#34392F",
+  brand:       "#3B5BDB",
+  accent:      "#FA7C12",
+  aiViolet:    "#7048E8",
+  aiCyan:      "#1098AD",
+  brandLight:  "#4C6EF5",
+  accentDeep:  "#E8590C",
+  aiIndigo:    "#4263EB",
+  inkSoft:     "#495057",
 };
 
 export const DATA_PALETTE = [
-  DATA_COLORS.sage,
-  DATA_COLORS.gold,
-  DATA_COLORS.copper,
-  DATA_COLORS.sageLight,
-  DATA_COLORS.goldDark,
-  DATA_COLORS.copperDark,
-  DATA_COLORS.sageDeep,
+  DATA_COLORS.brand,
+  DATA_COLORS.accent,
+  DATA_COLORS.aiViolet,
+  DATA_COLORS.aiCyan,
+  DATA_COLORS.brandLight,
+  DATA_COLORS.accentDeep,
+  DATA_COLORS.aiIndigo,
   DATA_COLORS.inkSoft,
 ];
 
 export const HEATMAP_RAMP = [
-  "#F2EDDF", // empty
-  "#E0E0CB",
-  "#C2CBB4",
-  "#9DB59A",
-  "#6E957A",
-  "#3F6B4D", // hot
+  "#F0F2FA", // empty (canvas-well)
+  "#DCE3FE", // brand-100
+  "#BFCAFD", // brand-200
+  "#9EAFEC", // brand-300
+  "#6B83E5", // brand-400
+  "#3B5BDB", // brand-500 (hot)
 ];
 
 export function colorAt(index: number): string {

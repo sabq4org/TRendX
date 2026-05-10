@@ -26,7 +26,7 @@ export default function AccountPage() {
       <Header eyebrow="ACCOUNT" title="الحساب" subtitle="معلومات الناشر والاشتراك." />
       <main className="flex-1 px-10 pb-10 space-y-6 max-w-3xl">
         <div className="bg-canvas-card rounded-card shadow-card p-8 flex items-center gap-6">
-          <div className="w-20 h-20 rounded-card bg-sage-700 text-canvas-card grid place-items-center text-3xl font-display font-black shadow-card-lift">
+          <div className="w-20 h-20 rounded-card bg-brand-600 text-canvas-card grid place-items-center text-3xl font-display font-black shadow-card-lift">
             {user.avatar_initial}
           </div>
           <div className="flex-1">
@@ -35,7 +35,7 @@ export default function AccountPage() {
             </h2>
             <p className="text-sm text-ink-mute mt-1">{user.email}</p>
             <div className="flex items-center gap-2 mt-3">
-              <span className="text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-pill bg-sage-50 text-sage-700">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-pill bg-brand-50 text-brand-600">
                 {TIER_LABEL[user.tier as keyof typeof TIER_LABEL] ?? "Free"}
               </span>
               <span className="text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-pill bg-canvas-well text-ink-soft">
@@ -53,8 +53,8 @@ export default function AccountPage() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
-          <Stat label="نقاط TRENDX" value={fmtInt(user.points)} tone="sage" />
-          <Stat label="عملات TRENDX" value={user.coins.toFixed(2)} tone="gold" />
+          <Stat label="نقاط TRENDX" value={fmtInt(user.points)} tone="brand" />
+          <Stat label="عملات TRENDX" value={user.coins.toFixed(2)} tone="accent" />
           <Stat label="المدينة" value={user.city ?? "—"} />
           <Stat label="المنطقة" value={user.region ?? "—"} />
           <Stat label="الجنس" value={user.gender === "male" ? "ذكر" : user.gender === "female" ? "أنثى" : "—"} />
@@ -62,7 +62,7 @@ export default function AccountPage() {
         </div>
 
         <div className="bg-canvas-well rounded-card p-6 border border-ink-line/40">
-          <div className="text-eyebrow text-sage-700 mb-2">API ENDPOINT</div>
+          <div className="text-eyebrow text-brand-600 mb-2">API ENDPOINT</div>
           <code className="text-[12px] text-ink-soft font-mono break-all" dir="ltr">
             {process.env.NEXT_PUBLIC_TRENDX_API ?? "https://trendx-production.up.railway.app"}
           </code>
@@ -72,10 +72,10 @@ export default function AccountPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "sage" | "gold" }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "brand" | "accent" }) {
   const accent =
-    tone === "sage" ? "text-sage-700" :
-    tone === "gold" ? "text-gold-700" :
+    tone === "brand" ? "text-brand-600" :
+    tone === "accent" ? "text-accent-700" :
     "text-ink";
   return (
     <div className="bg-canvas-card rounded-card shadow-card p-5">

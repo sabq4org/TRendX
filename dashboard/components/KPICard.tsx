@@ -1,6 +1,6 @@
 import clsx from "clsx";
 
-type Tone = "default" | "sage" | "gold" | "copper";
+type Tone = "default" | "brand" | "accent" | "ai";
 
 type Props = {
   label: string;
@@ -13,10 +13,10 @@ type Props = {
 };
 
 const TONE_COLORS: Record<Tone, { bar: string; eyebrow: string; valueAccent?: string }> = {
-  default: { bar: "text-ink-line", eyebrow: "text-ink-mute" },
-  sage:    { bar: "text-sage-500", eyebrow: "text-sage-700" },
-  gold:    { bar: "text-gold-500", eyebrow: "text-gold-700" },
-  copper:  { bar: "text-copper-500", eyebrow: "text-copper-700" },
+  default: { bar: "text-ink-line",   eyebrow: "text-ink-mute" },
+  brand:   { bar: "text-brand-500",  eyebrow: "text-brand-600" },
+  accent:  { bar: "text-accent-500", eyebrow: "text-accent-700" },
+  ai:      { bar: "text-ai-500",     eyebrow: "text-ai-700" },
 };
 
 export function KPICard({

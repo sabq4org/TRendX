@@ -32,9 +32,9 @@ export default function LoginPage() {
           <div>
             <div className="flex items-baseline gap-2.5 mb-1">
               <span className="text-5xl font-display font-black tracking-tight text-ink">TRENDX</span>
-              <span className="w-2 h-2 rounded-full bg-sage-500" />
+              <span className="w-2 h-2 rounded-full bg-brand-500" />
             </div>
-            <p className="text-sm font-bold uppercase tracking-[0.22em] text-sage-700">
+            <p className="text-sm font-bold uppercase tracking-[0.22em] text-brand-600">
               ذكاء الرأي السعودي
             </p>
           </div>
@@ -42,7 +42,7 @@ export default function LoginPage() {
           <div>
             <blockquote className="text-3xl font-display font-light text-ink leading-snug max-w-xl">
               «من البيانات الخام إلى قرارات تصنع الفارق —
-              <span className="font-black text-sage-700"> هنا يبدأ الذكاء الإستراتيجي.</span>»
+              <span className="font-black text-brand-600"> هنا يبدأ الذكاء الإستراتيجي.</span>»
             </blockquote>
 
             <div className="flex items-center gap-8 mt-12 pt-8 border-t border-ink-line/60">
@@ -69,12 +69,12 @@ export default function LoginPage() {
           <div className="lg:hidden mb-10 text-center">
             <div className="flex items-baseline justify-center gap-2 mb-1">
               <span className="text-3xl font-display font-black text-ink">TRENDX</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-sage-500" />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
             </div>
           </div>
 
           <div className="mb-9">
-            <div className="text-eyebrow text-sage-700 mb-3">SIGN IN</div>
+            <div className="text-eyebrow text-brand-600 mb-3">SIGN IN</div>
             <h1 className="text-3xl font-display font-black text-ink leading-tight">
               مرحباً بعودتك
             </h1>
@@ -94,7 +94,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3.5 rounded-chip border border-ink-line bg-canvas-well/40 focus:bg-canvas-card focus:border-sage-500 focus:outline-none focus:ring-4 focus:ring-sage-500/15 text-sm transition"
+                className="w-full px-4 py-3.5 rounded-chip border border-ink-line bg-canvas-well/40 focus:bg-canvas-card focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 text-sm transition"
               />
             </div>
 
@@ -108,7 +108,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3.5 rounded-chip border border-ink-line bg-canvas-well/40 focus:bg-canvas-card focus:border-sage-500 focus:outline-none focus:ring-4 focus:ring-sage-500/15 text-sm transition"
+                className="w-full px-4 py-3.5 rounded-chip border border-ink-line bg-canvas-well/40 focus:bg-canvas-card focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/15 text-sm transition"
               />
             </div>
 
@@ -121,7 +121,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={submitting || loading}
-              className="w-full bg-sage-700 hover:bg-sage-900 disabled:bg-sage-300 disabled:cursor-not-allowed text-canvas-card font-bold py-3.5 rounded-chip text-sm transition shadow-card hover:shadow-card-lift"
+              className="w-full brand-fill disabled:opacity-60 disabled:cursor-not-allowed font-bold py-3.5 rounded-chip text-sm transition shadow-card hover:shadow-glow"
             >
               {submitting ? "جارٍ الدخول..." : "تسجيل الدخول"}
             </button>

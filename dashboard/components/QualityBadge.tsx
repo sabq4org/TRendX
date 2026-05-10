@@ -15,13 +15,13 @@ export function QualityBadge({
   dataFreshness, methodologyNote,
 }: Props) {
   const items = [
-    { icon: Database,    label: "حجم العيّنة",    value: fmtInt(sampleSize),                                    accent: "sage" },
-    { icon: ShieldCheck, label: "مستوى الثقة",     value: `${confidenceLevel}%`,                                 accent: "sage" },
-    { icon: Target,      label: "هامش الخطأ",      value: marginOfError !== null ? `±${marginOfError}%` : "—",   accent: "gold" },
+    { icon: Database,    label: "حجم العيّنة",    value: fmtInt(sampleSize),                                    accent: "brand" },
+    { icon: ShieldCheck, label: "مستوى الثقة",     value: `${confidenceLevel}%`,                                 accent: "brand" },
+    { icon: Target,      label: "هامش الخطأ",      value: marginOfError !== null ? `±${marginOfError}%` : "—",   accent: "accent" },
     representativenessScore !== undefined ? {
-      icon: Compass,     label: "تمثيل العيّنة",   value: `${representativenessScore}/100`,                      accent: "copper",
+      icon: Compass,     label: "تمثيل العيّنة",   value: `${representativenessScore}/100`,                      accent: "ai",
     } : null,
-    { icon: Clock,       label: "آخر تحديث",       value: fmtRelativeNow(dataFreshness),                          accent: "sage" },
+    { icon: Clock,       label: "آخر تحديث",       value: fmtRelativeNow(dataFreshness),                          accent: "brand" },
   ].filter(Boolean) as Array<{ icon: typeof Database; label: string; value: string; accent: string }>;
 
   return (
@@ -30,9 +30,9 @@ export function QualityBadge({
         {items.map((item) => {
           const Icon = item.icon;
           const accentBg =
-            item.accent === "sage"   ? "bg-sage-50 text-sage-700" :
-            item.accent === "gold"   ? "bg-gold-50 text-gold-700" :
-            "bg-copper-50 text-copper-700";
+            item.accent === "brand"   ? "bg-brand-50 text-brand-600" :
+            item.accent === "accent"   ? "bg-accent-50 text-accent-700" :
+            "bg-ai-50 text-ai-700";
           return (
             <div key={item.label} className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-chip grid place-items-center ${accentBg}`}>

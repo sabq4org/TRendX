@@ -39,14 +39,14 @@ export default function SurveysListPage() {
                     <span className="text-[10px] font-mono font-bold tabular text-ink-mute">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
-                    <span className="text-eyebrow text-sage-700">
+                    <span className="text-eyebrow text-brand-600">
                       {s.topic_name ?? "بدون قطاع"}
                     </span>
                   </div>
                   <span className="text-[10px] text-ink-mute">{fmtRelativeNow(s.created_at)}</span>
                 </div>
 
-                <h3 className="text-2xl font-display font-black text-ink leading-tight tracking-tight mb-3 group-hover:text-sage-700 transition">
+                <h3 className="text-2xl font-display font-black text-ink leading-tight tracking-tight mb-3 group-hover:text-brand-600 transition">
                   {s.title}
                 </h3>
                 {s.description && (
@@ -56,12 +56,12 @@ export default function SurveysListPage() {
                 )}
 
                 <div className="grid grid-cols-3 gap-6 pt-5 border-t border-ink-line/40">
-                  <Stat label="مستجيب" value={fmtInt(s.total_responses)} tone="sage" />
-                  <Stat label="معدل الإكمال" value={fmtPctRaw(s.completion_rate, 0)} tone="gold" />
-                  <Stat label="وقت الإكمال" value={fmtSeconds(s.avg_completion_seconds)} tone="copper" />
+                  <Stat label="مستجيب" value={fmtInt(s.total_responses)} tone="brand" />
+                  <Stat label="معدل الإكمال" value={fmtPctRaw(s.completion_rate, 0)} tone="accent" />
+                  <Stat label="وقت الإكمال" value={fmtSeconds(s.avg_completion_seconds)} tone="ai" />
                 </div>
 
-                <div className="absolute top-8 inset-inline-end-8 opacity-0 group-hover:opacity-100 transition flex items-center gap-1 text-[12px] font-bold text-sage-700">
+                <div className="absolute top-8 inset-inline-end-8 opacity-0 group-hover:opacity-100 transition flex items-center gap-1 text-[12px] font-bold text-brand-600">
                   Survey Intelligence <ArrowLeft size={13} />
                 </div>
               </Link>
@@ -79,11 +79,11 @@ export default function SurveysListPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: "sage" | "gold" | "copper" }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone: "brand" | "accent" | "ai" }) {
   const color =
-    tone === "sage"   ? "text-sage-700" :
-    tone === "gold"   ? "text-gold-700" :
-    "text-copper-700";
+    tone === "brand"   ? "text-brand-600" :
+    tone === "accent"   ? "text-accent-700" :
+    "text-ai-700";
   return (
     <div>
       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-mute">{label}</div>

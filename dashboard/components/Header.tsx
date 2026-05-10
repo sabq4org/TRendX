@@ -22,7 +22,7 @@ export function Header({ title, subtitle, eyebrow }: {
       <div className="flex items-end justify-between gap-6">
         <div className="flex-1 min-w-0">
           {eyebrow && (
-            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-sage-700 mb-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-brand-600 mb-3">
               {eyebrow}
             </div>
           )}
@@ -41,15 +41,15 @@ export function Header({ title, subtitle, eyebrow }: {
             <div className="text-end">
               <div className="text-sm font-bold text-ink">{user.name}</div>
               <div className="flex items-center gap-1.5 mt-1 justify-end">
-                <BadgeCheck size={11} className="text-sage-600" />
-                <span className="text-[11px] font-bold text-sage-700">
+                <BadgeCheck size={11} className="text-brand-500" />
+                <span className="text-[11px] font-bold text-brand-600">
                   {TIER_LABEL[user.tier as keyof typeof TIER_LABEL] ?? "Free"}
                 </span>
                 <span className="text-ink-line">•</span>
                 <span className="text-[11px] tabular text-ink-mute">{fmtInt(user.points)} نقطة</span>
               </div>
             </div>
-            <div className="w-11 h-11 rounded-full bg-sage-700 text-canvas-card grid place-items-center font-display font-bold text-base shadow-card">
+            <div className="w-11 h-11 rounded-full bg-brand-600 text-canvas-card grid place-items-center font-display font-bold text-base shadow-card">
               {user.avatar_initial || user.name.slice(0, 1)}
             </div>
             <button

@@ -37,9 +37,9 @@ export function LiveTicker() {
     <div className="bg-canvas-card rounded-card shadow-card p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="text-eyebrow text-sage-700 mb-1.5">REAL TIME</div>
+          <div className="text-eyebrow text-brand-600 mb-1.5">REAL TIME</div>
           <h3 className="text-base font-display font-bold text-ink flex items-center gap-2">
-            <Activity size={16} className="text-sage-600" />
+            <Activity size={16} className="text-brand-500" />
             النبض الحيّ
           </h3>
         </div>
@@ -68,8 +68,8 @@ export function LiveTicker() {
               <span
                 className={`shrink-0 w-2 h-2 rounded-full mt-2 ${
                   event.type === "vote_milestone"
-                    ? "bg-gold-500 shadow-[0_0_0_3px_rgba(201,169,97,0.25)]"
-                    : "bg-sage-500"
+                    ? "bg-accent-500 shadow-[0_0_0_3px_rgba(250,124,18,0.25)]"
+                    : "bg-brand-500"
                 }`}
               />
               <div className="min-w-0 flex-1">
@@ -79,7 +79,7 @@ export function LiveTicker() {
                 <div className="text-[11px] text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
                   {event.type === "vote_milestone" ? (
                     <>
-                      <span className="font-bold text-gold-700">
+                      <span className="font-bold text-accent-700">
                         وصل إلى {fmtInt(event.milestone)} صوت
                       </span>
                     </>

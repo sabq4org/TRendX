@@ -28,8 +28,8 @@ export function Gauge({
   const end = polar(endAngle);
   const largeArc = angle > 180 ? 1 : 0;
 
-  // Colour ramp: copper (low) → gold (mid) → sage (high)
-  const color = clamped >= 70 ? "#3F6B4D" : clamped >= 40 ? "#C9A961" : "#B86F4A";
+  // Colour ramp: AI-violet (low) → orange accent (mid) → brand blue (high)
+  const color = clamped >= 70 ? "#3B5BDB" : clamped >= 40 ? "#FA7C12" : "#7048E8";
 
   return (
     <div className="flex flex-col items-center justify-center">
@@ -38,7 +38,7 @@ export function Gauge({
         <path
           d={`M ${polar(180).x} ${polar(180).y} A ${radius} ${radius} 0 0 1 ${polar(0).x} ${polar(0).y}`}
           fill="none"
-          stroke="#E5E1D5"
+          stroke="#E4E7F5"
           strokeWidth={14}
           strokeLinecap="round"
         />
@@ -58,7 +58,7 @@ export function Gauge({
           fontWeight="900"
           fontFamily="var(--font-tajawal)"
           letterSpacing="-0.025em"
-          fill="#1A1F1B"
+          fill="#1A1B25"
         >
           {clamped.toFixed(0)}
         </text>

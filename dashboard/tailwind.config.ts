@@ -1,75 +1,80 @@
 import type { Config } from "tailwindcss";
 
 /**
- * TRENDX — "Saudi Premium" visual system.
+ * TRENDX — Dashboard visual system, locked to the iOS app's identity
+ * (`TRENDX/Theme/TrendXTheme.swift`).
  *
- *   - Warm cream canvas (paper, not pure white) so the eye relaxes on long
- *     sessions and the data carries the contrast.
- *   - A reserved palette built from three Saudi-rooted hues:
- *       sage   → derived from the Vision 2030 emerald, used for the
- *                primary brand and positive deltas
- *       gold   → desert / Najdi gold, used for accents, milestone chips,
- *                and warm highlights
- *       copper → muted clay tone, used as the secondary data colour and
- *                for cautionary states
- *   - Typography is hierarchical: huge tabular display numerals (96px+)
- *     paired with a single body face, with extreme weight contrast
- *     (200 vs 800) to give the layouts an editorial rhythm.
+ *   - Canvas: cool light grey-blue (#F4F5FA), the same surface used as
+ *     `TrendXTheme.background` on iPhone — the dashboard must feel like
+ *     a continuation of the same product, not a separate website.
+ *   - Brand: TRENDX blue scale built around #3B5BDB / #364FC7. This is
+ *     the only colour reserved for primary CTAs, leading data points,
+ *     and active navigation.
+ *   - Accent: warm orange (#FA7C12) used sparingly for milestone chips
+ *     and secondary KPIs, matching iOS `TrendXTheme.accent`.
+ *   - AI signature: violet `#7048E8` + cyan `#1098AD`, mirroring the
+ *     iOS AI gradient. Used for AI-touched surfaces only.
  */
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // ----- Inks (warm-leaning charcoals) -----
+        // ----- Inks -----
         ink: {
-          DEFAULT: "#1A1F1B",
-          soft:    "#34392F",
-          mute:    "#6E7269",
-          ghost:   "#9CA098",
-          line:    "#E5E1D5",
-          hairline:"#EFEBDF",
+          DEFAULT:  "#1A1B25",
+          soft:     "#495057",
+          mute:     "#868E96",
+          ghost:    "#ADB5BD",
+          line:     "#DEE2E6",
+          hairline: "#E4E7F5",
         },
         // ----- Surfaces -----
         canvas: {
-          DEFAULT: "#FAF6EC", // body cream (paper)
+          DEFAULT: "#F4F5FA", // body — matches iOS TrendXTheme.background
           card:    "#FFFFFF",
-          well:    "#F2EDDF", // section sub-surface
-          deep:    "#EDE6D2", // deeper grouping
-          ring:    "#E5E1D5",
+          well:    "#F0F2FA", // sub-surface (paleFill)
+          deep:    "#E8EAF2", // backgroundDeep
+          ring:    "#DEE2E6",
+          soft:    "#E4E7F5",
         },
-        // ----- Sage / Saudi emerald -----
-        sage: {
-          50:  "#EAF1EB",
-          100: "#D2E0D4",
-          300: "#7FA088",
-          500: "#3F6B4D",
-          600: "#2D5A3D",
-          700: "#1F4630",
-          900: "#0F2D1E",
+        // ----- Brand: TRENDX blue -----
+        brand: {
+          50:  "#EEF1FE",
+          100: "#DCE3FE",
+          200: "#BFCAFD",
+          300: "#9EAFEC",
+          400: "#6B83E5",
+          500: "#3B5BDB", // ⭐ primary (TrendXTheme.primary)
+          600: "#364FC7", // primaryDeep
+          700: "#2A3FA5",
+          800: "#1F2F84",
+          900: "#1A2870",
         },
-        // ----- Gold (Najdi warm gold) -----
-        gold: {
-          50:  "#FBF3DC",
-          100: "#F4E5B7",
-          300: "#E0C77A",
-          500: "#C9A961",
-          700: "#9F8240",
-          900: "#5C4A1E",
+        // ----- Accent: warm orange -----
+        accent: {
+          50:  "#FFF4E6",
+          100: "#FFE0B3",
+          300: "#FFB066",
+          500: "#FA7C12", // (TrendXTheme.accent)
+          700: "#E8590C", // accentDeep
+          900: "#A33C04",
         },
-        // ----- Copper / clay -----
-        copper: {
-          50:  "#F8EBE2",
-          100: "#EDD2BF",
-          300: "#D89F7E",
-          500: "#B86F4A",
-          700: "#8B5435",
-          900: "#4C2E1D",
+        // ----- AI signature -----
+        ai: {
+          indigo: "#4263EB",
+          violet: "#7048E8",
+          cyan:   "#1098AD",
+          50:     "#F1EDFE",
+          100:    "#E0D5FB",
+          500:    "#7048E8",
+          700:    "#5028B0",
         },
-        // ----- Semantic -----
-        positive: { DEFAULT: "#3F6B4D", soft: "#EAF1EB" },
-        negative: { DEFAULT: "#A33D3D", soft: "#F8E8E8" },
-        warning:  { DEFAULT: "#9F8240", soft: "#FBF3DC" },
+        // ----- Semantic — iOS aligned -----
+        positive: { DEFAULT: "#2F9E44", soft: "#E5F4E8" },
+        negative: { DEFAULT: "#E03131", soft: "#FBE4E4" },
+        warning:  { DEFAULT: "#F59F00", soft: "#FEF3D7" },
+        info:     { DEFAULT: "#1971C2", soft: "#E0EEFB" },
       },
       fontFamily: {
         sans: ["var(--font-tajawal)", "var(--font-inter)", "system-ui", "sans-serif"],
@@ -77,23 +82,21 @@ const config: Config = {
         mono: ["var(--font-inter)", "ui-monospace", "monospace"],
       },
       fontSize: {
-        // Editorial KPI scale
         "kpi-hero": ["96px", { lineHeight: "0.95", letterSpacing: "-0.035em", fontWeight: "800" }],
         "kpi":      ["64px", { lineHeight: "1.0",  letterSpacing: "-0.03em",  fontWeight: "800" }],
         "kpi-sm":   ["44px", { lineHeight: "1.05", letterSpacing: "-0.025em", fontWeight: "700" }],
         "kpi-mini": ["28px", { lineHeight: "1.1",  letterSpacing: "-0.015em", fontWeight: "700" }],
-        // Body refinements
         "label":    ["10px", { lineHeight: "1.2", letterSpacing: "0.12em", fontWeight: "700" }],
         "eyebrow":  ["11px", { lineHeight: "1.3", letterSpacing: "0.16em", fontWeight: "700" }],
       },
       boxShadow: {
-        // Shadows are sage-tinted (warm-cool), never neutral grey
-        card: "0 1px 1px rgba(15,45,30,0.03), 0 4px 16px rgba(15,45,30,0.04)",
-        "card-lift": "0 4px 8px rgba(15,45,30,0.05), 0 16px 40px rgba(15,45,30,0.08)",
-        "card-deep": "0 12px 36px rgba(15,45,30,0.10)",
-        glow: "0 0 0 6px rgba(63,107,77,0.06), 0 12px 32px rgba(63,107,77,0.10)",
-        chip: "0 1px 0 rgba(15,45,30,0.04)",
-        inset: "inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(15,45,30,0.04)",
+        // Brand-blue tinted shadows (iOS TrendXTheme.shadow)
+        card:        "0 1px 1px rgba(59,91,219,0.04), 0 4px 16px rgba(59,91,219,0.05)",
+        "card-lift": "0 4px 8px rgba(59,91,219,0.06), 0 16px 40px rgba(59,91,219,0.10)",
+        "card-deep": "0 12px 36px rgba(54,79,199,0.14)",
+        glow:        "0 0 0 6px rgba(59,91,219,0.08), 0 12px 32px rgba(59,91,219,0.18)",
+        chip:        "0 1px 0 rgba(59,91,219,0.04)",
+        inset:       "inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(59,91,219,0.04)",
       },
       borderRadius: {
         card: "20px",
@@ -101,28 +104,22 @@ const config: Config = {
         pill: "999px",
       },
       backgroundImage: {
-        "cream-warm":
-          "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(201,169,97,0.08) 0%, transparent 60%), linear-gradient(180deg, #FAF6EC 0%, #F2EDDF 100%)",
-        "sage-glass":
-          "linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(242,237,223,0.65) 100%)",
-        "kpi-frame":
-          "linear-gradient(180deg, #FFFFFF 0%, #FAF6EC 100%)",
+        "canvas-glow":
+          "radial-gradient(ellipse 60% 40% at 0% 0%, rgba(59,91,219,0.08) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 100% 100%, rgba(250,124,18,0.06) 0%, transparent 60%)",
+        "ai-gradient":
+          "linear-gradient(135deg, #4263EB 0%, #7048E8 50%, #1098AD 100%)",
+        "brand-gradient":
+          "linear-gradient(135deg, #3B5BDB 0%, #4C6EF5 100%)",
         "hero":
-          "radial-gradient(ellipse 120% 60% at 0% 0%, rgba(63,107,77,0.06) 0%, transparent 50%), radial-gradient(ellipse 80% 60% at 100% 100%, rgba(201,169,97,0.08) 0%, transparent 50%)",
+          "radial-gradient(ellipse 120% 60% at 0% 0%, rgba(59,91,219,0.10) 0%, transparent 50%), radial-gradient(ellipse 80% 60% at 100% 100%, rgba(112,72,232,0.08) 0%, transparent 50%)",
       },
       transitionTimingFunction: {
         spring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
         soft:   "cubic-bezier(0.22, 0.61, 0.36, 1)",
       },
       keyframes: {
-        "fade-up": {
-          "0%":   { opacity: "0", transform: "translateY(8px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        "scale-in": {
-          "0%":   { opacity: "0", transform: "scale(0.96)" },
-          "100%": { opacity: "1", transform: "scale(1)" },
-        },
+        "fade-up":  { "0%": { opacity: "0", transform: "translateY(8px)" },  "100%": { opacity: "1", transform: "translateY(0)" } },
+        "scale-in": { "0%": { opacity: "0", transform: "scale(0.96)" },     "100%": { opacity: "1", transform: "scale(1)" } },
       },
       animation: {
         "fade-up": "fade-up 0.5s cubic-bezier(0.22,0.61,0.36,1) both",

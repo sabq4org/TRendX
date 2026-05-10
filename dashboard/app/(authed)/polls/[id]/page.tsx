@@ -109,26 +109,26 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 stagger">
           <KPICard
-            index={0} tone="sage"
+            index={0} tone="brand"
             label="إجمالي الأصوات"
             value={fmtInt(a.sample_size)}
             hint={a.consensus.label}
           />
           <KPICard
-            index={1} tone="gold"
+            index={1} tone="accent"
             label="الخيار الرائد"
             value={fmtPctRaw(a.consensus.leading_percentage, 1)}
             hint={`فجوة الاستقطاب ${a.consensus.polarization_index.toFixed(1)}%`}
           />
           <KPICard
-            index={2} tone="copper"
+            index={2} tone="ai"
             size="small"
             label="متوسّط القرار"
             value={fmtSeconds(a.behavioral.avg_decision_seconds)}
             hint={`نسبة تغيير الصوت ${a.behavioral.change_vote_rate_pct}%`}
           />
           <KPICard
-            index={3} tone="sage"
+            index={3} tone="brand"
             size="small"
             label="ساعة الذروة"
             value={a.timeline.peak_hour ? `${a.timeline.peak_hour}:00` : "—"}
@@ -142,7 +142,7 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
           </ChartCard>
 
           <ChartCard eyebrow="GEOGRAPHY" title="التوزيع الجغرافي" subtitle="أعلى المدن (نسبة لأكبر قيمة في الجدول)">
-            {cities.length > 0 ? <HBar data={cities} accent="#3F6B4D" /> : <Empty />}
+            {cities.length > 0 ? <HBar data={cities} accent="#3B5BDB" /> : <Empty />}
           </ChartCard>
         </div>
 
@@ -168,7 +168,7 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
           </ChartCard>
 
           <ChartCard eyebrow="DEVICES" title="الأجهزة" subtitle="من أيّ نظام يصوّت الجمهور">
-            {devices.length > 0 ? <HBar data={devices} accent="#C9A961" /> : <Empty />}
+            {devices.length > 0 ? <HBar data={devices} accent="#FA7C12" /> : <Empty />}
           </ChartCard>
         </div>
 
@@ -192,10 +192,10 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         {poll?.ai_insight && (
-          <div className="bg-gold-50/40 border border-gold-100 rounded-card p-8">
+          <div className="bg-accent-50/40 border border-accent-100 rounded-card p-8">
             <div className="flex items-center gap-2 mb-3">
-              <Sparkles size={14} className="text-gold-700" />
-              <span className="text-eyebrow text-gold-700">TRENDX AI INSIGHT</span>
+              <Sparkles size={14} className="text-accent-700" />
+              <span className="text-eyebrow text-accent-700">TRENDX AI INSIGHT</span>
             </div>
             <p className="text-lg font-display font-light text-ink leading-relaxed">{poll.ai_insight}</p>
           </div>

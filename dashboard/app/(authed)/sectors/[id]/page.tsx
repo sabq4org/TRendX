@@ -68,10 +68,10 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
 
       <main className="flex-1 px-10 pb-10 space-y-7">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 stagger">
-          <KPICard index={0} tone="sage" label="استطلاعات" value={fmtInt(polls.length)} />
-          <KPICard index={1} tone="gold" label="استبيانات" value={fmtInt(surveys.length)} />
-          <KPICard index={2} tone="copper" label="إجمالي الأصوات" value={fmtInt(totalVotes)} />
-          <KPICard index={3} tone="sage" label="إجمالي الاستجابات" value={fmtInt(totalResponses)} />
+          <KPICard index={0} tone="brand" label="استطلاعات" value={fmtInt(polls.length)} />
+          <KPICard index={1} tone="accent" label="استبيانات" value={fmtInt(surveys.length)} />
+          <KPICard index={2} tone="ai" label="إجمالي الأصوات" value={fmtInt(totalVotes)} />
+          <KPICard index={3} tone="brand" label="إجمالي الاستجابات" value={fmtInt(totalResponses)} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger">
@@ -117,7 +117,7 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
         <div className="bg-canvas-card rounded-card shadow-card p-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <div className="text-eyebrow text-sage-700 mb-1.5">SECTOR REPORT</div>
+              <div className="text-eyebrow text-brand-600 mb-1.5">SECTOR REPORT</div>
               <h3 className="text-xl font-display font-black text-ink tracking-tight">
                 تقرير الذكاء القطاعي
               </h3>
@@ -125,7 +125,7 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
             <button
               onClick={loadReport}
               disabled={report.loading}
-              className="bg-sage-700 hover:bg-sage-900 disabled:bg-sage-300 text-canvas-card font-bold py-2.5 px-5 rounded-chip text-xs transition shadow-card hover:shadow-card-lift inline-flex items-center gap-2"
+              className="bg-brand-600 hover:bg-brand-700 disabled:bg-brand-300 text-canvas-card font-bold py-2.5 px-5 rounded-chip text-xs transition shadow-card hover:shadow-card-lift inline-flex items-center gap-2"
             >
               <Sparkles size={12} /> {report.loading ? "جارٍ التوليد…" : report.data ? "إعادة التوليد" : "توليد التقرير"}
             </button>
@@ -146,7 +146,7 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
 
         <div className="bg-canvas-card rounded-card shadow-card overflow-hidden">
           <div className="px-8 py-6 border-b border-ink-line/40">
-            <div className="text-eyebrow text-sage-700 mb-1">POLLS IN SECTOR</div>
+            <div className="text-eyebrow text-brand-600 mb-1">POLLS IN SECTOR</div>
             <h3 className="text-xl font-display font-black text-ink tracking-tight">استطلاعات القطاع</h3>
           </div>
           <ul>
@@ -159,7 +159,7 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
                   <span className="text-[11px] font-mono font-bold tabular text-ink-mute w-7">
                     {String(idx + 1).padStart(2, "0")}
                   </span>
-                  <span className="text-[14px] text-ink truncate flex-1 group-hover:text-sage-700 transition">{p.title}</span>
+                  <span className="text-[14px] text-ink truncate flex-1 group-hover:text-brand-600 transition">{p.title}</span>
                   <span className="shrink-0 text-end">
                     <span className="text-xl font-display font-black tabular text-ink">{fmtInt(p.total_votes)}</span>
                     <span className="text-[10px] uppercase tracking-[0.14em] text-ink-mute ms-2">صوت</span>
@@ -179,7 +179,7 @@ function SectorReportBody({ report }: { report: SectorAIReport }) {
   return (
     <div className="space-y-5">
       <div className="bg-canvas-well rounded-chip p-6">
-        <div className="text-eyebrow text-sage-700 mb-2">STRATEGIC BRIEF</div>
+        <div className="text-eyebrow text-brand-600 mb-2">STRATEGIC BRIEF</div>
         <p className="text-[15px] text-ink-soft leading-loose whitespace-pre-line font-light">
           {r.strategic_brief}
         </p>
@@ -187,32 +187,32 @@ function SectorReportBody({ report }: { report: SectorAIReport }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="bg-canvas-well rounded-chip p-5">
-          <div className="text-eyebrow text-sage-700 mb-2">SECTOR PERSONA</div>
+          <div className="text-eyebrow text-brand-600 mb-2">SECTOR PERSONA</div>
           <div className="font-display font-black text-xl text-ink tracking-tight mb-1">
             {r.sector_persona.name}
-            <span className="font-display font-black tabular text-sage-700 text-base ms-2">
+            <span className="font-display font-black tabular text-brand-600 text-base ms-2">
               {r.sector_persona.share_pct}%
             </span>
           </div>
           <p className="text-[13px] text-ink-soft leading-relaxed font-light">{r.sector_persona.description}</p>
         </div>
         <div className="bg-canvas-well rounded-chip p-5">
-          <div className="text-eyebrow text-sage-700 mb-2">30-DAY FORECAST</div>
+          <div className="text-eyebrow text-brand-600 mb-2">30-DAY FORECAST</div>
           <p className="text-[14px] text-ink-soft leading-relaxed font-light">{r.predicted_trend}</p>
         </div>
       </div>
 
       {r.consensus_map.length > 0 && (
         <div>
-          <div className="text-eyebrow text-sage-700 mb-3">CONSENSUS MAP</div>
+          <div className="text-eyebrow text-brand-600 mb-3">CONSENSUS MAP</div>
           <ul className="space-y-2">
             {r.consensus_map.map((c, i) => (
               <li key={i} className="flex items-center gap-3 text-[14px] p-3 rounded-chip hover:bg-canvas-well/50 transition">
                 <span className={clsx(
                   "shrink-0 px-2.5 py-0.5 rounded-pill text-[10px] font-bold",
                   c.label === "إجماع قوي" && "bg-positive-soft text-positive",
-                  c.label === "ميل واضح" && "bg-sage-50 text-sage-700",
-                  c.label === "اختلاف خفيف" && "bg-gold-50 text-gold-700",
+                  c.label === "ميل واضح" && "bg-brand-50 text-brand-600",
+                  c.label === "اختلاف خفيف" && "bg-accent-50 text-accent-700",
                   c.label === "انقسام حاد" && "bg-negative-soft text-negative",
                 )}>
                   {c.label}
@@ -227,11 +227,11 @@ function SectorReportBody({ report }: { report: SectorAIReport }) {
 
       {r.cross_survey_patterns.length > 0 && (
         <div>
-          <div className="text-eyebrow text-sage-700 mb-3">CROSS-SURVEY PATTERNS</div>
+          <div className="text-eyebrow text-brand-600 mb-3">CROSS-SURVEY PATTERNS</div>
           <ul className="space-y-2">
             {r.cross_survey_patterns.map((p, i) => (
               <li key={i} className="text-[14px] text-ink-soft flex items-start gap-3 leading-relaxed">
-                <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-sage-600" />
+                <span className="shrink-0 mt-2 w-1.5 h-1.5 rounded-full bg-brand-500" />
                 <span>{p}</span>
               </li>
             ))}

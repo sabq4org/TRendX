@@ -32,9 +32,9 @@ export function Sidebar() {
             <span className="text-3xl font-display font-black tracking-tight text-ink leading-none">
               TRENDX
             </span>
-            <span className="w-1.5 h-1.5 rounded-full bg-sage-500 mt-1 group-hover:scale-125 transition" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 mt-1 group-hover:scale-125 transition" />
           </div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700 mt-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600 mt-2">
             ذكاء الرأي السعودي
           </p>
         </Link>
@@ -55,14 +55,14 @@ export function Sidebar() {
                     className={clsx(
                       "relative flex items-center gap-3 px-3.5 py-3 rounded-chip text-sm font-medium transition group",
                       active
-                        ? "bg-sage-700 text-canvas-card shadow-card-lift"
+                        ? "brand-fill shadow-glow"
                         : "text-ink-soft hover:bg-canvas-well/70 hover:text-ink",
                     )}
                   >
                     <Icon size={17} strokeWidth={active ? 2.4 : 2} />
                     <span className="font-semibold">{item.label}</span>
                     {active && (
-                      <span className="ms-auto w-1.5 h-1.5 rounded-full bg-gold-500 shadow-[0_0_0_3px_rgba(201,169,97,0.25)]" />
+                      <span className="ms-auto w-1.5 h-1.5 rounded-full bg-accent-500 shadow-[0_0_0_3px_rgba(250,124,18,0.30)]" />
                     )}
                   </Link>
                 </li>
@@ -75,10 +75,10 @@ export function Sidebar() {
         <div className="mt-6 pt-6 border-t border-ink-line/60">
           <div className="flex items-center gap-2.5 px-2">
             <span className="relative flex w-2 h-2">
-              <span className="absolute inset-0 rounded-full bg-sage-500 animate-ping opacity-60" />
-              <span className="relative w-2 h-2 rounded-full bg-sage-600" />
+              <span className="absolute inset-0 rounded-full bg-brand-500 animate-ping opacity-60" />
+              <span className="relative w-2 h-2 rounded-full bg-brand-500" />
             </span>
-            <span className="text-[11px] font-bold text-sage-700">متصل بـ Railway</span>
+            <span className="text-[11px] font-bold text-brand-600">متصل بـ Railway</span>
             <span className="text-[10px] text-ink-mute ms-auto">v0.2</span>
           </div>
         </div>

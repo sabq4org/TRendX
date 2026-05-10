@@ -24,7 +24,7 @@ export function ChartCard({
       <div className="flex items-start justify-between mb-6 gap-4">
         <div className="flex-1 min-w-0">
           {eyebrow && (
-            <div className="text-eyebrow text-sage-700 mb-1.5">{eyebrow}</div>
+            <div className="text-eyebrow text-brand-600 mb-1.5">{eyebrow}</div>
           )}
           <h3 className="text-base font-display font-bold text-ink tracking-tight">{title}</h3>
           {subtitle && (
