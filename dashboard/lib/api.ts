@@ -214,6 +214,14 @@ export const api = {
   pulseToday(token: string): Promise<DailyPulse> {
     return request("/pulse/today", { token });
   },
+  /**
+   * Public, view-only shape — same as `pulseToday` but without
+   * `user_responded` / `user_choice`. Used by the dashboard, where
+   * publishers and admins should never accidentally cast a vote.
+   */
+  pulseTodayAnon(_token?: string): Promise<DailyPulse> {
+    return request("/pulse/today/anon");
+  },
   pulseRespond(
     token: string,
     body: { option_index: number; predicted_pct?: number },

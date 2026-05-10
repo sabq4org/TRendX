@@ -1,17 +1,30 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Sidebar } from "@/components/Sidebar";
+import { canAccess, groupForPath, type Role } from "@/lib/role-gate";
 
 export default function AuthedLayout({ children }: { children: React.ReactNode }) {
-  const { token, loading } = useAuth();
+  const { token, user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname() ?? "/overview";
 
+  // Auth gate
   useEffect(() => {
     if (!loading && !token) router.replace("/login");
   }, [loading, token, router]);
+
+  // Role gate — kick respondents (and unauthorised publishers) back to
+  // /overview if they navigate to a page they can't see.
+  useEffect(() => {
+    if (loading || !user) return;
+    const required = groupForPath(pathname);
+    if (!canAccess(user.role as Role, required)) {
+      router.replace("/overview");
+    }
+  }, [loading, user, pathname, router]);
 
   if (loading || !token) {
     return (

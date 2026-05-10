@@ -13,7 +13,9 @@ import { ArrowLeft, Sparkles, Activity, Flame } from "lucide-react";
 export default function OverviewPage() {
   const { token, user } = useAuth();
   const bootstrap = useFetch((t) => api.bootstrap(t), token);
-  const pulse = useFetch((t) => api.pulseToday(t), token);
+  // Read-only pulse summary; voting happens only inside the iOS app.
+  const pulse = useFetch((t) => api.pulseTodayAnon(t), token);
+  const isRespondent = user?.role === "respondent";
   const streak = useFetch((t) => api.myStreak(t), token);
 
   if (bootstrap.loading) {
@@ -80,16 +82,14 @@ export default function OverviewPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1.5">
                   <span className="text-eyebrow text-brand-600">نبض اليوم</span>
-                  {streak.data && streak.data.current_streak > 0 && (
+                  {isRespondent && streak.data && streak.data.current_streak > 0 && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-accent-700 bg-accent-50 px-2 py-0.5 rounded-pill">
                       <Flame size={10} /> سلسلة {streak.data.current_streak}
                     </span>
                   )}
-                  {pulse.data.user_responded && (
-                    <span className="text-[10px] font-bold text-positive bg-positive-soft px-2 py-0.5 rounded-pill">
-                      صوّتت ✓
-                    </span>
-                  )}
+                  <span className="text-[10px] font-bold text-ai-700 bg-ai-50/60 px-2 py-0.5 rounded-pill">
+                    عرض فقط
+                  </span>
                 </div>
                 <h2 className="text-xl lg:text-2xl font-display font-bold text-ink leading-snug">
                   {pulse.data.question}
@@ -97,9 +97,9 @@ export default function OverviewPage() {
                 <div className="flex items-center gap-3 text-[12px] text-ink-mute mt-2">
                   <span className="tabular font-bold text-ink">{fmtInt(pulse.data.total_responses)} مشارك</span>
                   <span>•</span>
-                  <span>+{pulse.data.reward_points} نقطة</span>
-                  <span>•</span>
                   <span>{pulse.data.options.length} خيارات</span>
+                  <span>•</span>
+                  <span>التصويت من تطبيق iOS</span>
                 </div>
               </div>
               <ArrowLeft size={20} className="text-brand-600 group-hover:-translate-x-1 transition-transform shrink-0" />

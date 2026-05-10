@@ -17,32 +17,44 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/auth";
+import { canAccess, type AccessGroup, type Role } from "@/lib/role-gate";
 
-const NAV = [
-  { href: "/overview",         label: "النظرة العامة", icon: LayoutDashboard },
-  { href: "/pulse",            label: "نبض اليوم",      icon: Activity },
-  { href: "/trendx-index",     label: "مؤشّر TRENDX",   icon: TrendingUp },
-  { href: "/polls",            label: "الاستطلاعات",   icon: ListChecks },
-  { href: "/surveys",          label: "الاستبيانات",   icon: ClipboardList },
-  { href: "/sectors",          label: "القطاعات",      icon: Layers },
-  { href: "/sectors/compare",  label: "مقارنة قطاعات",  icon: GitCompareArrows },
-  { href: "/audiences",        label: "سوق الجمهور",   icon: Users },
-  { href: "/accuracy",         label: "دقّة التنبّؤ",    icon: Target },
-  { href: "/account",          label: "الحساب",         icon: UserCircle },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  group: AccessGroup;
+};
+
+const NAV: NavItem[] = [
+  { href: "/overview",         label: "النظرة العامة",  icon: LayoutDashboard,   group: "everyone" },
+  { href: "/pulse",            label: "نبض اليوم",      icon: Activity,          group: "everyone" },
+  { href: "/trendx-index",     label: "مؤشّر TRENDX",   icon: TrendingUp,        group: "everyone" },
+  { href: "/polls",            label: "الاستطلاعات",   icon: ListChecks,        group: "publisher" },
+  { href: "/surveys",          label: "الاستبيانات",   icon: ClipboardList,     group: "publisher" },
+  { href: "/sectors",          label: "القطاعات",      icon: Layers,            group: "publisher" },
+  { href: "/sectors/compare",  label: "مقارنة قطاعات",  icon: GitCompareArrows,  group: "publisher" },
+  { href: "/audiences",        label: "سوق الجمهور",   icon: Users,             group: "publisher" },
+  { href: "/accuracy",         label: "دقّة التنبّؤ",    icon: Target,            group: "everyone" },
+  { href: "/account",          label: "الحساب",         icon: UserCircle,        group: "everyone" },
 ];
 
-const ADMIN_ITEM = { href: "/admin", label: "لوحة الإدارة", icon: ShieldCheck };
+const ADMIN_ITEM: NavItem = {
+  href: "/admin",
+  label: "لوحة الإدارة",
+  icon: ShieldCheck,
+  group: "admin",
+};
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const role = user?.role as Role | undefined;
+  const visible = NAV.filter((item) => canAccess(role, item.group));
 
   return (
     <aside className="w-72 shrink-0 min-h-screen sticky top-0 h-screen flex flex-col p-5">
-      {/* Glass surface */}
       <div className="glass rounded-card flex-1 flex flex-col p-6">
-        {/* Brand mark */}
         <Link href="/overview" className="block mb-9 group">
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-display font-black tracking-tight text-ink leading-none">
@@ -55,18 +67,16 @@ export function Sidebar() {
           </p>
         </Link>
 
-        {/* Nav */}
         <nav className="flex-1">
           <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-mute mb-3 px-3">
             القائمة
           </div>
           <ul className="space-y-1">
-            {NAV.map((item) => {
-              // Use exact match for /sectors so /sectors/compare doesn't
-              // light up the parent sector page too.
+            {visible.map((item) => {
               const active =
                 item.href === "/sectors"
-                  ? pathname === "/sectors" || (pathname?.startsWith("/sectors/") && pathname !== "/sectors/compare")
+                  ? pathname === "/sectors" ||
+                    (pathname?.startsWith("/sectors/") && pathname !== "/sectors/compare")
                   : pathname === item.href || pathname?.startsWith(item.href + "/");
               const Icon = item.icon;
               return (
@@ -90,7 +100,7 @@ export function Sidebar() {
               );
             })}
 
-            {isAdmin && (
+            {canAccess(role, ADMIN_ITEM.group) && (
               <>
                 <li className="pt-3">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-mute px-3 mb-2">
@@ -122,7 +132,6 @@ export function Sidebar() {
           </ul>
         </nav>
 
-        {/* Live status pill */}
         <div className="mt-6 pt-6 border-t border-ink-line/60">
           <div className="flex items-center gap-2.5 px-2">
             <span className="relative flex w-2 h-2">
@@ -132,6 +141,11 @@ export function Sidebar() {
             <span className="text-[11px] font-bold text-brand-600">متصل بـ Railway</span>
             <span className="text-[10px] text-ink-mute ms-auto">v0.2</span>
           </div>
+          {role === "respondent" && (
+            <div className="mt-3 px-2 text-[10px] text-ink-mute leading-relaxed">
+              يمكنك التصويت على نبض اليوم من تطبيق <b className="text-ink-soft">TRENDX</b> على iOS.
+            </div>
+          )}
         </div>
       </div>
     </aside>
