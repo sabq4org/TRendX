@@ -29,8 +29,31 @@ struct TrendXIndexScreen: View {
                         .padding(.horizontal, 20)
                     footer
                 } else {
-                    Text(errorMessage ?? "تعذّر تحميل المؤشّر")
-                        .foregroundStyle(TrendXTheme.error)
+                    VStack(spacing: 12) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 32))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                        Text("تعذّر تحميل المؤشّر")
+                            .font(.system(size: 16, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.ink)
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.system(size: 12))
+                                .foregroundStyle(TrendXTheme.tertiaryInk)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 30)
+                        }
+                        Button(action: { Task { await load() } }) {
+                            Text("إعادة المحاولة")
+                                .font(.system(size: 13, weight: .heavy))
+                                .padding(.horizontal, 18).padding(.vertical, 9)
+                                .background(TrendXTheme.primaryGradient)
+                                .foregroundStyle(.white)
+                                .cornerRadius(99)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 40)
                 }
             }
             .padding(.bottom, 120)

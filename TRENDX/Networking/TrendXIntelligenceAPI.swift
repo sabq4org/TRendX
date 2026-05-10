@@ -68,6 +68,15 @@ struct TrendXSentimentTimeline: Decodable {
     let direction: String      // "rising" | "falling" | "stable"
     let delta30d: Double
     let computedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case days, series, direction
+        case topicId       = "topic_id"
+        case topicName     = "topic_name"
+        case currentScore  = "current_score"
+        case delta30d      = "delta_30d"
+        case computedAt    = "computed_at"
+    }
 }
 
 // MARK: - Sector benchmark
@@ -347,6 +356,12 @@ extension TrendXAPIClient {
 
 // MARK: - TRENDX Index (public)
 
+// NOTE on coding keys:
+// Swift's `JSONDecoder.keyDecodingStrategy = .convertFromSnakeCase`
+// turns `change_24h` into `change24H` (capitalising the first letter
+// of *every* segment, even "24h" — see `String.capitalized`). That
+// breaks decoding because the property below is `change24h` with a
+// lowercase `h`. We pin the keys explicitly to dodge the rule.
 struct TrendXIndexMetric: Decodable, Identifiable {
     var id: String { slug }
     let slug: String
@@ -356,6 +371,12 @@ struct TrendXIndexMetric: Decodable, Identifiable {
     let direction: String   // "up" | "down" | "flat"
     let sampleSize: Int
     let blurb: String
+
+    enum CodingKeys: String, CodingKey {
+        case slug, name, value, direction, blurb
+        case change24h = "change_24h"
+        case sampleSize = "sample_size"
+    }
 }
 
 struct TrendXIndex: Decodable {
@@ -364,6 +385,13 @@ struct TrendXIndex: Decodable {
     let compositeChange24h: Int
     let totalResponses: Int
     let metrics: [TrendXIndexMetric]
+
+    enum CodingKeys: String, CodingKey {
+        case composite, metrics
+        case computedAt           = "computed_at"
+        case compositeChange24h   = "composite_change_24h"
+        case totalResponses       = "total_responses"
+    }
 }
 
 extension TrendXAPIClient {

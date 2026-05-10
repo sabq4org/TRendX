@@ -21,6 +21,12 @@ final class AppStore: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var appMessage: String?
 
+    /// Set to `true` immediately after a successful first-time sign-up.
+    /// `ContentView` uses this to overlay `WelcomeAfterSignUpScreen`
+    /// (an AI-flavoured "preparing your TRENDX" greeting) before
+    /// dropping the user into the regular tab interface.
+    @Published var showWelcomeAfterSignUp: Bool = false
+
     private let userKey      = "trendx_user_v1"
     private let surveysKey   = "trendx_surveys_v1"
     private let topicsKey = "trendx_topics_v1"
@@ -146,6 +152,9 @@ final class AppStore: ObservableObject {
             currentUser.city = city
             currentUser.region = region
             persistUser()
+            // Defer to next tick so the smart sign-up flow has a chance
+            // to show its final "جاهز ✨" message before we transition.
+            showWelcomeAfterSignUp = true
         }
     }
 

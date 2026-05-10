@@ -13,7 +13,14 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if store.isAuthenticated {
+            if store.isAuthenticated && store.showWelcomeAfterSignUp {
+                WelcomeAfterSignUpScreen(onContinue: {
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        store.showWelcomeAfterSignUp = false
+                    }
+                })
+                .transition(.opacity)
+            } else if store.isAuthenticated {
                 ZStack(alignment: .bottom) {
                     // Main Content
                     TabView(selection: $store.selectedTab) {

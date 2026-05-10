@@ -111,29 +111,58 @@ struct TrendXIndexHomeCard: View {
         ZStack {
             RoundedRectangle(cornerRadius: TrendXTheme.cardRadius)
                 .fill(TrendXTheme.surface)
-            HStack(alignment: .center, spacing: 14) {
+
+            // Subtle ambient gradient — matches the Pulse card so the
+            // two siblings on Home read as one design family.
+            RoundedRectangle(cornerRadius: TrendXTheme.cardRadius)
+                .fill(
+                    LinearGradient(
+                        colors: [TrendXTheme.aiViolet.opacity(0.08), TrendXTheme.aiCyan.opacity(0.04)],
+                        startPoint: .topTrailing,
+                        endPoint: .bottomLeading
+                    )
+                )
+
+            HStack(spacing: 14) {
+                // Trailing chevron → ends up on the screen's left in RTL.
                 Image(systemName: "chevron.left")
                     .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(TrendXTheme.aiViolet)
+
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("مؤشّر TRENDX")
-                        .font(.system(size: 11, weight: .heavy))
-                        .tracking(1.4)
-                        .foregroundStyle(TrendXTheme.aiViolet)
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("/100")
-                            .font(.system(size: 12))
-                            .foregroundStyle(TrendXTheme.tertiaryInk)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text("نبض السعودية")
+                            .font(.system(size: 10, weight: .heavy))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(TrendXTheme.aiViolet.opacity(0.12))
+                            .foregroundStyle(TrendXTheme.aiViolet)
+                            .cornerRadius(99)
+                        Text("مؤشر TRENDX")
+                            .font(.system(size: 11, weight: .heavy))
+                            .tracking(1.4)
+                            .foregroundStyle(TrendXTheme.aiViolet)
+                    }
+
+                    // Score — single text run so digits and "/100" stay
+                    // visually attached even with RTL flow.
+                    (
                         Text("\(index?.composite ?? 50)")
                             .font(.system(size: 36, weight: .black))
-                            .foregroundStyle(TrendXTheme.aiViolet)
-                            .monospacedDigit()
-                    }
-                    Text("نبض الرأي العام · يحدّث يوميّاً")
+                            .foregroundColor(TrendXTheme.aiViolet)
+                        +
+                        Text(" / 100")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(TrendXTheme.tertiaryInk)
+                    )
+                    .monospacedDigit()
+
+                    Text("نبض الرأي العام · يُحدَّث يوميّاً")
                         .font(.system(size: 11))
                         .foregroundStyle(TrendXTheme.tertiaryInk)
                 }
+
                 ZStack {
                     Circle()
                         .fill(LinearGradient(
@@ -142,6 +171,7 @@ struct TrendXIndexHomeCard: View {
                             endPoint: .bottomTrailing
                         ))
                         .frame(width: 52, height: 52)
+                        .shadow(color: TrendXTheme.aiViolet.opacity(0.4), radius: 12, x: 0, y: 4)
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 20, weight: .heavy))
                         .foregroundStyle(.white)
