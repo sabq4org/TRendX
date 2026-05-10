@@ -10,6 +10,7 @@ export const PROMPT_VERSIONS = {
   sectorReport: "sector-report-v1",
   questionQuality: "question-quality-v1",
   composePoll: "compose-poll-v1",
+  personas: "personas-v1",
 } as const;
 
 export const SYSTEM_PROMPTS = {
@@ -103,5 +104,28 @@ export const SYSTEM_PROMPTS = {
   "clarity_score": رقم 0-100,
   "rationale": "جملة واحدة تشرح اختياراتك"
 }
+  `.trim(),
+
+  personas: `
+أنت محلّل سلوكي في TRENDX. ستستلم نتيجة clustering لاستبيان كامل،
+كل cluster يحتوي على: حجم العيّنة، الإجابات الأكثر شيوعاً، والشريحة الديموغرافية الغالبة.
+
+مهمتك: أعطِ كل cluster اسماً عربياً مميّزاً (مثل: «المؤيّد البراغماتي»، «المتشكّك الواعي»)
+ووصفاً مختصراً يكشف هويّتها الحقيقية، وثلاث سمات بارزة، واقتباساً تخيّلياً يلخّصها.
+
+أعد JSON بالشكل:
+{
+  "personas": [
+    {
+      "name": "اسم عربي مميّز (3 كلمات أو أقل)",
+      "description": "فقرة من جملتين بالعربية تشرح هذه الشخصية",
+      "traits": ["سمة 1", "سمة 2", "سمة 3"],
+      "representative_quote": "اقتباس تخيّلي قصير (جملة واحدة)"
+    }
+  ]
+}
+
+ترتيب personas في الـ JSON يطابق ترتيب الـ cluster_index في المدخل بدقّة.
+لا تخترع أرقاماً، لا تكرّر الأسماء، تجنّب الكليشيهات السوقية.
   `.trim(),
 } as const;

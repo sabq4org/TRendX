@@ -32,6 +32,20 @@ import {
   getCachedOrComputeSurvey,
 } from "./lib/analytics.js";
 import {
+  computeSurveyHeatmap,
+  computePollHeatmap,
+  computeCrossQuestion,
+  getCachedSentimentTimeline,
+  getCachedSectorBenchmark,
+  type HeatmapDimension,
+} from "./lib/deep-analytics.js";
+import { computeSurveyPersonas } from "./lib/personas.js";
+import {
+  dispatchWebhookEvent,
+  generateWebhookSecret,
+  testWebhook,
+} from "./lib/webhooks.js";
+import {
   runSnapshotsNow,
   startSnapshotJob,
 } from "./jobs/snapshot.js";
@@ -41,8 +55,6 @@ import { sseHandler, broadcastEvent } from "./events/sse.js";
 
 type Variables = {
   userId: string;
-  userTier: string;
-  userRole: string;
 };
 
 const app = new Hono<{ Variables: Variables }>();
@@ -164,6 +176,11 @@ app.post("/auth/signin", async (c) => {
 });
 
 // MARK: - Auth middleware (everything below needs a token)
+//
+// Tokens accepted via either:
+//   - `Authorization: Bearer <jwt>` (preferred, used by iOS + dashboard fetch)
+//   - `?token=<jwt>` query param (necessary for SSE / printable reports
+//     where the browser cannot attach custom headers).
 
 app.use("*", async (c, next) => {
   const path = c.req.path;
@@ -171,11 +188,14 @@ app.use("*", async (c, next) => {
     path === "/" ||
     path === "/health" ||
     path.startsWith("/auth/") ||
+    path.startsWith("/reports/") || // print-ready HTML reports auth via query
     c.req.method === "OPTIONS";
   if (isPublic) return next();
 
   const header = c.req.header("Authorization") ?? "";
-  const token = header.replace(/^Bearer\s+/i, "");
+  const headerToken = header.replace(/^Bearer\s+/i, "");
+  const queryToken = c.req.query("token");
+  const token = headerToken || queryToken;
   if (!token) return c.json({ error: "Missing token" }, 401);
 
   try {
@@ -186,6 +206,17 @@ app.use("*", async (c, next) => {
   }
   return next();
 });
+
+async function loadActor(
+  c: { get: (k: "userId") => string },
+): Promise<{ id: string; role: string; tier: string } | null> {
+  const id = c.get("userId");
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, role: true, tier: true },
+  });
+  return user;
+}
 
 // MARK: - Profile
 
@@ -529,6 +560,22 @@ app.post("/polls/vote", async (c) => {
       deviceType: user.deviceType,
       total: newTotal,
     });
+    // Webhook fan-out to subscribed publishers for this poll.
+    if (poll.publisherId) {
+      void dispatchWebhookEvent(
+        "poll.vote_cast",
+        {
+          poll_id: pollId,
+          poll_title: poll.title,
+          total: newTotal,
+          city: user.city,
+          device_type: user.deviceType,
+          age_group: ageGroup,
+          gender: user.gender,
+        },
+        { publisherId: poll.publisherId },
+      );
+    }
     if (newTotal % 100 === 0) {
       broadcastEvent({
         type: "vote_milestone",
@@ -537,6 +584,18 @@ app.post("/polls/vote", async (c) => {
         total: newTotal,
         milestone: newTotal,
       });
+      if (poll.publisherId) {
+        void dispatchWebhookEvent(
+          "poll.vote_milestone",
+          {
+            poll_id: pollId,
+            poll_title: poll.title,
+            total: newTotal,
+            milestone: newTotal,
+          },
+          { publisherId: poll.publisherId },
+        );
+      }
     }
   }
 
@@ -765,6 +824,37 @@ app.post("/surveys/:id/respond", async (c) => {
           },
         }),
       ]);
+
+      const newTotal = survey.totalCompletes + 1;
+      broadcastEvent({
+        type: "survey_completed",
+        surveyId,
+        surveyTitle: survey.title,
+        total: newTotal,
+      });
+      if (survey.publisherId) {
+        void dispatchWebhookEvent(
+          "survey.completed",
+          {
+            survey_id: surveyId,
+            survey_title: survey.title,
+            total_completes: newTotal,
+            response_id: response.id,
+          },
+          { publisherId: survey.publisherId },
+        );
+      }
+    } else if (survey.publisherId) {
+      void dispatchWebhookEvent(
+        "survey.response",
+        {
+          survey_id: surveyId,
+          survey_title: survey.title,
+          response_id: response.id,
+          is_complete: false,
+        },
+        { publisherId: survey.publisherId },
+      );
     }
 
     return c.json({ ok: true, response_id: response.id, is_complete: isComplete });
@@ -1157,6 +1247,329 @@ app.get("/analytics/survey/:id", async (c) => {
 app.post("/admin/snapshots/run", async (c) => {
   await runSnapshotsNow();
   return c.json({ ok: true, ranAt: new Date().toISOString() });
+});
+
+// MARK: - Layer 3 — Deep Analytics
+//
+// All endpoints here are read-only, on-demand. They share the same JSON
+// contract surface that iOS will consume when we add a publisher-mode
+// view to the iPhone app, so the keys are snake_case and never change
+// shape based on caller.
+
+const HEATMAP_DIMS = new Set<HeatmapDimension>(["gender", "age_group", "city", "device"]);
+
+function parseDim(value: string | undefined, fallback: HeatmapDimension): HeatmapDimension {
+  if (value && HEATMAP_DIMS.has(value as HeatmapDimension)) return value as HeatmapDimension;
+  return fallback;
+}
+
+app.get("/analytics/poll/:id/heatmap", async (c) => {
+  const pollId = c.req.param("id");
+  const x = parseDim(c.req.query("x"), "gender");
+  const y = parseDim(c.req.query("y"), "age_group");
+  const optionId = c.req.query("option_id");
+  const payload = await computePollHeatmap(pollId, x, y, optionId);
+  if (!payload) return c.json({ error: "Poll not found" }, 404);
+  return c.json(payload);
+});
+
+app.get("/analytics/survey/:id/heatmap", async (c) => {
+  const surveyId = c.req.param("id");
+  const x = parseDim(c.req.query("x"), "gender");
+  const y = parseDim(c.req.query("y"), "age_group");
+  const questionId = c.req.query("question_id");
+  const optionId = c.req.query("option_id");
+  const payload = await computeSurveyHeatmap(surveyId, x, y, questionId, optionId);
+  if (!payload) return c.json({ error: "Survey not found" }, 404);
+  return c.json(payload);
+});
+
+app.get("/analytics/survey/:id/cross-question", async (c) => {
+  const surveyId = c.req.param("id");
+  const q1 = c.req.query("q1");
+  const q2 = c.req.query("q2");
+  if (!q1 || !q2) return c.json({ error: "q1 and q2 query params required" }, 400);
+  const payload = await computeCrossQuestion(surveyId, q1, q2);
+  if (!payload) return c.json({ error: "Questions not found" }, 404);
+  return c.json(payload);
+});
+
+app.get("/analytics/topic/:id/sentiment-timeline", async (c) => {
+  const topicId = c.req.param("id");
+  const days = Math.max(7, Math.min(90, Number(c.req.query("days") ?? 30)));
+  const payload = await getCachedSentimentTimeline(topicId, days);
+  if (!payload) return c.json({ error: "Topic not found" }, 404);
+  return c.json(payload);
+});
+
+app.get("/analytics/sectors/benchmark", async (c) => {
+  const ids = (c.req.query("topic_ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (ids.length === 0) return c.json({ error: "topic_ids query required" }, 400);
+  if (ids.length > 6) return c.json({ error: "Maximum 6 sectors per benchmark" }, 400);
+  const payload = await getCachedSectorBenchmark(ids);
+  return c.json(payload);
+});
+
+// MARK: - Personas
+
+app.get("/surveys/:id/personas", async (c) => {
+  const surveyId = c.req.param("id");
+  const force = c.req.query("refresh") === "1";
+  const payload = await computeSurveyPersonas(surveyId, force);
+  if (!payload) return c.json({ error: "Survey not found" }, 404);
+  return c.json(payload);
+});
+
+// MARK: - Webhooks (Publisher API)
+
+app.get("/publisher/webhooks", async (c) => {
+  const userId = c.get("userId");
+  const rows = await prisma.webhook.findMany({
+    where: { publisherId: userId },
+    orderBy: { createdAt: "desc" },
+  });
+  return c.json(snake(rows));
+});
+
+app.post("/publisher/webhooks", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{
+    url?: string;
+    events?: string[];
+  }>();
+  const url = (body.url ?? "").trim();
+  const events = (body.events ?? []).filter((e) => typeof e === "string" && e.length > 0);
+  if (!url.startsWith("https://") || events.length === 0) {
+    return c.json({ error: "url (https://) and at least one event required" }, 400);
+  }
+  const wh = await prisma.webhook.create({
+    data: {
+      publisherId: userId,
+      url,
+      events,
+      secret: generateWebhookSecret(),
+    },
+  });
+  return c.json(snake(wh));
+});
+
+app.patch("/publisher/webhooks/:id", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const existing = await prisma.webhook.findUnique({ where: { id } });
+  if (!existing || existing.publisherId !== userId) {
+    return c.json({ error: "Webhook not found" }, 404);
+  }
+  const body = await c.req.json<{ url?: string; events?: string[]; is_active?: boolean }>();
+  const wh = await prisma.webhook.update({
+    where: { id },
+    data: {
+      ...(body.url !== undefined ? { url: body.url } : {}),
+      ...(body.events !== undefined ? { events: body.events } : {}),
+      ...(body.is_active !== undefined ? { isActive: body.is_active } : {}),
+    },
+  });
+  return c.json(snake(wh));
+});
+
+app.delete("/publisher/webhooks/:id", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const existing = await prisma.webhook.findUnique({ where: { id } });
+  if (!existing || existing.publisherId !== userId) {
+    return c.json({ error: "Webhook not found" }, 404);
+  }
+  await prisma.webhook.delete({ where: { id } });
+  return c.json({ ok: true });
+});
+
+app.post("/publisher/webhooks/:id/test", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const existing = await prisma.webhook.findUnique({ where: { id } });
+  if (!existing || existing.publisherId !== userId) {
+    return c.json({ error: "Webhook not found" }, 404);
+  }
+  const result = await testWebhook(id);
+  return c.json(result);
+});
+
+// MARK: - Admin Console
+
+app.get("/admin/users", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const q = (c.req.query("q") ?? "").trim();
+  const role = c.req.query("role");
+  const tier = c.req.query("tier");
+  const limit = Math.min(200, Number(c.req.query("limit") ?? 50));
+  const users = await prisma.user.findMany({
+    where: {
+      AND: [
+        q ? {
+          OR: [
+            { email: { contains: q, mode: "insensitive" } },
+            { name:  { contains: q, mode: "insensitive" } },
+          ],
+        } : {},
+        role ? { role: role as "respondent" | "publisher" | "admin" } : {},
+        tier ? { tier: tier as "free" | "premium" | "enterprise" } : {},
+      ],
+    },
+    orderBy: { lastActiveAt: "desc" },
+    take: limit,
+    select: {
+      id: true, email: true, name: true, role: true, tier: true,
+      city: true, country: true, gender: true, deviceType: true,
+      points: true, isPremium: true,
+      joinedAt: true, lastActiveAt: true,
+    },
+  });
+  return c.json(snake(users));
+});
+
+app.patch("/admin/users/:id", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const targetId = c.req.param("id");
+  const body = await c.req.json<{
+    role?: "respondent" | "publisher" | "admin";
+    tier?: "free" | "premium" | "enterprise";
+    is_premium?: boolean;
+  }>();
+  const user = await prisma.user.update({
+    where: { id: targetId },
+    data: {
+      ...(body.role ? { role: body.role } : {}),
+      ...(body.tier ? { tier: body.tier } : {}),
+      ...(body.is_premium !== undefined ? { isPremium: body.is_premium } : {}),
+    },
+  });
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      action: "user.updated",
+      resourceType: "user",
+      resourceId: targetId,
+      metadata: body as unknown as Prisma.InputJsonValue,
+    },
+  });
+  return c.json(userDTO(user));
+});
+
+app.get("/admin/audit-log", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const limit = Math.min(500, Number(c.req.query("limit") ?? 100));
+  const rows = await prisma.auditLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  return c.json(snake(rows));
+});
+
+app.get("/admin/jobs/status", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const [latestSnapshot, latestInsight, webhooksTotal, webhooksActive, recentDeliveries] =
+    await Promise.all([
+      prisma.analyticsSnapshot.findFirst({ orderBy: { computedAt: "desc" } }),
+      prisma.aIInsight.findFirst({ orderBy: { generatedAt: "desc" } }),
+      prisma.webhook.count(),
+      prisma.webhook.count({ where: { isActive: true } }),
+      prisma.auditLog.findMany({
+        where: { resourceType: "webhook" },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      }),
+    ]);
+  return c.json({
+    snapshot: latestSnapshot ? {
+      computed_at: latestSnapshot.computedAt.toISOString(),
+      entity_type: latestSnapshot.entityType,
+      entity_id: latestSnapshot.entityId,
+    } : null,
+    last_ai_insight: latestInsight ? {
+      generated_at: latestInsight.generatedAt.toISOString(),
+      insight_type: latestInsight.insightType,
+      model: latestInsight.modelUsed,
+      latency_ms: latestInsight.latencyMs,
+    } : null,
+    webhooks: { total: webhooksTotal, active: webhooksActive },
+    recent_webhook_deliveries: snake(recentDeliveries),
+    server_time: new Date().toISOString(),
+  });
+});
+
+app.get("/admin/sectors", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const rows = await prisma.topic.findMany({
+    orderBy: { name: "asc" },
+    include: { _count: { select: { polls: true, surveys: true } } },
+  });
+  return c.json(snake(rows));
+});
+
+app.post("/admin/sectors", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json<{
+    name?: string; slug?: string; icon?: string; color?: string; parent_id?: string | null;
+  }>();
+  if (!body.name || !body.slug || !body.icon) {
+    return c.json({ error: "name, slug, icon required" }, 400);
+  }
+  const topic = await prisma.topic.create({
+    data: {
+      name: body.name,
+      slug: body.slug,
+      icon: body.icon,
+      color: body.color ?? "blue",
+      parentId: body.parent_id ?? null,
+    },
+  });
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      action: "sector.created",
+      resourceType: "topic",
+      resourceId: topic.id,
+      metadata: body as unknown as Prisma.InputJsonValue,
+    },
+  });
+  return c.json(topicDTO(topic));
+});
+
+app.patch("/admin/sectors/:id", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    name?: string; slug?: string; icon?: string; color?: string;
+  }>();
+  const topic = await prisma.topic.update({
+    where: { id },
+    data: {
+      ...(body.name ? { name: body.name } : {}),
+      ...(body.slug ? { slug: body.slug } : {}),
+      ...(body.icon ? { icon: body.icon } : {}),
+      ...(body.color ? { color: body.color } : {}),
+    },
+  });
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      action: "sector.updated",
+      resourceType: "topic",
+      resourceId: id,
+      metadata: body as unknown as Prisma.InputJsonValue,
+    },
+  });
+  return c.json(topicDTO(topic));
 });
 
 // MARK: - Realtime (SSE)

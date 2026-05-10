@@ -40,7 +40,9 @@ const PUBLISHERS = [
     name: "TRENDX Official",
     avatarInitial: "T",
     tier: "enterprise" as const,
-    role: "publisher" as const,
+    // The "official" account also wears the admin hat for the demo so
+    // a single login can showcase both publisher and admin views.
+    role: "admin" as const,
     city: "الرياض",
     region: "الرياض",
     gender: "unspecified" as const,
