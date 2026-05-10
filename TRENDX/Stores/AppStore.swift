@@ -242,7 +242,33 @@ final class AppStore: ObservableObject {
     var followedTopics: [Topic] {
         topics.filter { $0.isFollowing }
     }
-    
+
+    /// Apply onboarding extras gathered by the AI sign-up flow (preferred topics
+    /// and a free-text "voice line"). Topics are merged into followedTopics and
+    /// reflected in the local topics list so the UI updates immediately. The
+    /// voice line is stored in UserDefaults under `trendx_onboarding_voice` and
+    /// can later be sent to the backend profile endpoint.
+    func applyOnboardingExtras(followedTopics topicIds: [UUID], voiceLine: String) {
+        for topicId in topicIds {
+            if !currentUser.followedTopics.contains(topicId) {
+                currentUser.followedTopics.append(topicId)
+            }
+            if let index = topics.firstIndex(where: { $0.id == topicId }), !topics[index].isFollowing {
+                topics[index].isFollowing = true
+                topics[index].followersCount += 1
+            }
+        }
+        persistUser()
+        persistTopics()
+
+        let trimmed = voiceLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            UserDefaults.standard.set(trimmed, forKey: "trendx_onboarding_voice")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "trendx_onboarding_voice")
+        }
+    }
+
     // MARK: - Poll Actions
     
     func voteOnPoll(_ pollId: UUID, optionId: UUID) {
