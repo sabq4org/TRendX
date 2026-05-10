@@ -1,21 +1,8 @@
 -- Phase: نبض اليوم (Daily Pulse) + Audience Marketplace + Predictive Accuracy
 -- + Weekly Challenge + الحوار (Comments) + Opinion DNA
--- All additive. No existing tables touched.
-
--- =============================================================================
--- Extend InsightType enum with new kinds (user_dna, pulse_summary, etc.)
--- =============================================================================
-ALTER TYPE "InsightType" ADD VALUE IF NOT EXISTS 'user_dna';
-ALTER TYPE "InsightType" ADD VALUE IF NOT EXISTS 'pulse_summary';
-ALTER TYPE "InsightType" ADD VALUE IF NOT EXISTS 'trendx_index';
-ALTER TYPE "InsightType" ADD VALUE IF NOT EXISTS 'audience_estimate';
-
-ALTER TYPE "LedgerType" ADD VALUE IF NOT EXISTS 'challenge_winner';
-ALTER TYPE "LedgerType" ADD VALUE IF NOT EXISTS 'pulse_streak_bonus';
-
--- enum changes must be committed before they're usable in the same txn
-COMMIT;
-BEGIN;
+-- All additive. No existing tables touched. Enum changes live in the
+-- previous migration (20260510084400_extend_enums) so the values are
+-- already committed and usable here.
 
 -- =============================================================================
 -- daily_pulses
