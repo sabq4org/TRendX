@@ -12,7 +12,8 @@ import Link from "next/link";
 /**
  * Public TRENDX Index — accessible without auth, designed to be linked
  * from journalism articles, social, etc. Reflects the live national
- * mood across six dimensions.
+ * mood across six dimensions. The signed-in dashboard counterpart lives
+ * at /(authed)/trendx-index and re-uses the same payload.
  */
 export default function PublicIndexPage() {
   const [data, setData] = useState<TrendXIndex | null>(null);
@@ -51,7 +52,6 @@ export default function PublicIndexPage() {
 
   return (
     <main className="min-h-screen px-6 md:px-12 py-12 max-w-6xl mx-auto">
-      {/* Header */}
       <header className="mb-10">
         <div className="flex items-center justify-between mb-6">
           <Link href="/" className="text-sm font-bold text-brand-600 inline-flex items-center gap-1.5 hover:underline">
@@ -74,7 +74,6 @@ export default function PublicIndexPage() {
         </p>
       </header>
 
-      {/* Composite hero card */}
       <section className="bg-canvas-card rounded-card p-8 md:p-12 shadow-card-lift relative overflow-hidden mb-12">
         <div className="absolute inset-0 bg-hero opacity-60 pointer-events-none" />
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
@@ -103,7 +102,6 @@ export default function PublicIndexPage() {
         </div>
       </section>
 
-      {/* Indicators grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger">
         {data.metrics.map((m) => (
           <article
@@ -130,7 +128,6 @@ export default function PublicIndexPage() {
               <span className="text-ink-mute tabular">{fmtInt(m.sample_size)} إجابة</span>
             </div>
             <p className="text-sm text-ink-soft leading-relaxed">{m.blurb}</p>
-            {/* Sparkbar */}
             <div className="mt-4 h-1.5 bg-canvas-well rounded-pill overflow-hidden">
               <div
                 className="h-full bg-brand-gradient rounded-pill transition-all duration-700"
@@ -143,7 +140,7 @@ export default function PublicIndexPage() {
 
       <footer className="mt-16 text-center text-[12px] text-ink-mute">
         <p>
-          البيانات مفتوحة للاستشهاد بشرط ذكر TRENDX كمصدر · 
+          البيانات مفتوحة للاستشهاد بشرط ذكر TRENDX كمصدر ·
           <Link href="/" className="text-brand-600 font-bold hover:underline ms-1">
             أنشئ استبيانك الخاصّ
           </Link>
