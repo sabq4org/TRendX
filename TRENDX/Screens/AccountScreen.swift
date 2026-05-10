@@ -28,6 +28,42 @@ struct AccountScreen: View {
                 )
                 .padding(.horizontal, 20)
 
+                // NEW: Opinion DNA — direct entry to identity screen
+                NavigationLink {
+                    OpinionDNAScreen()
+                        .environmentObject(store)
+                        .trendxRTL()
+                } label: {
+                    OpinionDNAEntryCard()
+                        .environmentObject(store)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+
+                // NEW: National TRENDX Index entry
+                NavigationLink {
+                    TrendXIndexScreen()
+                        .environmentObject(store)
+                        .trendxRTL()
+                } label: {
+                    TrendXIndexHomeCard()
+                        .environmentObject(store)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+
+                // NEW: Predictive Accuracy
+                NavigationLink {
+                    PredictionAccuracyScreen()
+                        .environmentObject(store)
+                        .trendxRTL()
+                } label: {
+                    AccuracyEntryCard()
+                        .environmentObject(store)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
+
                 AIInsightChip(
                     text: "رادارك الحالي يركز على: \(favoriteTopics). شاركت في \(votedCount) استطلاع واستبدلت \(store.redemptions.count) هدية حتى الآن.",
                     label: "ملخص TRENDX AI"

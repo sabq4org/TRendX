@@ -74,6 +74,10 @@ enum InsightType {
   recommendation
   question_quality
   auto_tag
+  user_dna
+  pulse_summary
+  trendx_index
+  audience_estimate
 }
 
 enum LedgerType {
@@ -83,6 +87,8 @@ enum LedgerType {
   signup_bonus
   manual_adjustment
   refund
+  challenge_winner
+  pulse_streak_bonus
 }
 
 // MARK: - Identity
@@ -132,6 +138,13 @@ model User {
   ledgerEntries    PointsLedger[]
   webhooks         Webhook[]
 
+  pulseResponses       DailyPulseResponse[]
+  streak               UserStreak?
+  audiences            Audience[]                  @relation("AudiencePublisher")
+  votePredictions      VotePrediction[]
+  challengePredictions WeeklyChallengePrediction[]
+  pollComments         PollComment[]
+
   @@index([role])
   @@index([tier])
   @@index([city])
@@ -158,6 +171,7 @@ model Topic {
 
   polls   Poll[]
   surveys Survey[]
+  pulses  DailyPulse[]
 
   @@index([parentId])
   @@map("topics")
@@ -204,8 +218,10 @@ model Poll {
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
 
-  options PollOption[]
-  votes   Vote[]
+  options     PollOption[]
+  votes       Vote[]
+  predictions VotePrediction[]
+  comments    PollComment[]
 
   @@index([status])
   @@index([topicId])
@@ -521,4 +537,211 @@ model AuditLog {
   @@index([resourceType, resourceId])
   @@index([createdAt])
   @@map("audit_log")
+}
+
+// MARK: - Daily Pulse (national daily question)
+
+model DailyPulse {
+  id          String     @id @default(uuid()) @db.Uuid
+  /// ISO yyyy-mm-dd — one pulse per day, enforced by unique
+  pulseDate   String     @unique @map("pulse_date")
+  question    String     @db.VarChar(500)
+  description String?
+  /// Each option: { text: string }
+  options     Json       @db.JsonB
+
+  topicId String? @map("topic_id") @db.Uuid
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  status         String @default("active") // "scheduled" | "active" | "closed"
+  totalResponses Int    @default(0) @map("total_responses")
+
+  /// Live tally: array of counts indexed by option order, kept in
+  /// sync via incrementing fields when a response lands.
+  tallies Json @default("[]") @db.JsonB
+
+  /// AI-generated narrative for the previous day's pulse, refreshed by
+  /// the daily cron the morning after the pulse closes.
+  aiSummary String? @map("ai_summary")
+
+  /// Reward in points for participating; bumped on streak.
+  rewardPoints Int @default(40) @map("reward_points")
+
+  closesAt  DateTime @map("closes_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  responses DailyPulseResponse[]
+
+  @@index([status])
+  @@index([pulseDate])
+  @@map("daily_pulses")
+}
+
+model DailyPulseResponse {
+  id      String     @id @default(uuid()) @db.Uuid
+  pulseId String     @map("pulse_id") @db.Uuid
+  pulse   DailyPulse @relation(fields: [pulseId], references: [id], onDelete: Cascade)
+  userId  String     @map("user_id") @db.Uuid
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  optionIndex   Int  @map("option_index")
+  /// Optional prediction game: what % do you think will pick the leading option?
+  predictedPct  Int? @map("predicted_pct")
+
+  // Frozen demographics (matches Vote model)
+  deviceType DeviceType @default(unknown) @map("device_type")
+  city       String?
+  region     String?
+  country    String?
+  gender     Gender     @default(unspecified)
+  ageGroup   String?    @map("age_group")
+
+  respondedAt DateTime @default(now()) @map("responded_at")
+
+  @@unique([pulseId, userId])
+  @@index([pulseId])
+  @@map("daily_pulse_responses")
+}
+
+model UserStreak {
+  userId         String    @id @map("user_id") @db.Uuid
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentStreak  Int       @default(0) @map("current_streak")
+  longestStreak  Int       @default(0) @map("longest_streak")
+  lastPulseDate  String?   @map("last_pulse_date")
+  totalPulses    Int       @default(0) @map("total_pulses")
+  freezesLeft    Int       @default(2) @map("freezes_left")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_streaks")
+}
+
+// MARK: - Audience Marketplace
+
+model Audience {
+  id          String  @id @default(uuid()) @db.Uuid
+  publisherId String  @map("publisher_id") @db.Uuid
+  publisher   User    @relation("AudiencePublisher", fields: [publisherId], references: [id], onDelete: Cascade)
+
+  name        String
+  /// Selection rules: { gender?, age_groups?[], cities?[], regions?[], devices?[], topics?[] }
+  criteria    Json    @db.JsonB
+  /// Latest estimate of how many users match the criteria. Refreshed
+  /// when the user opens the audience page.
+  availableCount Int  @default(0) @map("available_count")
+  /// Suggested price in SAR for renting this audience for one survey.
+  estimatedPrice Decimal @default(0) @map("estimated_price") @db.Decimal(12, 2)
+  status         String  @default("draft") // "draft" | "active" | "completed"
+
+  /// Optional poll/survey this audience is targeting. Soft link.
+  pollId   String? @map("poll_id") @db.Uuid
+  surveyId String? @map("survey_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([publisherId])
+  @@map("audiences")
+}
+
+// MARK: - Predictive Accuracy + Weekly Challenge
+
+model VotePrediction {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pollId String @map("poll_id") @db.Uuid
+  poll   Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  /// What % the user thinks will pick the LEADING option (0..100).
+  predictedPct Int @map("predicted_pct")
+  actualPct    Int? @map("actual_pct")
+  /// |predicted - actual| absolute distance, computed when poll ends.
+  distance Int?
+  /// 0..100 score derived from distance (100 - distance).
+  accuracy Int?
+
+  predictedAt DateTime @default(now()) @map("predicted_at")
+  scoredAt    DateTime? @map("scored_at")
+
+  @@unique([pollId, userId])
+  @@index([userId])
+  @@map("vote_predictions")
+}
+
+model WeeklyChallenge {
+  id          String  @id @default(uuid()) @db.Uuid
+  /// ISO yyyy-mm-dd of week's Sunday.
+  weekStart   String  @unique @map("week_start")
+  question    String  @db.VarChar(500)
+  description String?
+  /// Free-form: what number is being predicted ("نسبة من سيؤيّد X")
+  metricLabel String  @map("metric_label")
+  closesAt    DateTime @map("closes_at")
+  /// Filled when the challenge is scored.
+  targetPct   Int?     @map("target_pct")
+  status      String   @default("open") // "open" | "scoring" | "settled"
+  rewardPoints Int     @default(500) @map("reward_points")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  predictions WeeklyChallengePrediction[]
+
+  @@map("weekly_challenges")
+}
+
+model WeeklyChallengePrediction {
+  id          String           @id @default(uuid()) @db.Uuid
+  challengeId String           @map("challenge_id") @db.Uuid
+  challenge   WeeklyChallenge  @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userId      String           @map("user_id") @db.Uuid
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  predictedPct Int             @map("predicted_pct")
+  distance    Int?
+  rank        Int?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([challengeId, userId])
+  @@index([challengeId])
+  @@map("weekly_challenge_predictions")
+}
+
+// MARK: - Comments (الحوار)
+
+model PollComment {
+  id      String @id @default(uuid()) @db.Uuid
+  pollId  String @map("poll_id") @db.Uuid
+  poll    Poll   @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  userId  String @map("user_id") @db.Uuid
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  body       String  @db.VarChar(800)
+  /// Score = upvotes - downvotes
+  score      Int     @default(0)
+  upvotes    Int     @default(0)
+  downvotes  Int     @default(0)
+  /// Author's vote at the moment of commenting (frozen for context).
+  authorVoteOptionId String? @map("author_vote_option_id") @db.Uuid
+
+  status     String  @default("visible") // "visible" | "hidden" | "flagged"
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([pollId])
+  @@index([userId])
+  @@map("poll_comments")
+}
+
+model PollCommentVote {
+  id        String @id @default(uuid()) @db.Uuid
+  commentId String @map("comment_id") @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+  /// +1 or -1
+  value     Int
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([commentId, userId])
+  @@map("poll_comment_votes")
 }

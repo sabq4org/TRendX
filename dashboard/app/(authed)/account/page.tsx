@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
+import { useFetch } from "@/lib/use-fetch";
 import { Header } from "@/components/Header";
 import { fmtInt } from "@/lib/format";
-import { LogOut, Webhook, ChevronLeft } from "lucide-react";
+import { LogOut, Webhook, ChevronLeft, Sparkles, Flame } from "lucide-react";
 
 const TIER_LABEL = {
   enterprise: "Enterprise",
@@ -19,7 +21,9 @@ const ROLE_LABEL = {
 } as const;
 
 export default function AccountPage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, token } = useAuth();
+  const dna = useFetch((t) => api.myDNA(t).catch(() => null), token);
+  const streak = useFetch((t) => api.myStreak(t), token);
   if (!user) return null;
 
   return (
@@ -60,6 +64,46 @@ export default function AccountPage() {
           <Stat label="المنطقة" value={user.region ?? "—"} />
           <Stat label="الجنس" value={user.gender === "male" ? "ذكر" : user.gender === "female" ? "أنثى" : "—"} />
           <Stat label="سنة الميلاد" value={user.birth_year ? String(user.birth_year) : "—"} />
+        </div>
+
+        {/* Streak + DNA combined */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Streak */}
+          <div className="bg-canvas-card rounded-card shadow-card p-6 flex flex-col items-center text-center">
+            <div className="w-14 h-14 rounded-chip bg-accent-50 grid place-items-center mb-3">
+              <Flame size={26} className="text-accent-500" />
+            </div>
+            <div className="text-eyebrow text-accent-700 mb-1">سلسلة المشاركة</div>
+            <div className="text-kpi-sm tabular text-accent-700 leading-none">
+              {streak.data?.current_streak ?? 0}
+            </div>
+            <div className="text-[12px] text-ink-mute mt-1">
+              يوم متتالٍ · أطول: {streak.data?.longest_streak ?? 0}
+            </div>
+          </div>
+
+          {/* Opinion DNA */}
+          <Link
+            href="/account/dna"
+            className="group lg:col-span-2 bg-canvas-card rounded-card shadow-card p-6 hover:shadow-card-lift transition-all relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-hero opacity-50 pointer-events-none" />
+            <div className="relative flex items-start gap-5">
+              <div className="w-12 h-12 rounded-chip bg-ai-50 grid place-items-center">
+                <Sparkles size={20} className="text-ai-700" />
+              </div>
+              <div className="flex-1">
+                <div className="text-eyebrow text-ai-700 mb-1">OPINION DNA</div>
+                <h3 className="text-lg font-display font-bold text-ink tracking-tight">
+                  {dna.data?.archetype.title ?? "اكتشف هويّتك في الرأي"}
+                </h3>
+                <p className="text-[12px] text-ink-mute font-light mt-1 max-w-md">
+                  {dna.data?.archetype.blurb ?? "شارك في 3 استطلاعات على الأقلّ لنبني شخصيّتك الفكريّة."}
+                </p>
+              </div>
+              <ChevronLeft className="text-ink-ghost group-hover:text-ai-700 group-hover:-translate-x-1 transition-transform" size={18} />
+            </div>
+          </Link>
         </div>
 
         <Link

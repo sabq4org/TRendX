@@ -16,7 +16,9 @@ export type DashboardEvent =
   | { type: "vote_cast"; pollId: string; pollTitle: string; city: string | null; deviceType: string; total: number }
   | { type: "vote_milestone"; pollId: string; pollTitle: string; total: number; milestone: number }
   | { type: "survey_completed"; surveyId: string; surveyTitle: string; total: number }
-  | { type: "snapshot_refreshed"; entityType: "poll" | "survey"; entityId: string };
+  | { type: "snapshot_refreshed"; entityType: "poll" | "survey"; entityId: string }
+  | { type: "pulse_response"; pulse_id: string; total: number; timestamp: string }
+  | { type: "comment_posted"; pollId: string; commentId: string; total: number };
 
 type Subscriber = {
   id: string;

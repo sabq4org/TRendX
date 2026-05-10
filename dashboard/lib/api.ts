@@ -1,13 +1,21 @@
 import type {
   AdminUser,
+  Audience,
+  AudienceCriteria,
+  AudienceEstimate,
   AuditLogEntry,
   AuthResponse,
   Bootstrap,
+  Comment,
   CrossQuestion,
+  DailyPulse,
   Heatmap,
   HeatmapDimension,
   JobsStatus,
+  OpinionDNA,
   PollAnalytics,
+  PredictionLeaderboardItem,
+  PulseHistoryItem,
   SectorAIReport,
   SectorBenchmark,
   SentimentTimeline,
@@ -16,8 +24,12 @@ import type {
   SurveyAnalytics,
   SurveyPersonas,
   Topic,
+  TrendXIndex,
   User,
+  UserAccuracy,
+  UserStreak,
   Webhook,
+  WeeklyChallenge,
 } from "./types";
 
 const API_BASE =
@@ -195,5 +207,109 @@ export const api = {
   },
   adminRunSnapshots(token: string): Promise<{ ok: boolean; ranAt: string }> {
     return request("/admin/snapshots/run", { method: "POST", token });
+  },
+
+  // ----- Daily Pulse + Streak -----
+
+  pulseToday(token: string): Promise<DailyPulse> {
+    return request("/pulse/today", { token });
+  },
+  pulseRespond(
+    token: string,
+    body: { option_index: number; predicted_pct?: number },
+  ): Promise<{
+    pulse: DailyPulse;
+    reward: number;
+    streak: UserStreak;
+    prediction_score: number | null;
+  }> {
+    return request("/pulse/today/respond", { method: "POST", body, token });
+  },
+  pulseYesterday(token: string): Promise<{ pulse: DailyPulse | null }> {
+    return request("/pulse/yesterday", { token });
+  },
+  pulseHistory(token: string, days = 14): Promise<{ items: PulseHistoryItem[] }> {
+    return request(`/pulse/history?days=${days}`, { token });
+  },
+  myStreak(token: string): Promise<UserStreak> {
+    return request("/me/streak", { token });
+  },
+
+  // ----- Opinion DNA -----
+
+  myDNA(token: string): Promise<OpinionDNA> {
+    return request("/me/dna", { token });
+  },
+  refreshDNA(token: string): Promise<OpinionDNA> {
+    return request("/me/dna/refresh", { method: "POST", token });
+  },
+
+  // ----- Audience Marketplace -----
+
+  estimateAudience(token: string, criteria: AudienceCriteria): Promise<AudienceEstimate> {
+    return request("/publisher/audiences/estimate", { method: "POST", body: { criteria }, token });
+  },
+  listAudiences(token: string): Promise<{ items: Audience[] }> {
+    return request("/publisher/audiences", { token });
+  },
+  createAudienceApi(
+    token: string,
+    body: { name: string; criteria: AudienceCriteria },
+  ): Promise<Audience> {
+    return request("/publisher/audiences", { method: "POST", body, token });
+  },
+
+  // ----- TRENDX Index (public) -----
+
+  trendxIndex(): Promise<TrendXIndex> {
+    return request("/public/index");
+  },
+
+  // ----- Predictions -----
+
+  predictPoll(token: string, pollId: string, predictedPct: number): Promise<{ ok: true }> {
+    return request(`/polls/${pollId}/predict`, {
+      method: "POST",
+      body: { predicted_pct: predictedPct },
+      token,
+    });
+  },
+  myAccuracy(token: string): Promise<UserAccuracy> {
+    return request("/me/accuracy", { token });
+  },
+  accuracyLeaderboard(token: string, limit = 25): Promise<{ items: PredictionLeaderboardItem[] }> {
+    return request(`/accuracy/leaderboard?limit=${limit}`, { token });
+  },
+
+  // ----- Weekly Challenge -----
+
+  thisWeekChallenge(token: string): Promise<WeeklyChallenge> {
+    return request("/challenges/this-week", { token });
+  },
+  predictChallenge(token: string, id: string, predictedPct: number): Promise<{ ok: true; id: string }> {
+    return request(`/challenges/${id}/predict`, {
+      method: "POST",
+      body: { predicted_pct: predictedPct },
+      token,
+    });
+  },
+  settleChallenge(token: string, id: string, actualPct: number): Promise<{ winners: number }> {
+    return request(`/admin/challenges/${id}/settle`, {
+      method: "POST",
+      body: { actual_pct: actualPct },
+      token,
+    });
+  },
+
+  // ----- Comments (الحوار) -----
+
+  pollComments(token: string, pollId: string, sort: "top" | "new" = "top"): Promise<{ items: Comment[] }> {
+    return request(`/polls/${pollId}/comments?sort=${sort}`, { token });
+  },
+  postComment(token: string, pollId: string, body: string): Promise<{ id: string }> {
+    return request(`/polls/${pollId}/comments`, { method: "POST", body: { body }, token });
+  },
+  voteComment(token: string, id: string, value: 1 | -1): Promise<{ score: number; upvotes: number; downvotes: number }> {
+    return request(`/comments/${id}/vote`, { method: "POST", body: { value }, token });
   },
 };

@@ -50,6 +50,39 @@ import {
   startSnapshotJob,
 } from "./jobs/snapshot.js";
 import { sseHandler, broadcastEvent } from "./events/sse.js";
+import {
+  getCurrentPulseForUser,
+  getOrCreateTodayPulse,
+  previousPulseSummary,
+  pulseHistory,
+  recordResponse as recordPulseResponse,
+} from "./lib/pulse.js";
+import { getStreak } from "./lib/streak.js";
+import { getCachedOpinionDNA } from "./lib/dna.js";
+import {
+  estimateAudience,
+  listPublisherAudiences,
+  createAudience,
+  type AudienceCriteria,
+} from "./lib/audience.js";
+import { getCachedTrendXIndex } from "./lib/index-metrics.js";
+import {
+  recordPrediction,
+  scorePollPredictions,
+  userAccuracyStats,
+  predictionLeaderboard,
+} from "./lib/predictions.js";
+import {
+  getOrCreateThisWeekChallenge,
+  submitChallengePrediction,
+  settleChallenge,
+} from "./lib/challenges.js";
+import {
+  listComments,
+  postComment,
+  voteOnComment,
+} from "./lib/comments.js";
+import { startDailyJob } from "./jobs/daily.js";
 
 // MARK: - Types
 
@@ -189,6 +222,9 @@ app.use("*", async (c, next) => {
     path === "/health" ||
     path.startsWith("/auth/") ||
     path.startsWith("/reports/") || // print-ready HTML reports auth via query
+    path.startsWith("/public/") ||  // TRENDX Index public endpoint
+    path.startsWith("/embed/") ||   // embeddable widgets
+    path === "/widget.js" ||
     c.req.method === "OPTIONS";
   if (isPublic) return next();
 
@@ -1572,6 +1608,368 @@ app.patch("/admin/sectors/:id", async (c) => {
   return c.json(topicDTO(topic));
 });
 
+// MARK: - Daily Pulse (نبض اليوم)
+//
+// One national question per day, surfaced on iOS home and the dashboard
+// overview. The same JSON shape is consumed by both — the platform is
+// one product, the surfaces are different.
+
+app.get("/pulse/today", async (c) => {
+  const userId = c.get("userId");
+  const payload = await getCurrentPulseForUser(userId);
+  return c.json(payload);
+});
+
+app.get("/pulse/today/anon", async (_c) => {
+  // Embeddable / preview shape — no user_responded flag.
+  const payload = await getOrCreateTodayPulse();
+  return _c.json(payload);
+});
+
+app.post("/pulse/today/respond", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{ option_index?: number; predicted_pct?: number }>();
+  if (typeof body.option_index !== "number") {
+    return c.json({ error: "option_index is required" }, 400);
+  }
+  try {
+    const result = await recordPulseResponse(userId, body.option_index, body.predicted_pct);
+    broadcastEvent({
+      type: "pulse_response",
+      pulse_id: result.pulse.id,
+      total: result.pulse.total_responses,
+      timestamp: new Date().toISOString(),
+    });
+    return c.json(result);
+  } catch (err) {
+    const status = (err as { httpStatus?: number }).httpStatus ?? 400;
+    return c.json({ error: (err as Error).message }, status as 400 | 409);
+  }
+});
+
+app.get("/pulse/yesterday", async (c) => {
+  const previous = await previousPulseSummary();
+  return c.json({ pulse: previous });
+});
+
+app.get("/pulse/history", async (c) => {
+  const days = Math.min(60, Math.max(1, Number(c.req.query("days") ?? "14")));
+  const items = await pulseHistory(days);
+  return c.json({ items });
+});
+
+app.get("/me/streak", async (c) => {
+  const userId = c.get("userId");
+  const streak = await getStreak(userId);
+  return c.json(streak);
+});
+
+// MARK: - Opinion DNA
+
+app.get("/me/dna", async (c) => {
+  const userId = c.get("userId");
+  const dna = await getCachedOpinionDNA(userId);
+  if (!dna) {
+    return c.json({ error: "Not enough vote history yet — vote on at least 3 polls." }, 422);
+  }
+  return c.json(dna);
+});
+
+app.post("/me/dna/refresh", async (c) => {
+  const userId = c.get("userId");
+  const dna = await getCachedOpinionDNA(userId, true);
+  if (!dna) return c.json({ error: "Not enough history" }, 422);
+  return c.json(dna);
+});
+
+// MARK: - Audience Marketplace
+
+app.post("/publisher/audiences/estimate", async (c) => {
+  const userId = c.get("userId");
+  const me = await prisma.user.findUnique({ where: { id: userId }, select: { tier: true } });
+  const body = await c.req.json<{ criteria?: AudienceCriteria }>();
+  if (!body.criteria) return c.json({ error: "criteria is required" }, 400);
+  const est = await estimateAudience(body.criteria, me?.tier ?? "free");
+  return c.json(est);
+});
+
+app.get("/publisher/audiences", async (c) => {
+  const userId = c.get("userId");
+  const list = await listPublisherAudiences(userId);
+  return c.json({
+    items: list.map((a) => ({
+      id: a.id,
+      name: a.name,
+      criteria: a.criteria,
+      available_count: a.availableCount,
+      estimated_price_sar: Number(a.estimatedPrice),
+      status: a.status,
+      poll_id: a.pollId,
+      survey_id: a.surveyId,
+      created_at: a.createdAt.toISOString(),
+    })),
+  });
+});
+
+app.post("/publisher/audiences", async (c) => {
+  const userId = c.get("userId");
+  const me = await prisma.user.findUnique({ where: { id: userId }, select: { tier: true } });
+  const body = await c.req.json<{ name?: string; criteria?: AudienceCriteria }>();
+  if (!body.name || !body.criteria) {
+    return c.json({ error: "name and criteria are required" }, 400);
+  }
+  const created = await createAudience(userId, {
+    name: body.name,
+    criteria: body.criteria,
+    publisherTier: me?.tier ?? "free",
+  });
+  return c.json({
+    id: created.id,
+    name: created.name,
+    available_count: created.availableCount,
+    estimated_price_sar: Number(created.estimatedPrice),
+    status: created.status,
+    created_at: created.createdAt.toISOString(),
+  });
+});
+
+// MARK: - TRENDX Index (public)
+
+app.get("/public/index", async (c) => {
+  const idx = await getCachedTrendXIndex();
+  return c.json(idx);
+});
+
+app.get("/public/index/refresh", async (c) => {
+  // Admin-only refresh; gated by header secret to keep cron simple.
+  const secret = c.req.header("X-Trendx-Cron");
+  if (secret !== process.env.CRON_SECRET) return c.json({ error: "unauthorized" }, 401);
+  const fresh = await getCachedTrendXIndex(true);
+  return c.json(fresh);
+});
+
+// MARK: - Embeddable Widget (poll preview)
+//
+// Renders a tiny self-contained HTML page that any publisher can iframe
+// into their own news site or blog. The widget loads its data from the
+// same JSON endpoint our app uses — no extra surface area.
+
+app.get("/embed/poll/:id", async (c) => {
+  const id = c.req.param("id");
+  const poll = await prisma.poll.findUnique({
+    where: { id },
+    include: {
+      options: { orderBy: { displayOrder: "asc" } },
+    },
+  });
+  if (!poll) {
+    return c.text("<!doctype html><body>poll not found</body>", 404, { "Content-Type": "text/html; charset=utf-8" });
+  }
+  const total = poll.totalVotes || 1;
+  const optionsHtml = poll.options
+    .map((o) => {
+      const pct = total > 0 ? Math.round((o.votesCount / total) * 100) : 0;
+      return `
+        <div class="row">
+          <div class="head"><span>${escapeHtml(o.text)}</span><b>${pct}%</b></div>
+          <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+        </div>`;
+    })
+    .join("");
+
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(poll.title)} — TRENDX</title>
+<style>
+  :root { color-scheme: light; }
+  body{font-family:-apple-system,Tajawal,Inter,system-ui,sans-serif;background:#F4F5FA;color:#1A1B25;margin:0;padding:20px;}
+  .card{background:#fff;border-radius:20px;padding:22px;box-shadow:0 4px 16px rgba(59,91,219,.08);max-width:520px;margin:0 auto;}
+  .eyebrow{font-size:10px;letter-spacing:.16em;color:#3B5BDB;font-weight:700;text-transform:uppercase;}
+  h1{font-size:18px;line-height:1.4;margin:8px 0 16px;font-weight:700;}
+  .row{margin-bottom:14px;}
+  .head{display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:6px;}
+  .bar{height:8px;background:#E4E7F5;border-radius:999px;overflow:hidden;}
+  .fill{height:100%;background:linear-gradient(90deg,#3B5BDB,#4C6EF5);border-radius:999px;transition:width .6s ease;}
+  .footer{margin-top:18px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#868E96;}
+  a{color:#3B5BDB;text-decoration:none;font-weight:700;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="eyebrow">TRENDX POLL</div>
+  <h1>${escapeHtml(poll.title)}</h1>
+  ${optionsHtml}
+  <div class="footer">
+    <span>${total.toLocaleString("en-US")} مشارك</span>
+    <a href="https://t-rend-x.vercel.app/polls/${poll.id}" target="_blank">شاهد التحليل الكامل ←</a>
+  </div>
+</div>
+</body>
+</html>`;
+  return c.text(html, 200, {
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Frame-Options": "ALLOWALL",
+    "Cache-Control": "public, max-age=60",
+  });
+});
+
+app.get("/widget.js", (c) => {
+  const js = `(function(){
+  var hosts = document.querySelectorAll('[data-trendx-poll]');
+  hosts.forEach(function(el){
+    var id = el.getAttribute('data-trendx-poll');
+    if(!id) return;
+    var iframe = document.createElement('iframe');
+    iframe.src = 'https://trendx-production.up.railway.app/embed/poll/' + id;
+    iframe.style.cssText = 'border:0;width:100%;max-width:560px;height:420px;display:block;margin:0 auto;';
+    iframe.loading = 'lazy';
+    iframe.title = 'TRENDX Poll';
+    el.innerHTML = '';
+    el.appendChild(iframe);
+  });
+})();`;
+  return c.text(js, 200, {
+    "Content-Type": "application/javascript; charset=utf-8",
+    "Cache-Control": "public, max-age=86400",
+  });
+});
+
+// MARK: - Predictive Accuracy
+
+app.post("/polls/:id/predict", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const body = await c.req.json<{ predicted_pct?: number }>();
+  if (typeof body.predicted_pct !== "number") {
+    return c.json({ error: "predicted_pct is required" }, 400);
+  }
+  try {
+    const result = await recordPrediction(userId, id, body.predicted_pct);
+    return c.json(result);
+  } catch (err) {
+    const status = (err as { httpStatus?: number }).httpStatus ?? 400;
+    return c.json({ error: (err as Error).message }, status as 400);
+  }
+});
+
+app.post("/polls/:id/predict/score", async (c) => {
+  // Open to publisher of the poll OR admin; cron triggers it on close.
+  const id = c.req.param("id");
+  const result = await scorePollPredictions(id);
+  return c.json(result);
+});
+
+app.get("/me/accuracy", async (c) => {
+  const userId = c.get("userId");
+  const stats = await userAccuracyStats(userId);
+  return c.json(stats);
+});
+
+app.get("/accuracy/leaderboard", async (c) => {
+  const limit = Math.min(50, Math.max(5, Number(c.req.query("limit") ?? "25")));
+  const items = await predictionLeaderboard(limit);
+  return c.json({ items });
+});
+
+// MARK: - Weekly Challenge
+
+app.get("/challenges/this-week", async (c) => {
+  const userId = c.get("userId");
+  const ch = await getOrCreateThisWeekChallenge();
+  const myPrediction = await prisma.weeklyChallengePrediction.findUnique({
+    where: { challengeId_userId: { challengeId: ch.id, userId } },
+  });
+  const totalPredictions = await prisma.weeklyChallengePrediction.count({
+    where: { challengeId: ch.id },
+  });
+  return c.json({
+    id: ch.id,
+    week_start: ch.weekStart,
+    question: ch.question,
+    description: ch.description,
+    metric_label: ch.metricLabel,
+    closes_at: ch.closesAt.toISOString(),
+    status: ch.status,
+    target_pct: ch.targetPct,
+    reward_points: ch.rewardPoints,
+    total_predictions: totalPredictions,
+    my_prediction: myPrediction
+      ? {
+          predicted_pct: myPrediction.predictedPct,
+          distance: myPrediction.distance,
+          rank: myPrediction.rank,
+        }
+      : null,
+  });
+});
+
+app.post("/challenges/:id/predict", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const body = await c.req.json<{ predicted_pct?: number }>();
+  if (typeof body.predicted_pct !== "number") {
+    return c.json({ error: "predicted_pct is required" }, 400);
+  }
+  const created = await submitChallengePrediction(userId, id, body.predicted_pct);
+  return c.json({ ok: true, id: created.id });
+});
+
+app.post("/admin/challenges/:id/settle", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const id = c.req.param("id");
+  const body = await c.req.json<{ actual_pct?: number }>();
+  if (typeof body.actual_pct !== "number") return c.json({ error: "actual_pct is required" }, 400);
+  const result = await settleChallenge(id, body.actual_pct);
+  return c.json(result);
+});
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// MARK: - Comments (الحوار بعد التصويت)
+
+app.get("/polls/:id/comments", async (c) => {
+  const id = c.req.param("id");
+  const sort = (c.req.query("sort") as "top" | "new") ?? "top";
+  const items = await listComments(id, sort);
+  return c.json({ items });
+});
+
+app.post("/polls/:id/comments", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const body = await c.req.json<{ body?: string }>();
+  if (!body.body) return c.json({ error: "body is required" }, 400);
+  try {
+    const result = await postComment(userId, id, body.body);
+    return c.json(result);
+  } catch (err) {
+    const status = (err as { httpStatus?: number }).httpStatus ?? 400;
+    return c.json({ error: (err as Error).message }, status as 400 | 403);
+  }
+});
+
+app.post("/comments/:id/vote", async (c) => {
+  const userId = c.get("userId");
+  const id = c.req.param("id");
+  const body = await c.req.json<{ value?: 1 | -1 }>();
+  if (body.value !== 1 && body.value !== -1) {
+    return c.json({ error: "value must be 1 or -1" }, 400);
+  }
+  const result = await voteOnComment(userId, id, body.value);
+  return c.json(result);
+});
+
 // MARK: - Realtime (SSE)
 
 app.get("/events/dashboard", (c) => sseHandler(c));
@@ -1608,6 +2006,10 @@ const server = serve(
 // SNAPSHOT_DISABLED=1.
 if (process.env.SNAPSHOT_DISABLED !== "1") {
   startSnapshotJob();
+}
+
+if (process.env.DAILY_DISABLED !== "1") {
+  startDailyJob();
 }
 
 // Optional one-time demo seeder. We run it in the background **after** the

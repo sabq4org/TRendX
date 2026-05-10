@@ -78,8 +78,32 @@ struct HomeScreen: View {
 
     private var postsContent: some View {
         VStack(spacing: 24) {
+            // Daily Pulse spotlight — same JSON as the Web /pulse page.
+            NavigationLink {
+                PulseTodayScreen()
+                    .environmentObject(store)
+                    .trendxRTL()
+            } label: {
+                PulseHomeCard()
+                    .environmentObject(store)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+
             AIBriefCard(brief: TrendXAI.dailyBrief(activePolls: store.activePolls, topics: store.topics, user: store.currentUser))
                 .padding(.horizontal, 20)
+
+            // National TRENDX Index card
+            NavigationLink {
+                TrendXIndexScreen()
+                    .environmentObject(store)
+                    .trendxRTL()
+            } label: {
+                TrendXIndexHomeCard()
+                    .environmentObject(store)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
 
             HomeMomentumStrip(
                 activeCount: store.activePolls.count,

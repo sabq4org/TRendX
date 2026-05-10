@@ -10,16 +10,24 @@ import {
   GitCompareArrows,
   UserCircle,
   ShieldCheck,
+  Activity,
+  Target,
+  Users,
+  TrendingUp,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
   { href: "/overview",         label: "النظرة العامة", icon: LayoutDashboard },
+  { href: "/pulse",            label: "نبض اليوم",      icon: Activity },
+  { href: "/trendx-index",     label: "مؤشّر TRENDX",   icon: TrendingUp },
   { href: "/polls",            label: "الاستطلاعات",   icon: ListChecks },
   { href: "/surveys",          label: "الاستبيانات",   icon: ClipboardList },
   { href: "/sectors",          label: "القطاعات",      icon: Layers },
   { href: "/sectors/compare",  label: "مقارنة قطاعات",  icon: GitCompareArrows },
+  { href: "/audiences",        label: "سوق الجمهور",   icon: Users },
+  { href: "/accuracy",         label: "دقّة التنبّؤ",    icon: Target },
   { href: "/account",          label: "الحساب",         icon: UserCircle },
 ];
 

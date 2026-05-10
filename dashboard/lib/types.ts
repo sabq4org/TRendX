@@ -367,3 +367,156 @@ export type JobsStatus = {
   recent_webhook_deliveries: AuditLogEntry[];
   server_time: string;
 };
+
+// ----- Daily Pulse + Streak (نبض اليوم) -----
+
+export type DailyPulse = {
+  id: string;
+  pulse_date: string;
+  question: string;
+  description: string | null;
+  options: Array<{ index: number; text: string; votes: number; percentage: number }>;
+  total_responses: number;
+  status: string;
+  closes_at: string;
+  reward_points: number;
+  topic_id: string | null;
+  ai_summary: string | null;
+  user_responded?: boolean;
+  user_choice?: number | null;
+};
+
+export type PulseHistoryItem = {
+  pulse_date: string;
+  question: string;
+  total_responses: number;
+  leading_option_text: string | null;
+  leading_pct: number;
+};
+
+export type UserStreak = {
+  current_streak: number;
+  longest_streak: number;
+  total_pulses: number;
+  freezes_left: number;
+  last_pulse_date?: string | null;
+  status?: "active_today" | "active_yesterday" | "broken" | "never";
+  is_personal_best?: boolean;
+  delta?: "+1" | "kept" | "frozen" | "reset";
+};
+
+// ----- Opinion DNA -----
+
+export type OpinionDNA = {
+  computed_at: string;
+  sample_size: number;
+  axes: Array<{
+    key: string;
+    label_high: string;
+    label_low: string;
+    score: number;
+  }>;
+  archetype: { title: string; blurb: string };
+  share_caption: string;
+};
+
+// ----- Audience Marketplace -----
+
+export type AudienceCriteria = {
+  gender?: string[];
+  age_groups?: string[];
+  cities?: string[];
+  regions?: string[];
+  devices?: string[];
+  topic_ids?: string[];
+};
+
+export type AudienceEstimate = {
+  available_count: number;
+  estimated_price_sar: number;
+  per_response_price_sar: number;
+  median_response_minutes: number;
+  representativeness: number;
+  breakdown: {
+    by_gender: Record<string, number>;
+    by_age_group: Record<string, number>;
+    by_city: Record<string, number>;
+  };
+};
+
+export type Audience = {
+  id: string;
+  name: string;
+  criteria: AudienceCriteria;
+  available_count: number;
+  estimated_price_sar: number;
+  status: string;
+  poll_id?: string | null;
+  survey_id?: string | null;
+  created_at: string;
+};
+
+// ----- TRENDX Index (public) -----
+
+export type TrendXIndexMetric = {
+  slug: string;
+  name: string;
+  value: number;
+  change_24h: number;
+  direction: "up" | "down" | "flat";
+  sample_size: number;
+  blurb: string;
+};
+
+export type TrendXIndex = {
+  computed_at: string;
+  composite: number;
+  composite_change_24h: number;
+  total_responses: number;
+  metrics: TrendXIndexMetric[];
+};
+
+// ----- Predictive Accuracy + Weekly Challenge -----
+
+export type UserAccuracy = {
+  predictions: number;
+  scored: number;
+  average_accuracy: number;
+  best_accuracy: number;
+  rank_percentile: number;
+};
+
+export type PredictionLeaderboardItem = {
+  user_id: string;
+  name: string;
+  avatar_initial: string;
+  predictions: number;
+  average_accuracy: number;
+};
+
+export type WeeklyChallenge = {
+  id: string;
+  week_start: string;
+  question: string;
+  description: string | null;
+  metric_label: string;
+  closes_at: string;
+  status: string;
+  target_pct: number | null;
+  reward_points: number;
+  total_predictions: number;
+  my_prediction: { predicted_pct: number; distance: number | null; rank: number | null } | null;
+};
+
+// ----- Comments (الحوار) -----
+
+export type Comment = {
+  id: string;
+  body: string;
+  score: number;
+  upvotes: number;
+  downvotes: number;
+  created_at: string;
+  author_vote_option_id: string | null;
+  user: { id: string; name: string; avatar_initial: string };
+};

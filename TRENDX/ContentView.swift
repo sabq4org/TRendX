@@ -16,16 +16,16 @@ struct ContentView: View {
                 ZStack(alignment: .bottom) {
                     // Main Content
                     TabView(selection: $store.selectedTab) {
-                        HomeScreen()
+                        NavigationStack { HomeScreen() }
                             .tag(TabItem.home)
-                        
-                        PollsScreen()
+
+                        NavigationStack { PollsScreen() }
                             .tag(TabItem.polls)
-                        
-                        GiftsScreen()
+
+                        NavigationStack { GiftsScreen() }
                             .tag(TabItem.gifts)
-                        
-                        AccountScreen()
+
+                        NavigationStack { AccountScreen() }
                             .tag(TabItem.account)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))

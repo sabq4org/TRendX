@@ -33,6 +33,12 @@ final class AppStore: ObservableObject {
     private let aiRepository: AIRepository
     private var authSession: AuthSession?
 
+    /// Public read-only access to the live access token. Layer-3 screens
+    /// (Pulse, DNA, Index, …) use this to call `TrendXAPIClient` directly
+    /// for read-only intelligence endpoints.
+    var accessToken: String? { authSession?.accessToken }
+    var apiClient: TrendXAPIClient { client }
+
     var isRemoteEnabled: Bool {
         client.config.isConfigured
     }
