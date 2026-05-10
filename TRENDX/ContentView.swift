@@ -30,7 +30,7 @@ struct ContentView: View {
                             .tag(TabItem.account)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
-                    
+
                     // Custom Tab Bar
                     TrendXTabBar(selectedTab: $store.selectedTab)
 
@@ -41,11 +41,15 @@ struct ContentView: View {
                             .frame(maxHeight: .infinity, alignment: .top)
                     }
                 }
+                // Only the authed shell ignores the keyboard so the
+                // tab bar doesn't bounce when typing in a sheet. The
+                // unauthenticated sign-up flow needs full keyboard
+                // avoidance, so we keep this scoped to authed.
+                .ignoresSafeArea(.keyboard)
             } else {
                 LoginScreen()
             }
         }
-        .ignoresSafeArea(.keyboard)
         .environmentObject(store)
         .trendxRTL()
         .sheet(isPresented: $store.showCreatePoll) {

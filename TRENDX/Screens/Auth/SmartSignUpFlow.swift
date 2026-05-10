@@ -99,6 +99,11 @@ struct SmartSignUpFlow: View {
     var body: some View {
         ZStack {
             TrendXAmbientBackground()
+                // Tap anywhere on the background drops the soft
+                // keyboard. We use `simultaneousGesture` so it never
+                // competes with chip / button taps in the input area.
+                .contentShape(Rectangle())
+                .onTapGesture { dismissKeyboard() }
 
             VStack(spacing: 0) {
                 header
@@ -124,8 +129,12 @@ struct SmartSignUpFlow: View {
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
                         .padding(.bottom, 18)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .scrollDismissesKeyboard(.interactively)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        inputBar
+                    }
                     .onChange(of: messages.count) { _, _ in
                         withAnimation(.easeOut(duration: 0.25)) {
                             if let last = messages.last {
@@ -141,18 +150,6 @@ struct SmartSignUpFlow: View {
                         }
                     }
                 }
-
-                // Inline input area for the current step
-                inputArea
-                    .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 18)
-                    .background(.ultraThinMaterial)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(TrendXTheme.tertiaryInk.opacity(0.1))
-                            .frame(height: 0.5)
-                    }
             }
         }
         .trendxRTL()
@@ -203,6 +200,33 @@ struct SmartSignUpFlow: View {
         .padding(.horizontal, 18)
         .padding(.top, 18)
         .padding(.bottom, 12)
+    }
+
+    // MARK: - Input bar (pinned to keyboard)
+
+    /// Pinned bar at the bottom of the conversation. Returns an empty
+    /// view (zero height — no whitespace, no tappable scrim) for steps
+    /// that have no input control. iOS will lift this bar with the
+    /// keyboard automatically because it's hosted via `safeAreaInset`.
+    @ViewBuilder
+    private var inputBar: some View {
+        switch step {
+        case .greeting, .finishing, .done:
+            // Render nothing — and crucially, no padded background —
+            // so the area beneath the last message is fully inert.
+            Color.clear.frame(height: 0)
+        default:
+            inputArea
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 14)
+                .background(.ultraThinMaterial)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(TrendXTheme.tertiaryInk.opacity(0.1))
+                        .frame(height: 0.5)
+                }
+        }
     }
 
     // MARK: - Input area (per step)
