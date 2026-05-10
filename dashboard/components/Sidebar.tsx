@@ -7,20 +7,28 @@ import {
   ListChecks,
   ClipboardList,
   Layers,
+  GitCompareArrows,
   UserCircle,
+  ShieldCheck,
 } from "lucide-react";
 import clsx from "clsx";
+import { useAuth } from "@/lib/auth";
 
 const NAV = [
-  { href: "/overview", label: "النظرة العامة", icon: LayoutDashboard },
-  { href: "/polls",    label: "الاستطلاعات",   icon: ListChecks },
-  { href: "/surveys",  label: "الاستبيانات",   icon: ClipboardList },
-  { href: "/sectors",  label: "القطاعات",      icon: Layers },
-  { href: "/account",  label: "الحساب",         icon: UserCircle },
+  { href: "/overview",         label: "النظرة العامة", icon: LayoutDashboard },
+  { href: "/polls",            label: "الاستطلاعات",   icon: ListChecks },
+  { href: "/surveys",          label: "الاستبيانات",   icon: ClipboardList },
+  { href: "/sectors",          label: "القطاعات",      icon: Layers },
+  { href: "/sectors/compare",  label: "مقارنة قطاعات",  icon: GitCompareArrows },
+  { href: "/account",          label: "الحساب",         icon: UserCircle },
 ];
+
+const ADMIN_ITEM = { href: "/admin", label: "لوحة الإدارة", icon: ShieldCheck };
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <aside className="w-72 shrink-0 min-h-screen sticky top-0 h-screen flex flex-col p-5">
@@ -46,7 +54,12 @@ export function Sidebar() {
           </div>
           <ul className="space-y-1">
             {NAV.map((item) => {
-              const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+              // Use exact match for /sectors so /sectors/compare doesn't
+              // light up the parent sector page too.
+              const active =
+                item.href === "/sectors"
+                  ? pathname === "/sectors" || (pathname?.startsWith("/sectors/") && pathname !== "/sectors/compare")
+                  : pathname === item.href || pathname?.startsWith(item.href + "/");
               const Icon = item.icon;
               return (
                 <li key={item.href}>
@@ -68,6 +81,36 @@ export function Sidebar() {
                 </li>
               );
             })}
+
+            {isAdmin && (
+              <>
+                <li className="pt-3">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink-mute px-3 mb-2">
+                    إدارة
+                  </div>
+                </li>
+                <li>
+                  {(() => {
+                    const Icon = ADMIN_ITEM.icon;
+                    const active = pathname?.startsWith("/admin");
+                    return (
+                      <Link
+                        href={ADMIN_ITEM.href}
+                        className={clsx(
+                          "relative flex items-center gap-3 px-3.5 py-3 rounded-chip text-sm font-medium transition group",
+                          active
+                            ? "bg-accent-500 text-canvas-card shadow-card-lift"
+                            : "text-ink-soft hover:bg-canvas-well/70 hover:text-ink",
+                        )}
+                      >
+                        <Icon size={17} strokeWidth={active ? 2.4 : 2} />
+                        <span className="font-semibold">{ADMIN_ITEM.label}</span>
+                      </Link>
+                    );
+                  })()}
+                </li>
+              </>
+            )}
           </ul>
         </nav>
 

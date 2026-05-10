@@ -1,59 +1,94 @@
 "use client";
 
+import clsx from "clsx";
+import { fmtInt } from "@/lib/format";
 import { HEATMAP_RAMP } from "@/lib/chart-colors";
 
+type Cell = { x: string; y: string; count: number; row_pct: number };
+
 /**
- * Hour-of-day × day-of-week heatmap. Cells are tinted by frequency.
- * Used both for "votes by hour × day" and (later) for survey question ×
- * response correlations.
+ * SVG-driven heatmap. Rows = y dimension, columns = x dimension.
+ * Cell colour intensity scales with row_pct (0..100) so dominance
+ * within each demographic slice is what we visualise — not raw count.
  */
-
-type Cell = { row: string; col: string; value: number };
-
-function colorFor(value: number, max: number): string {
-  if (max === 0) return HEATMAP_RAMP[0];
-  const idx = Math.min(HEATMAP_RAMP.length - 1, Math.round((value / max) * (HEATMAP_RAMP.length - 1)));
-  return HEATMAP_RAMP[idx];
-}
-
 export function Heatmap({
-  cells, rowLabels, colLabels,
+  xKeys,
+  yKeys,
+  cells,
+  xLabel,
+  yLabel,
 }: {
+  xKeys: string[];
+  yKeys: string[];
   cells: Cell[];
-  rowLabels: string[];
-  colLabels: string[];
+  xLabel?: string;
+  yLabel?: string;
 }) {
-  const max = Math.max(0, ...cells.map((c) => c.value));
-  const cellByKey = new Map(cells.map((c) => [`${c.row}-${c.col}`, c.value]));
+  if (xKeys.length === 0 || yKeys.length === 0) {
+    return (
+      <div className="text-center py-12 text-sm text-ink-mute">
+        لا توجد بيانات كافية لرسم الخريطة الحرارية بعد.
+      </div>
+    );
+  }
+
+  const lookup = new Map<string, Cell>();
+  for (const c of cells) lookup.set(`${c.y}|${c.x}`, c);
+
+  function colorFor(pct: number): string {
+    if (pct <= 0) return HEATMAP_RAMP[0];
+    const idx = Math.min(HEATMAP_RAMP.length - 1, Math.floor((pct / 100) * (HEATMAP_RAMP.length - 1)) + 1);
+    return HEATMAP_RAMP[idx];
+  }
 
   return (
     <div className="overflow-x-auto">
-      <table className="border-separate border-spacing-1">
+      <table className="border-separate border-spacing-1 mx-auto" dir="ltr">
         <thead>
           <tr>
-            <th className="w-16" />
-            {colLabels.map((col) => (
-              <th key={col} className="text-[10px] font-semibold text-ink-mute pb-1 px-1">
-                {col}
+            <th className="p-2 text-[10px] font-bold uppercase tracking-[0.14em] text-ink-mute">
+              {yLabel ?? ""}
+            </th>
+            {xKeys.map((x) => (
+              <th
+                key={x}
+                className="px-2 py-1 text-[11px] font-semibold text-ink-soft text-center min-w-[80px]"
+              >
+                {x}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rowLabels.map((row) => (
-            <tr key={row}>
-              <td className="text-[10px] font-semibold text-ink-soft pe-2 text-end">
-                {row}
-              </td>
-              {colLabels.map((col) => {
-                const v = cellByKey.get(`${row}-${col}`) ?? 0;
+          {yKeys.map((y) => (
+            <tr key={y}>
+              <th
+                scope="row"
+                className="px-3 py-2 text-[11px] font-semibold text-ink-soft text-end whitespace-nowrap"
+              >
+                {y}
+              </th>
+              {xKeys.map((x) => {
+                const cell = lookup.get(`${y}|${x}`);
+                const pct = cell?.row_pct ?? 0;
+                const count = cell?.count ?? 0;
+                const dark = pct > 55;
                 return (
-                  <td key={`${row}-${col}`}>
-                    <div
-                      title={`${row} • ${col}: ${v}`}
-                      className="w-7 h-7 rounded-md transition hover:scale-110"
-                      style={{ background: colorFor(v, max) }}
-                    />
+                  <td
+                    key={`${y}|${x}`}
+                    className={clsx(
+                      "rounded-chip text-center align-middle min-w-[80px] h-12 transition-transform hover:scale-105",
+                      dark ? "text-canvas-card" : "text-ink",
+                    )}
+                    style={{ background: colorFor(pct) }}
+                    title={`${y} × ${x} — ${pct}% (${count})`}
+                  >
+                    <div className="text-sm font-display font-bold tabular leading-tight">
+                      {pct.toFixed(0)}%
+                    </div>
+                    <div className={clsx("text-[10px] tabular leading-none mt-0.5", dark ? "text-canvas-card/80" : "text-ink-mute")}>
+                      {fmtInt(count)}
+                    </div>
                   </td>
                 );
               })}
@@ -61,16 +96,11 @@ export function Heatmap({
           ))}
         </tbody>
       </table>
-
-      <div className="flex items-center gap-2 mt-3">
-        <span className="text-[10px] text-ink-mute">قليل</span>
-        <div className="flex gap-0.5">
-          {HEATMAP_RAMP.map((c) => (
-            <div key={c} className="w-4 h-2 rounded-sm" style={{ background: c }} />
-          ))}
+      {xLabel && (
+        <div className="text-center mt-2 text-[10px] uppercase tracking-[0.14em] text-ink-mute">
+          {xLabel}
         </div>
-        <span className="text-[10px] text-ink-mute">كثيف</span>
-      </div>
+      )}
     </div>
   );
 }

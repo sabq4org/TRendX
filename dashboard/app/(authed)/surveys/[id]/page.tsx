@@ -12,16 +12,20 @@ import { HBar } from "@/components/charts/HBar";
 import { Donut } from "@/components/charts/Donut";
 import { fmtInt, fmtSeconds, fmtPctRaw, deviceLabel, genderLabel } from "@/lib/format";
 import clsx from "clsx";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Download } from "lucide-react";
 import type { SurveyAIReport } from "@/lib/types";
+import { SurveyHeatmapsTab } from "@/components/survey/HeatmapsTab";
+import { SurveyPersonasTab } from "@/components/survey/PersonasTab";
 
-const TABS = ["summary", "questions", "correlations", "ai"] as const;
+const TABS = ["summary", "questions", "correlations", "heatmap", "personas", "ai"] as const;
 type Tab = typeof TABS[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   summary: "ملخّص",
   questions: "الأسئلة",
   correlations: "الارتباطات",
+  heatmap: "خريطة حرارية",
+  personas: "الشخصيّات",
   ai: "تقرير AI",
 };
 
@@ -78,6 +82,14 @@ export default function SurveyDetailPage({ params }: { params: Promise<{ id: str
         eyebrow="SURVEY INTELLIGENCE"
         title={s.title}
         subtitle={s.description ?? "تحليل ذكاء استبياني كامل"}
+        right={
+          <button
+            onClick={() => token && window.open(`/reports/survey/${s.id}?token=${token}`, "_blank")}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
+          >
+            <Download size={12} /> تقرير قابل للطباعة
+          </button>
+        }
       />
 
       <main className="flex-1 px-10 pb-10 space-y-7">
@@ -246,6 +258,10 @@ export default function SurveyDetailPage({ params }: { params: Promise<{ id: str
             )}
           </div>
         )}
+
+        {tab === "heatmap" && <SurveyHeatmapsTab survey={s} />}
+
+        {tab === "personas" && <SurveyPersonasTab surveyId={s.id} />}
 
         {tab === "ai" && (
           <div className="space-y-6 stagger">

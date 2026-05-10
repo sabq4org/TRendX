@@ -82,12 +82,15 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
 
   const trend = a.timeline.daily_cumulative.map((p) => ({ day: p.day.slice(5), value: p.cumulative_votes }));
 
-  const hourCells = Object.entries(a.timeline.by_hour_of_day).map(([hour, value]) => ({
-    row: "اليوم",
-    col: `${hour}h`,
-    value,
+  const hourTotal = Object.values(a.timeline.by_hour_of_day).reduce((sum, v) => sum + v, 0);
+  const hourEntries = Object.entries(a.timeline.by_hour_of_day);
+  const hourCols = hourEntries.map(([h]) => `${h}h`).sort((a, b) => parseInt(a) - parseInt(b));
+  const hourCells = hourEntries.map(([hour, value]) => ({
+    x: `${hour}h`,
+    y: "اليوم",
+    count: value,
+    row_pct: hourTotal > 0 ? Number(((value / hourTotal) * 100).toFixed(1)) : 0,
   }));
-  const hourCols = Array.from(new Set(hourCells.map((c) => c.col))).sort();
 
   return (
     <>
@@ -174,7 +177,11 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 stagger">
           <ChartCard className="lg:col-span-2" eyebrow="HEATMAP" title="الكثافة الزمنية" subtitle="عدد الأصوات حسب ساعة اليوم">
-            {hourCells.length > 0 ? <Heatmap cells={hourCells} rowLabels={["اليوم"]} colLabels={hourCols} /> : <Empty />}
+            {hourCells.length > 0 ? (
+              <Heatmap cells={hourCells} xKeys={hourCols} yKeys={["اليوم"]} xLabel="ساعة UTC" />
+            ) : (
+              <Empty />
+            )}
           </ChartCard>
 
           <ChartCard eyebrow="GENDER" title="توزيع الجنس" subtitle="نسبة كل فئة من العيّنة">

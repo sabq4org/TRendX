@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { Header } from "@/components/Header";
 import { fmtInt } from "@/lib/format";
-import { LogOut } from "lucide-react";
+import { LogOut, Webhook, ChevronLeft } from "lucide-react";
 
 const TIER_LABEL = {
   enterprise: "Enterprise",
@@ -60,6 +61,23 @@ export default function AccountPage() {
           <Stat label="الجنس" value={user.gender === "male" ? "ذكر" : user.gender === "female" ? "أنثى" : "—"} />
           <Stat label="سنة الميلاد" value={user.birth_year ? String(user.birth_year) : "—"} />
         </div>
+
+        <Link
+          href="/account/webhooks"
+          className="group bg-canvas-card rounded-card shadow-card p-6 hover:shadow-card-lift transition-all flex items-center gap-5"
+        >
+          <div className="w-12 h-12 rounded-chip bg-ai-50 grid place-items-center">
+            <Webhook size={20} className="text-ai-700" />
+          </div>
+          <div className="flex-1">
+            <div className="text-eyebrow text-brand-600 mb-1">DEVELOPER TOOLS</div>
+            <h3 className="text-lg font-display font-bold text-ink tracking-tight">Webhooks</h3>
+            <p className="text-[12px] text-ink-mute font-light mt-1">
+              تنبيهات HTTPS موقّعة لكل صوت ولكل إكمال — لربط TRENDX بأنظمتك.
+            </p>
+          </div>
+          <ChevronLeft className="text-ink-ghost group-hover:text-brand-600 group-hover:-translate-x-1 transition-transform" size={18} />
+        </Link>
 
         <div className="bg-canvas-well rounded-card p-6 border border-ink-line/40">
           <div className="text-eyebrow text-brand-600 mb-2">API ENDPOINT</div>

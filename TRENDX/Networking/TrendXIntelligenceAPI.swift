@@ -1,0 +1,228 @@
+//
+//  TrendXIntelligenceAPI.swift
+//  TRENDX
+//
+//  Strongly-typed Swift client for the Layer-3 backend endpoints
+//  (deep analytics, persona detection, sector benchmarking, sentiment
+//  timelines). The shapes mirror the snake_case JSON returned by Hono;
+//  `JSONDecoder.keyDecodingStrategy = .convertFromSnakeCase` (already
+//  configured on `TrendXAPIClient`) takes care of the conversion.
+//
+//  These endpoints are read-only and idempotent — safe to call from
+//  any view, keep the requests behind a publisher-mode flag in the UI
+//  if you only want to expose them on certain accounts.
+//
+
+import Foundation
+
+// MARK: - Personas
+
+struct TrendXModalAnswer: Decodable {
+    let questionId: UUID
+    let questionTitle: String
+    let optionText: String
+}
+
+struct TrendXPersona: Decodable, Identifiable {
+    var id: Int { clusterIndex }
+    let clusterIndex: Int
+    let size: Int
+    let sharePct: Double
+    let dominantGender: String?
+    let dominantAgeGroup: String?
+    let dominantCity: String?
+    let name: String
+    let description: String
+    let traits: [String]
+    let representativeQuote: String
+    let modalAnswers: [TrendXModalAnswer]
+}
+
+struct TrendXSurveyPersonas: Decodable {
+    let surveyId: UUID
+    let k: Int
+    let sampleSize: Int
+    let cached: Bool
+    let generatedAt: String
+    let promptVersion: String
+    let model: String
+    let personas: [TrendXPersona]
+}
+
+// MARK: - Sentiment timeline
+
+struct TrendXSentimentDay: Decodable {
+    let date: String
+    let sentiment: Double
+    let sample: Int
+    let polls: Int
+    let surveys: Int
+}
+
+struct TrendXSentimentTimeline: Decodable {
+    let topicId: UUID
+    let topicName: String
+    let days: Int
+    let series: [TrendXSentimentDay]
+    let currentScore: Double
+    let direction: String      // "rising" | "falling" | "stable"
+    let delta30d: Double
+    let computedAt: String
+}
+
+// MARK: - Sector benchmark
+
+struct TrendXBenchmarkRow: Decodable, Identifiable {
+    var id: UUID { topicId }
+    let topicId: UUID
+    let topicName: String
+    let topicSlug: String
+    let pollsCount: Int
+    let surveysCount: Int
+    let totalVotes: Int
+    let totalResponses: Int
+    let avgCompletionRate: Int
+    let followersCount: Int
+    let sentimentScore: Double?
+    let sentimentDirection: String?
+}
+
+struct TrendXBenchmarkLeaders: Decodable {
+    let byEngagement: UUID?
+    let byCompletion: UUID?
+    let bySentiment: UUID?
+    let byFollowers: UUID?
+}
+
+struct TrendXSectorBenchmark: Decodable {
+    let topicIds: [UUID]
+    let rows: [TrendXBenchmarkRow]
+    let leaders: TrendXBenchmarkLeaders
+    let computedAt: String
+}
+
+// MARK: - Heatmap
+
+struct TrendXHeatmapCell: Decodable {
+    let x: String
+    let y: String
+    let count: Int
+    let rowPct: Double
+}
+
+struct TrendXHeatmap: Decodable {
+    let surveyId: UUID?
+    let pollId: UUID?
+    let questionId: UUID?
+    let xDim: String
+    let yDim: String
+    let xKeys: [String]
+    let yKeys: [String]
+    let cells: [TrendXHeatmapCell]
+    let total: Int
+    let computedAt: String
+}
+
+// MARK: - Cross-question
+
+struct TrendXCrossQuestionCell: Decodable {
+    let q1OptionId: UUID
+    let q2OptionId: UUID
+    let count: Int
+    let conditionalPct: Double
+}
+
+struct TrendXCrossQuestion: Decodable {
+    struct Question: Decodable {
+        struct Option: Decodable { let id: UUID; let text: String }
+        let id: UUID
+        let title: String
+        let options: [Option]
+    }
+    let surveyId: UUID
+    let q1: Question
+    let q2: Question
+    let matrix: [[TrendXCrossQuestionCell]]
+    let chiSquared: Double
+    let degreesOfFreedom: Int
+    let significance: String
+    let sampleSize: Int
+    let computedAt: String
+}
+
+// MARK: - Client extension
+
+extension TrendXAPIClient {
+    /// Persona profiles for a completed survey. Heavy first call (k-medoids
+    /// + GPT-4o); subsequent calls within 6h are served from cache.
+    func surveyPersonas(
+        surveyId: UUID,
+        accessToken: String,
+        forceRefresh: Bool = false
+    ) async throws -> TrendXSurveyPersonas {
+        let suffix = forceRefresh ? "?refresh=1" : ""
+        return try await get("/surveys/\(surveyId.uuidString)/personas\(suffix)",
+                             accessToken: accessToken)
+    }
+
+    /// Daily sentiment for a topic over the last `days` days (7..90).
+    func topicSentimentTimeline(
+        topicId: UUID,
+        days: Int = 30,
+        accessToken: String
+    ) async throws -> TrendXSentimentTimeline {
+        try await get("/analytics/topic/\(topicId.uuidString)/sentiment-timeline?days=\(days)",
+                      accessToken: accessToken)
+    }
+
+    /// Side-by-side benchmark of 2..6 sectors.
+    func sectorBenchmark(
+        topicIds: [UUID],
+        accessToken: String
+    ) async throws -> TrendXSectorBenchmark {
+        let csv = topicIds.map(\.uuidString).joined(separator: ",")
+        return try await get("/analytics/sectors/benchmark?topic_ids=\(csv)",
+                             accessToken: accessToken)
+    }
+
+    /// Two-dimensional heatmap of vote demographics for a poll.
+    func pollHeatmap(
+        pollId: UUID,
+        x: String,
+        y: String,
+        optionId: UUID? = nil,
+        accessToken: String
+    ) async throws -> TrendXHeatmap {
+        var path = "/analytics/poll/\(pollId.uuidString)/heatmap?x=\(x)&y=\(y)"
+        if let optionId { path += "&option_id=\(optionId.uuidString)" }
+        return try await get(path, accessToken: accessToken)
+    }
+
+    /// Two-dimensional heatmap of survey response demographics, optionally
+    /// filtered by a chosen question/option.
+    func surveyHeatmap(
+        surveyId: UUID,
+        x: String,
+        y: String,
+        questionId: UUID? = nil,
+        optionId: UUID? = nil,
+        accessToken: String
+    ) async throws -> TrendXHeatmap {
+        var path = "/analytics/survey/\(surveyId.uuidString)/heatmap?x=\(x)&y=\(y)"
+        if let questionId { path += "&question_id=\(questionId.uuidString)" }
+        if let optionId   { path += "&option_id=\(optionId.uuidString)" }
+        return try await get(path, accessToken: accessToken)
+    }
+
+    /// Joint distribution between two questions of one survey (with χ²
+    /// significance bucket).
+    func surveyCrossQuestion(
+        surveyId: UUID,
+        q1: UUID,
+        q2: UUID,
+        accessToken: String
+    ) async throws -> TrendXCrossQuestion {
+        try await get("/analytics/survey/\(surveyId.uuidString)/cross-question?q1=\(q1.uuidString)&q2=\(q2.uuidString)",
+                      accessToken: accessToken)
+    }
+}

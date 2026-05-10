@@ -10,10 +10,11 @@ const TIER_LABEL = {
   free: "Free",
 } as const;
 
-export function Header({ title, subtitle, eyebrow }: {
+export function Header({ title, subtitle, eyebrow, right }: {
   title: string;
   subtitle?: string;
   eyebrow?: string;
+  right?: React.ReactNode;
 }) {
   const { user, signOut } = useAuth();
 
@@ -34,6 +35,7 @@ export function Header({ title, subtitle, eyebrow }: {
               {subtitle}
             </p>
           )}
+          {right && <div className="mt-4">{right}</div>}
         </div>
 
         {user && (

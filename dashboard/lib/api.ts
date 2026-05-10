@@ -1,13 +1,23 @@
 import type {
+  AdminUser,
+  AuditLogEntry,
   AuthResponse,
   Bootstrap,
+  CrossQuestion,
+  Heatmap,
+  HeatmapDimension,
+  JobsStatus,
   PollAnalytics,
   SectorAIReport,
+  SectorBenchmark,
+  SentimentTimeline,
   Survey,
   SurveyAIReport,
   SurveyAnalytics,
+  SurveyPersonas,
   Topic,
   User,
+  Webhook,
 } from "./types";
 
 const API_BASE =
@@ -15,7 +25,11 @@ const API_BASE =
 
 async function request<T>(
   path: string,
-  options: { method?: "GET" | "POST"; body?: unknown; token?: string | null } = {},
+  options: {
+    method?: "GET" | "POST" | "PATCH" | "DELETE";
+    body?: unknown;
+    token?: string | null;
+  } = {},
 ): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: options.method ?? "GET",
@@ -70,5 +84,116 @@ export const api = {
 
   surveyDetail(token: string, id: string): Promise<Survey> {
     return request(`/surveys/${id}`, { token });
+  },
+
+  // ----- Layer 3 -----
+
+  pollHeatmap(
+    token: string,
+    pollId: string,
+    x: HeatmapDimension,
+    y: HeatmapDimension,
+    optionId?: string,
+  ): Promise<Heatmap> {
+    const qs = new URLSearchParams({ x, y, ...(optionId ? { option_id: optionId } : {}) });
+    return request(`/analytics/poll/${pollId}/heatmap?${qs}`, { token });
+  },
+
+  surveyHeatmap(
+    token: string,
+    surveyId: string,
+    x: HeatmapDimension,
+    y: HeatmapDimension,
+    questionId?: string,
+    optionId?: string,
+  ): Promise<Heatmap> {
+    const qs = new URLSearchParams({
+      x, y,
+      ...(questionId ? { question_id: questionId } : {}),
+      ...(optionId ? { option_id: optionId } : {}),
+    });
+    return request(`/analytics/survey/${surveyId}/heatmap?${qs}`, { token });
+  },
+
+  surveyCrossQuestion(
+    token: string,
+    surveyId: string,
+    q1: string,
+    q2: string,
+  ): Promise<CrossQuestion> {
+    const qs = new URLSearchParams({ q1, q2 });
+    return request(`/analytics/survey/${surveyId}/cross-question?${qs}`, { token });
+  },
+
+  topicSentimentTimeline(
+    token: string,
+    topicId: string,
+    days = 30,
+  ): Promise<SentimentTimeline> {
+    return request(`/analytics/topic/${topicId}/sentiment-timeline?days=${days}`, { token });
+  },
+
+  sectorBenchmark(token: string, topicIds: string[]): Promise<SectorBenchmark> {
+    const qs = new URLSearchParams({ topic_ids: topicIds.join(",") });
+    return request(`/analytics/sectors/benchmark?${qs}`, { token });
+  },
+
+  surveyPersonas(token: string, surveyId: string, refresh = false): Promise<SurveyPersonas> {
+    return request(
+      `/surveys/${surveyId}/personas${refresh ? "?refresh=1" : ""}`,
+      { token },
+    );
+  },
+
+  // ----- Webhooks (publisher) -----
+
+  listWebhooks(token: string): Promise<Webhook[]> {
+    return request("/publisher/webhooks", { token });
+  },
+  createWebhook(token: string, body: { url: string; events: string[] }): Promise<Webhook> {
+    return request("/publisher/webhooks", { method: "POST", body, token });
+  },
+  updateWebhook(
+    token: string,
+    id: string,
+    body: { url?: string; events?: string[]; is_active?: boolean },
+  ): Promise<Webhook> {
+    return request(`/publisher/webhooks/${id}`, { method: "PATCH", body, token });
+  },
+  deleteWebhook(token: string, id: string): Promise<{ ok: boolean }> {
+    return request(`/publisher/webhooks/${id}`, { method: "DELETE", token });
+  },
+  testWebhook(token: string, id: string): Promise<{ ok: boolean; status: number; response: string }> {
+    return request(`/publisher/webhooks/${id}/test`, { method: "POST", token });
+  },
+
+  // ----- Admin -----
+
+  adminListUsers(
+    token: string,
+    options: { q?: string; role?: string; tier?: string; limit?: number } = {},
+  ): Promise<AdminUser[]> {
+    const qs = new URLSearchParams();
+    if (options.q) qs.set("q", options.q);
+    if (options.role) qs.set("role", options.role);
+    if (options.tier) qs.set("tier", options.tier);
+    if (options.limit) qs.set("limit", String(options.limit));
+    return request(`/admin/users?${qs}`, { token });
+  },
+  adminUpdateUser(
+    token: string,
+    id: string,
+    body: { role?: string; tier?: string; is_premium?: boolean },
+  ): Promise<User> {
+    return request(`/admin/users/${id}`, { method: "PATCH", body, token });
+  },
+  adminAuditLog(token: string, limit = 100): Promise<AuditLogEntry[]> {
+    return request(`/admin/audit-log?limit=${limit}`, { token });
+  },
+  adminJobsStatus(token: string): Promise<JobsStatus> {
+    return request("/admin/jobs/status", { token });
+  },
+  adminRunSnapshots(token: string): Promise<{ ok: boolean; ranAt: string }> {
+    return request("/admin/snapshots/run", { method: "POST", token });
   },
 };

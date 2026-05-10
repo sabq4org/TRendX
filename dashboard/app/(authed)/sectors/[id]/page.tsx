@@ -12,7 +12,8 @@ import { BubbleScatter } from "@/components/charts/Bubble";
 import { fmtInt } from "@/lib/format";
 import clsx from "clsx";
 import type { SectorAIReport } from "@/lib/types";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Download } from "lucide-react";
+import { SentimentTimelineCard } from "@/components/sector/SentimentTimelineCard";
 
 export default function SectorDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -64,6 +65,14 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
         eyebrow="SECTOR INTELLIGENCE"
         title={topic ? topic.name : "قطاع"}
         subtitle="ذكاء عابر للقطاع — اتّجاه، إجماع، شخصية، تنبّؤ."
+        right={
+          <button
+            onClick={() => token && window.open(`/reports/sector/${id}?token=${token}`, "_blank")}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
+          >
+            <Download size={12} /> تقرير قابل للطباعة
+          </button>
+        }
       />
 
       <main className="flex-1 px-10 pb-10 space-y-7">
@@ -112,6 +121,10 @@ export default function SectorDetailPage({ params }: { params: Promise<{ id: str
               </div>
             )}
           </ChartCard>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 stagger">
+          <SentimentTimelineCard topicId={id} />
         </div>
 
         <div className="bg-canvas-card rounded-card shadow-card p-8">

@@ -206,3 +206,164 @@ export type SectorAIReport = {
     predicted_trend: string;
   };
 };
+
+// ----- Layer 3 — Deep Analytics -----
+
+export type HeatmapDimension = "gender" | "age_group" | "city" | "device";
+
+export type Heatmap = {
+  survey_id: string | null;
+  poll_id: string | null;
+  question_id: string | null;
+  x_dim: HeatmapDimension;
+  y_dim: HeatmapDimension;
+  x_keys: string[];
+  y_keys: string[];
+  cells: Array<{ x: string; y: string; count: number; row_pct: number }>;
+  total: number;
+  computed_at: string;
+};
+
+export type CrossQuestion = {
+  survey_id: string;
+  q1: { id: string; title: string; options: Array<{ id: string; text: string }> };
+  q2: { id: string; title: string; options: Array<{ id: string; text: string }> };
+  matrix: Array<Array<{
+    q1_option_id: string;
+    q2_option_id: string;
+    count: number;
+    conditional_pct: number;
+  }>>;
+  chi_squared: number;
+  degrees_of_freedom: number;
+  significance: "very_high" | "high" | "moderate" | "weak";
+  sample_size: number;
+  computed_at: string;
+};
+
+export type SentimentTimeline = {
+  topic_id: string;
+  topic_name: string;
+  days: number;
+  series: Array<{
+    date: string;
+    sentiment: number;
+    sample: number;
+    polls: number;
+    surveys: number;
+  }>;
+  current_score: number;
+  direction: "rising" | "falling" | "stable";
+  delta_30d: number;
+  computed_at: string;
+};
+
+export type SectorBenchmarkRow = {
+  topic_id: string;
+  topic_name: string;
+  topic_slug: string;
+  polls_count: number;
+  surveys_count: number;
+  total_votes: number;
+  total_responses: number;
+  avg_completion_rate: number;
+  followers_count: number;
+  sentiment_score: number | null;
+  sentiment_direction: "rising" | "falling" | "stable" | null;
+};
+
+export type SectorBenchmark = {
+  topic_ids: string[];
+  rows: SectorBenchmarkRow[];
+  leaders: {
+    by_engagement: string | null;
+    by_completion: string | null;
+    by_sentiment: string | null;
+    by_followers: string | null;
+  };
+  computed_at: string;
+};
+
+export type SurveyPersonas = {
+  survey_id: string;
+  k: number;
+  sample_size: number;
+  cached: boolean;
+  generated_at: string;
+  prompt_version: string;
+  model: string;
+  personas: Array<{
+    cluster_index: number;
+    size: number;
+    share_pct: number;
+    dominant_gender: string | null;
+    dominant_age_group: string | null;
+    dominant_city: string | null;
+    name: string;
+    description: string;
+    traits: string[];
+    representative_quote: string;
+    modal_answers: Array<{ question_id: string; question_title: string; option_text: string }>;
+  }>;
+};
+
+// ----- Webhooks -----
+
+export type Webhook = {
+  id: string;
+  publisher_id: string;
+  url: string;
+  events: string[];
+  secret: string;
+  is_active: boolean;
+  last_fired_at: string | null;
+  failure_count: number;
+  created_at: string;
+};
+
+// ----- Admin -----
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  tier: string;
+  city: string | null;
+  country: string;
+  gender: string;
+  device_type: string;
+  points: number;
+  is_premium: boolean;
+  joined_at: string;
+  last_active_at: string;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  actor_id: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type JobsStatus = {
+  snapshot: {
+    computed_at: string;
+    entity_type: string;
+    entity_id: string;
+  } | null;
+  last_ai_insight: {
+    generated_at: string;
+    insight_type: string;
+    model: string;
+    latency_ms: number | null;
+  } | null;
+  webhooks: { total: number; active: number };
+  recent_webhook_deliveries: AuditLogEntry[];
+  server_time: string;
+};
