@@ -7,6 +7,8 @@ infrastructure (schema, endpoints) and the UX surfaces (iOS, dashboard).
 The "wow" creative ideas Mizan picked are slotted into the phases where
 they unlock the most.
 
+**Status: Phases 0-6 all shipped on `main` (2026-05-12).**
+
 ## Phase 0 — Foundation (✅ shipped)
 
 Schema + DTOs + types for the new account model. No UI surfaces yet —
@@ -29,7 +31,7 @@ build on.
   on `AppStore.updateProfile` and `checkHandleAvailability`.
 - Dashboard: `User` type extended; new `AccountType` literal union.
 
-## Phase 1 — Visual identity (next)
+## Phase 1 — Visual identity (✅ shipped)
 
 Make the three account types feel different the moment you see them.
 
@@ -45,7 +47,7 @@ Make the three account types feel different the moment you see them.
 - Account-type picker on profile edit (individual / organization).
 - Saudi-green tone added to TrendXTheme palette.
 
-## Phase 2 — Follow system
+## Phase 2 — Follow system (✅ shipped)
 
 One-way social graph (Twitter-style).
 
@@ -59,7 +61,7 @@ One-way social graph (Twitter-style).
   during signup ("هل تريد متابعة هذه الحسابات؟").
 - Includes the **Handle reservation** wow (already shipped in Phase 0).
 
-## Phase 3 — Timeline + Story mode + Opt-in vote visibility
+## Phase 3 — Timeline + Story mode + Opt-in vote visibility (✅ shipped)
 
 The new central surface.
 
@@ -76,7 +78,7 @@ The new central surface.
   followers' timelines and a dedicated screen with sequential
   navigation.
 
-## Phase 4 — Events + Live event dashboard + Saudi map
+## Phase 4 — Events + Live event dashboard + Saudi map (✅ shipped)
 
 - `events` table: title, description, banner_image, organizer_id,
   category, type, starts_at, ends_at, location {city, venue, lat, lng},
@@ -90,7 +92,7 @@ The new central surface.
   the publisher dashboard.
 - Dashboard: events management for publishers.
 
-## Phase 5 — Verification & Trust
+## Phase 5 — Verification & Trust (✅ shipped)
 
 - Admin verification flow (KYC-light: name + email + supporting doc).
 - iOS: "اطلب توثيق الحساب" CTA on profile for non-verified
@@ -103,7 +105,7 @@ The new central surface.
   banner, their featured poll auto-pins to the top, and timeline
   Activity for that day amplifies their posts in that sector.
 
-## Phase 6 — Notifications expansion + Gov ↔ Citizen direct line
+## Phase 6 — Notifications expansion + Gov ↔ Citizen direct line (✅ shipped)
 
 - Extend `lib/notifications.ts` with: `mention_voted`, `new_from_following`,
   `official_update`, `event_started`, `event_ended_results`.

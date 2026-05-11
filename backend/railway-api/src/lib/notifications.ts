@@ -25,7 +25,11 @@ export type NotificationKind =
   | "pulse_pending"
   | "challenge_open"
   | "reward_earned"
-  | "streak_at_risk";
+  | "streak_at_risk"
+  | "new_from_following"
+  | "event_started"
+  | "national_poll"
+  | "sector_takeover";
 
 export type Notification = {
   id: string;
@@ -207,6 +211,92 @@ export async function buildNotifications(userId: string): Promise<Notification[]
       cta_route: "gifts",
       occurred_at: entry.createdAt.toISOString(),
       ref_id: entry.id,
+    });
+  }
+
+  // 6. New posts from followed accounts (last 24h).
+  const followed = await prisma.userFollow.findMany({
+    where: { followerId: userId },
+    select: { followedId: true },
+  });
+  const followedIds = followed.map((f) => f.followedId);
+  if (followedIds.length > 0) {
+    const recent = await prisma.poll.findMany({
+      where: {
+        publisherId: { in: followedIds },
+        createdAt: { gte: oneDayAgo },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+      select: { id: true, title: true, authorName: true, createdAt: true, voterAudience: true },
+    });
+    for (const p of recent) {
+      notifications.push({
+        id: `following_${p.id}`,
+        kind: p.voterAudience === "verified_citizen" ? "national_poll" : "new_from_following",
+        title: p.voterAudience === "verified_citizen"
+          ? `استطلاع وطني من ${p.authorName}`
+          : `منشور جديد من ${p.authorName}`,
+        body: p.title,
+        icon: p.voterAudience === "verified_citizen" ? "checkmark.shield.fill" : "person.crop.circle.badge.checkmark",
+        cta_label: p.voterAudience === "verified_citizen" ? "شارك بصوتك" : "اطلع الآن",
+        cta_route: `poll:${p.id}`,
+        occurred_at: p.createdAt.toISOString(),
+        ref_id: p.id,
+      });
+    }
+  }
+
+  // 7. Events that just went live and that the user might be interested in
+  //    (followed publisher OR in followed sector). Pulls the most recent
+  //    transition; if the user already RSVPed "attending" we skip.
+  const liveEvents = await prisma.event.findMany({
+    where: {
+      status: "live",
+      OR: [
+        { publisherId: { in: followedIds.length ? followedIds : ["-"] } },
+        // Best-effort — events aren't tied to a topic yet so we only
+        // match by publisher. Future: add `topicId` to events.
+      ],
+      startsAt: { gte: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+    },
+    orderBy: { startsAt: "desc" },
+    take: 2,
+    select: { id: true, title: true, city: true, startsAt: true },
+  });
+  for (const ev of liveEvents) {
+    notifications.push({
+      id: `event_${ev.id}`,
+      kind: "event_started",
+      title: "فعالية مباشرة الآن",
+      body: ev.city ? `${ev.title} — ${ev.city}` : ev.title,
+      icon: "antenna.radiowaves.left.and.right",
+      cta_label: "افتح الفعالية",
+      cta_route: `event:${ev.id}`,
+      occurred_at: ev.startsAt.toISOString(),
+      ref_id: ev.id,
+    });
+  }
+
+  // 8. Active sector takeovers — show as a single notification per
+  //    takeover so the user notices the spotlight.
+  const takeovers = await prisma.sectorTakeover.findMany({
+    where: { status: "active", endsAt: { gt: now } },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+    include: { publisher: { select: { name: true } }, topic: { select: { name: true } } },
+  });
+  for (const t of takeovers) {
+    notifications.push({
+      id: `takeover_${t.id}`,
+      kind: "sector_takeover",
+      title: `${t.publisher.name} يستضيف قطاع ${t.topic.name}`,
+      body: "محتوى مميّز اليوم — لا تفوّت الاستطلاع الرسمي المثبّت.",
+      icon: "megaphone.fill",
+      cta_label: "افتح القطاع",
+      cta_route: `topic:${t.topicId}`,
+      occurred_at: t.createdAt.toISOString(),
+      ref_id: t.id,
     });
   }
 

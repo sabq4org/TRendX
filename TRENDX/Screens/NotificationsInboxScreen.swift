@@ -197,12 +197,16 @@ private struct NotificationCard: View {
 
     private var kindTint: Color {
         switch notification.kind {
-        case "close_to_gift": return TrendXTheme.accent
-        case "pulse_pending": return TrendXTheme.primary
-        case "challenge_open": return TrendXTheme.aiIndigo
-        case "expiring_poll": return TrendXTheme.warning
-        case "reward_earned": return TrendXTheme.success
-        default: return TrendXTheme.primary
+        case "close_to_gift":      return TrendXTheme.accent
+        case "pulse_pending":      return TrendXTheme.primary
+        case "challenge_open":     return TrendXTheme.aiIndigo
+        case "expiring_poll":      return TrendXTheme.warning
+        case "reward_earned":      return TrendXTheme.success
+        case "new_from_following": return TrendXTheme.primary
+        case "event_started":      return Color(red: 0.95, green: 0.55, blue: 0.20)
+        case "national_poll":      return TrendXTheme.saudiGreen
+        case "sector_takeover":    return TrendXTheme.saudiGreen
+        default:                    return TrendXTheme.primary
         }
     }
 
