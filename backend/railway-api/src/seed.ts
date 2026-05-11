@@ -89,12 +89,220 @@ async function main(): Promise<void> {
     });
   }
 
-  const [topicCount, giftCount, govCount] = await Promise.all([
+  // ---------------------------------------------------------------
+  // Sample content from وزارة الإعلام so the timeline / radar shows
+  // real activity from the moment a user signs up and follows the
+  // ministry. Idempotent — each item is keyed by a stable title so
+  // re-running the seed doesn't create duplicates.
+  // ---------------------------------------------------------------
+  const moia = await prisma.user.findUnique({ where: { email: moiaEmail } });
+  const mediaTopic = await prisma.topic.findUnique({ where: { name: "إعلام" } });
+  if (moia && mediaTopic) {
+    console.log("[seed] upserting وزارة الإعلام sample content…");
+
+    type SamplePoll = {
+      title: string;
+      description: string;
+      voterAudience: "public" | "verified" | "verified_citizen";
+      rewardPoints: number;
+      options: string[];
+    };
+
+    const samplePolls: SamplePoll[] = [
+      {
+        title: "ما أكثر منصة إعلامية تستخدمها يومياً؟",
+        description: "نقيس عادات الجمهور السعودي مع المحتوى الإعلامي الرقمي.",
+        voterAudience: "public",
+        rewardPoints: 30,
+        options: ["X (تويتر)", "Snapchat", "YouTube", "TikTok", "أخرى"],
+      },
+      {
+        title: "ما رأيك بمستوى الإنتاج الإعلامي السعودي خلال 2026؟",
+        description: "استطلاع للحسابات الموثّقة فقط — صوت الخبراء والإعلاميين.",
+        voterAudience: "verified",
+        rewardPoints: 45,
+        options: ["تطوّر ملحوظ", "تحسّن نسبي", "ثابت", "يحتاج جهداً أكبر"],
+      },
+      {
+        title: "هل تفضّل قراءة الأخبار من المصادر الرسمية مباشرة؟",
+        description: "استطلاع وطني — يحتاج حساباً موثّقاً ببيانات كاملة (مدينة، عمر، جنس).",
+        voterAudience: "verified_citizen",
+        rewardPoints: 60,
+        options: ["نعم دائماً", "أحياناً", "نادراً", "لا أعتمد عليها"],
+      },
+    ];
+
+    for (const sp of samplePolls) {
+      const existing = await prisma.poll.findFirst({
+        where: { publisherId: moia.id, title: sp.title },
+      });
+      if (existing) continue;
+      await prisma.poll.create({
+        data: {
+          publisherId: moia.id,
+          title: sp.title,
+          description: sp.description,
+          authorName: moia.name,
+          authorAvatar: moia.avatarInitial,
+          authorIsVerified: true,
+          topicId: mediaTopic.id,
+          type: "single_choice",
+          status: "active",
+          voterAudience: sp.voterAudience,
+          rewardPoints: sp.rewardPoints,
+          durationDays: 14,
+          expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+          options: {
+            create: sp.options.map((text, idx) => ({ text, displayOrder: idx })),
+          },
+        },
+      });
+    }
+
+    // Survey: "تجربة المواطن مع الإعلام الرقمي"
+    const surveyTitle = "تجربة المواطن مع الإعلام الرقمي";
+    const surveyExisting = await prisma.survey.findFirst({
+      where: { publisherId: moia.id, title: surveyTitle },
+    });
+    if (!surveyExisting) {
+      await prisma.survey.create({
+        data: {
+          publisherId: moia.id,
+          title: surveyTitle,
+          description: "5 أسئلة تساعدنا على فهم تجربتك مع الإعلام السعودي وتطويره معاً.",
+          topicId: mediaTopic.id,
+          status: "active",
+          rewardPoints: 120,
+          durationDays: 30,
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          questions: {
+            create: [
+              {
+                title: "كم ساعة تستهلك المحتوى الإعلامي يومياً؟",
+                type: "single_choice",
+                displayOrder: 0,
+                rewardPoints: 20,
+                options: {
+                  create: [
+                    { text: "أقل من ساعة", displayOrder: 0 },
+                    { text: "1-3 ساعات", displayOrder: 1 },
+                    { text: "3-5 ساعات", displayOrder: 2 },
+                    { text: "أكثر من 5 ساعات", displayOrder: 3 },
+                  ],
+                },
+              },
+              {
+                title: "ما المصدر الذي تثق به أكثر؟",
+                type: "single_choice",
+                displayOrder: 1,
+                rewardPoints: 25,
+                options: {
+                  create: [
+                    { text: "وكالة الأنباء السعودية (واس)", displayOrder: 0 },
+                    { text: "الصحف الرسمية", displayOrder: 1 },
+                    { text: "القنوات الرسمية", displayOrder: 2 },
+                    { text: "حسابات الجهات على X", displayOrder: 3 },
+                  ],
+                },
+              },
+              {
+                title: "هل ترى أن المحتوى الإعلامي السعودي يعكس هويّتنا؟",
+                type: "single_choice",
+                displayOrder: 2,
+                rewardPoints: 25,
+                options: {
+                  create: [
+                    { text: "نعم بقوة", displayOrder: 0 },
+                    { text: "إلى حدّ ما", displayOrder: 1 },
+                    { text: "ضعيف", displayOrder: 2 },
+                  ],
+                },
+              },
+              {
+                title: "ما القطاع الذي تتمنّى تغطية إعلامية أكثر له؟",
+                type: "single_choice",
+                displayOrder: 3,
+                rewardPoints: 25,
+                options: {
+                  create: [
+                    { text: "الثقافة والفنون", displayOrder: 0 },
+                    { text: "الرياضة المحلية", displayOrder: 1 },
+                    { text: "الاقتصاد والاستثمار", displayOrder: 2 },
+                    { text: "الشباب وريادة الأعمال", displayOrder: 3 },
+                  ],
+                },
+              },
+              {
+                title: "هل تشارك المحتوى الذي تجده مفيداً؟",
+                type: "single_choice",
+                displayOrder: 4,
+                rewardPoints: 25,
+                options: {
+                  create: [
+                    { text: "دائماً", displayOrder: 0 },
+                    { text: "أحياناً", displayOrder: 1 },
+                    { text: "نادراً", displayOrder: 2 },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    // Event: ملتقى الإعلام السعودي 2026
+    const eventTitle = "ملتقى الإعلام السعودي 2026";
+    const eventExisting = await prisma.event.findFirst({
+      where: { publisherId: moia.id, title: eventTitle },
+    });
+    if (!eventExisting) {
+      await prisma.event.create({
+        data: {
+          publisherId: moia.id,
+          title: eventTitle,
+          description: "ملتقى يجمع نخبة من الإعلاميين والمختصين لمناقشة مستقبل القطاع. شارك حضورك واترك بصمتك على خريطة الحضور.",
+          category: "cultural",
+          status: "upcoming",
+          startsAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+          endsAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000),
+          city: "الرياض",
+          venue: "مركز الملك فهد الثقافي",
+          lat: 24.7136,
+          lng: 46.6753,
+        },
+      });
+    }
+
+    // Story: الإعلام في رؤية 2030
+    const storyTitle = "الإعلام في رؤية 2030";
+    const storyExisting = await prisma.story.findFirst({
+      where: { publisherId: moia.id, title: storyTitle },
+    });
+    if (!storyExisting) {
+      await prisma.story.create({
+        data: {
+          publisherId: moia.id,
+          title: storyTitle,
+          description: "سلسلة استطلاعات نتابع فيها رأي الجمهور حول تحوّلات الإعلام في رؤية المملكة 2030.",
+          coverStyle: "media",
+          isFeatured: true,
+          isPinned: true,
+          status: "active",
+          startsAt: new Date(),
+          endsAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+  }
+
+  const [topicCount, giftCount, govCount, moiaPolls] = await Promise.all([
     prisma.topic.count(),
     prisma.gift.count(),
     prisma.user.count({ where: { accountType: "government" } }),
+    moia ? prisma.poll.count({ where: { publisherId: moia.id } }) : 0,
   ]);
-  console.log(`[seed] done. topics=${topicCount} gifts=${giftCount} gov=${govCount}`);
+  console.log(`[seed] done. topics=${topicCount} gifts=${giftCount} gov=${govCount} moia_polls=${moiaPolls}`);
 }
 
 main()

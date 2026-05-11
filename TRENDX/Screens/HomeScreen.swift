@@ -210,6 +210,15 @@ struct HomeScreen: View {
                             },
                             onVoteWithVisibility: { optionId, isPublic in
                                 store.voteOnPoll(poll.id, optionId: optionId, isPublic: isPublic)
+                            },
+                            onRepost: { pollId, repost in
+                                Task {
+                                    if repost {
+                                        await store.repost(pollId: pollId)
+                                    } else {
+                                        await store.unrepost(pollId: pollId)
+                                    }
+                                }
                             }
                         )
                         .onTapGesture {

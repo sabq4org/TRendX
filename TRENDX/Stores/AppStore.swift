@@ -418,6 +418,41 @@ final class AppStore: ObservableObject {
         return (try? await apiClient.suggestedFollows(accessToken: token)) ?? []
     }
 
+    /// Repost a poll to your followers' timelines (optimistic flip).
+    @discardableResult
+    func repost(pollId: UUID) async -> Bool {
+        guard let token = accessToken else { return false }
+        if let index = polls.firstIndex(where: { $0.id == pollId }) {
+            polls[index].viewerReposted = true
+            polls[index].sharesCount += 1
+            persistPolls()
+        }
+        let ok = (try? await apiClient.repostPoll(id: pollId, accessToken: token)) != nil
+        if !ok, let index = polls.firstIndex(where: { $0.id == pollId }) {
+            polls[index].viewerReposted = false
+            polls[index].sharesCount = max(0, polls[index].sharesCount - 1)
+            persistPolls()
+        }
+        return ok
+    }
+
+    @discardableResult
+    func unrepost(pollId: UUID) async -> Bool {
+        guard let token = accessToken else { return false }
+        if let index = polls.firstIndex(where: { $0.id == pollId }) {
+            polls[index].viewerReposted = false
+            polls[index].sharesCount = max(0, polls[index].sharesCount - 1)
+            persistPolls()
+        }
+        let ok = (try? await apiClient.unrepostPoll(id: pollId, accessToken: token)) != nil
+        if !ok, let index = polls.firstIndex(where: { $0.id == pollId }) {
+            polls[index].viewerReposted = true
+            polls[index].sharesCount += 1
+            persistPolls()
+        }
+        return ok
+    }
+
     func loadUserProfile(idOrHandle: String) async -> TrendXUser? {
         try? await apiClient.userProfile(idOrHandle: idOrHandle, accessToken: accessToken)
     }

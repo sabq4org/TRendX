@@ -409,6 +409,9 @@ struct Poll: Codable, Identifiable, Equatable {
     var authorHandle: String?
     /// Audience gate for voting: "public" / "verified" / "verified_citizen".
     var voterAudience: String
+    /// Whether the current viewer has reposted this poll. Driven by
+    /// the repost endpoint and managed optimistically client-side.
+    var viewerReposted: Bool = false
     /// Optional AI-generated insight shown as an elegant chip inside the card
     var aiInsight: String?
 

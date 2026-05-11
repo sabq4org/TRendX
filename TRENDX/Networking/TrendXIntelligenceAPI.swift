@@ -552,6 +552,21 @@ struct FollowMutationResponse: Decodable {
     let followersCount: Int?
 }
 
+// MARK: - Reposts
+
+extension TrendXAPIClient {
+    func repostPoll(id: UUID, accessToken: String) async throws -> EmptyResponse {
+        try await post("/polls/\(id.uuidString)/repost",
+                       accessToken: accessToken,
+                       body: EmptyBody())
+    }
+    func unrepostPoll(id: UUID, accessToken: String) async throws -> EmptyResponse {
+        try await post("/polls/\(id.uuidString)/unrepost",
+                       accessToken: accessToken,
+                       body: EmptyBody())
+    }
+}
+
 extension TrendXAPIClient {
     func followUser(id: UUID, accessToken: String) async throws -> FollowMutationResponse {
         try await post("/users/\(id.uuidString)/follow",

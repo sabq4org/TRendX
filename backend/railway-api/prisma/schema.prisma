@@ -175,6 +175,7 @@ model User {
 
   followsOut UserFollow[] @relation("UserFollowsOut")
   followsIn  UserFollow[] @relation("UserFollowsIn")
+  reposts    Repost[]
 
   pulseResponses       DailyPulseResponse[]
   streak               UserStreak?
@@ -189,6 +190,23 @@ model User {
   @@index([accountType])
   @@index([isVerified])
   @@map("users")
+}
+
+// Repost (إعادة نشر). When a user reposts a poll, the action surfaces
+// in their followers' timeline as a `repost` activity. Composite
+// primary key gives idempotency on toggle.
+model Repost {
+  userId    String   @map("user_id") @db.Uuid
+  pollId    String   @map("poll_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, pollId])
+  @@index([pollId])
+  @@index([userId])
+  @@map("reposts")
 }
 
 // Public events organized by accounts (typically gov or org). Each
@@ -429,6 +447,7 @@ model Poll {
   votes       Vote[]
   predictions VotePrediction[]
   comments    PollComment[]
+  reposts     Repost[]
 
   @@index([status])
   @@index([topicId])

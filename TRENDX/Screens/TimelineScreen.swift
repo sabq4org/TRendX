@@ -53,10 +53,12 @@ struct TimelineItem: Decodable, Identifiable {
     let occurredAt: String
     let publisher: TimelinePublisher?
     let voter: TimelinePublisher?
+    let reposter: TimelinePublisher?
     let poll: PollPayload?
     let leaderText: String?
     let leaderPercentage: Int?
     let choice: String?
+    let caption: String?
     let topicName: String?
     let totalVotes: Int?
     let story: TimelineStoryPayload?
@@ -65,6 +67,7 @@ struct TimelineItem: Decodable, Identifiable {
         case poll_published
         case survey_published
         case vote_cast
+        case repost
         case poll_results
         case sector_trending
         case story
@@ -272,6 +275,7 @@ private struct TimelineCard: View {
         switch item.kind {
         case .poll_published, .survey_published: return TrendXTheme.primary
         case .vote_cast:        return TrendXTheme.aiIndigo
+        case .repost:           return TrendXTheme.aiViolet
         case .poll_results:     return TrendXTheme.success
         case .sector_trending:  return TrendXTheme.accent
         case .story:            return TrendXTheme.aiViolet
@@ -283,6 +287,7 @@ private struct TimelineCard: View {
         case .poll_published:   return "doc.text.fill"
         case .survey_published: return "list.bullet.clipboard.fill"
         case .vote_cast:        return "checkmark.bubble.fill"
+        case .repost:           return "arrow.2.squarepath"
         case .poll_results:     return "chart.bar.xaxis"
         case .sector_trending:  return "flame.fill"
         case .story:            return "book.fill"
@@ -294,6 +299,7 @@ private struct TimelineCard: View {
         case .poll_published:   return "استطلاع جديد"
         case .survey_published: return "استبيان جديد"
         case .vote_cast:        return "تصويت من متابعتك"
+        case .repost:           return "إعادة نشر"
         case .poll_results:     return "نتائج استطلاع"
         case .sector_trending:  return "ترند في قطاعك"
         case .story:            return "قصّة جديدة"
@@ -322,12 +328,58 @@ private struct TimelineCard: View {
             publishedBody
         case .vote_cast:
             voteBody
+        case .repost:
+            repostBody
         case .poll_results:
             resultsBody
         case .sector_trending:
             trendingBody
         case .story:
             storyBody
+        }
+    }
+
+    private var repostBody: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let r = item.reposter {
+                AccountAvatar(user: r.asUser, size: 40)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                if let r = item.reposter {
+                    HStack(spacing: 4) {
+                        Text(r.name)
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.ink)
+                        AccountTypeBadge(type: r.asUser.accountType, isVerified: r.isVerified, size: 11)
+                        Text("أعاد نشر")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                }
+                if let caption = item.caption, !caption.isEmpty {
+                    Text(caption)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                        .lineLimit(2)
+                }
+                if let title = item.poll?.title {
+                    Text(title)
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.ink)
+                        .lineLimit(2)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(TrendXTheme.aiViolet.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(TrendXTheme.aiViolet.opacity(0.18), lineWidth: 0.8)
+                                )
+                        )
+                }
+            }
+            Spacer(minLength: 0)
         }
     }
 

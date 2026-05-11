@@ -596,6 +596,44 @@ app.post("/events", async (c) => {
   return c.json(eventDTO(event));
 });
 
+// MARK: - Repost (إعادة نشر)
+//
+// One repost per (user, poll). The action surfaces in followers'
+// timelines as a `repost` activity. Idempotent — calling repost on
+// an existing row returns the same payload.
+
+app.post("/polls/:id/repost", async (c) => {
+  const userId = c.get("userId");
+  const pollId = c.req.param("id");
+  const body = await c.req.json<{ caption?: string }>().catch(() => ({ caption: undefined }));
+
+  const poll = await prisma.poll.findUnique({ where: { id: pollId } });
+  if (!poll) return c.json({ error: "Poll not found" }, 404);
+
+  const existing = await prisma.repost.findUnique({
+    where: { userId_pollId: { userId, pollId } },
+  });
+  if (existing) {
+    return c.json({ ok: true, already: true });
+  }
+
+  await prisma.repost.create({
+    data: { userId, pollId, caption: body.caption ?? null },
+  });
+  return c.json({ ok: true });
+});
+
+app.post("/polls/:id/unrepost", async (c) => {
+  const userId = c.get("userId");
+  const pollId = c.req.param("id");
+  const existing = await prisma.repost.findUnique({
+    where: { userId_pollId: { userId, pollId } },
+  });
+  if (!existing) return c.json({ ok: true, already: true });
+  await prisma.repost.delete({ where: { userId_pollId: { userId, pollId } } });
+  return c.json({ ok: true });
+});
+
 // MARK: - Sector takeovers + verification
 
 app.get("/sectors/:topicId/takeover", async (c) => {

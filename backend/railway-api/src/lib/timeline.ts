@@ -26,6 +26,14 @@ export type TimelineActivity =
       poll: ReturnType<typeof pollDTO>;
     }
   | {
+      kind: "repost";
+      id: string;
+      occurred_at: string;
+      reposter: ReturnType<typeof userDTO>;
+      poll: ReturnType<typeof pollDTO>;
+      caption: string | null;
+    }
+  | {
       kind: "survey_published";
       id: string;
       occurred_at: string;
@@ -159,6 +167,31 @@ export async function buildTimeline(
         take: Math.floor(limit * 0.5),
       });
 
+  // -- Source 4a: reposts by followed accounts.
+  const reposts = filter !== "all" && filter !== "accounts"
+    ? []
+    : followedIds.length === 0
+    ? []
+    : await prisma.repost.findMany({
+        where: {
+          userId: { in: followedIds },
+          createdAt: { lt: cutoff },
+        },
+        include: {
+          user: true,
+          poll: {
+            include: {
+              options: { orderBy: { displayOrder: "asc" } },
+              topic: true,
+              publisher: { select: { accountType: true, isVerified: true, handle: true } },
+              votes: { where: { userId }, select: { userId: true, optionId: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: Math.floor(limit * 0.5),
+      });
+
   // -- Source 4: public votes by followed accounts.
   const publicVotes = filter !== "all" && filter !== "accounts"
     ? []
@@ -270,6 +303,16 @@ export async function buildTimeline(
       voter: userDTO(v.user),
       poll: pollDTO(v.poll, { userId }),
       choice: v.option.text,
+    });
+  }
+  for (const r of reposts) {
+    items.push({
+      kind: "repost",
+      id: `repost:${r.userId}:${r.pollId}`,
+      occurred_at: r.createdAt.toISOString(),
+      reposter: userDTO(r.user),
+      poll: pollDTO(r.poll, { userId }),
+      caption: r.caption,
     });
   }
   for (const p of recentlyEnded) {

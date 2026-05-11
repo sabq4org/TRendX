@@ -556,6 +556,9 @@ struct PollCard: View {
     /// Optional richer vote callback — invoked instead of `onVote` when
     /// the parent wants to pass through the opt-in visibility flag.
     var onVoteWithVisibility: ((UUID, Bool) -> Void)? = nil
+    /// Optional repost handler — receives the poll id and the *new*
+    /// desired state (true = repost, false = un-repost).
+    var onRepost: ((UUID, Bool) -> Void)? = nil
 
     @State private var selectedOption: UUID?
     /// Per-card opt-in switch: "أظهر تصويتي لمتابعيّ". Default OFF —
@@ -827,7 +830,36 @@ struct PollCard: View {
             }
 
             // Actions
-            HStack(spacing: 20) {
+            HStack(spacing: 12) {
+                // Repost — surfaces this poll in the user's followers'
+                // timelines as a `repost` activity. Tapping again
+                // un-reposts. Optimistic flip via `@State` so the
+                // pill animates immediately.
+                Button {
+                    if let onRepost {
+                        onRepost(poll.id, !poll.viewerReposted)
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: poll.viewerReposted
+                              ? "arrow.2.squarepath" : "arrow.triangle.2.circlepath")
+                            .font(.system(size: 13, weight: .heavy))
+                        Text(poll.viewerReposted ? "أُعيد نشره" : "إعادة نشر")
+                            .font(.system(size: 11.5, weight: .heavy))
+                    }
+                    .foregroundStyle(poll.viewerReposted ? .white : TrendXTheme.aiViolet)
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(poll.viewerReposted
+                                  ? AnyShapeStyle(LinearGradient(
+                                      colors: [TrendXTheme.aiViolet, TrendXTheme.aiIndigo],
+                                      startPoint: .leading, endPoint: .trailing))
+                                  : AnyShapeStyle(TrendXTheme.aiViolet.opacity(0.10)))
+                    )
+                }
+                .buttonStyle(.plain)
+
                 Button(action: onShare) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .medium))
