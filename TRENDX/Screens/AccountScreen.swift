@@ -7,6 +7,7 @@ import SwiftUI
 
 struct AccountScreen: View {
     @EnvironmentObject private var store: AppStore
+    @State private var showProfileEdit = false
 
     private var votedCount: Int { store.currentUser.completedPolls.count }
     private var followedCount: Int { store.currentUser.followedTopics.count }
@@ -18,7 +19,9 @@ struct AccountScreen: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 18) {
-                ProfileHeader(user: store.currentUser)
+                ProfileHeader(user: store.currentUser) {
+                    showProfileEdit = true
+                }
 
                 StatsGrid(
                     points: store.currentUser.points,
@@ -159,6 +162,13 @@ struct AccountScreen: View {
             .padding(.bottom, 140)
         }
         .trendxScreenBackground()
+        .sheet(isPresented: $showProfileEdit) {
+            NavigationStack {
+                ProfileEditScreen(user: store.currentUser)
+                    .environmentObject(store)
+            }
+            .trendxRTL()
+        }
     }
 }
 
@@ -166,6 +176,7 @@ struct AccountScreen: View {
 
 struct ProfileHeader: View {
     let user: TrendXUser
+    var onEdit: () -> Void = {}
 
     private var membership: String {
         user.isPremium ? "عضو مميز" : "عضو TRENDX"
@@ -203,17 +214,20 @@ struct ProfileHeader: View {
                 .shadow(color: TrendXTheme.primaryDeep.opacity(0.28), radius: 14, x: 0, y: 8)
 
                 // Edit pencil
-                Circle()
-                    .fill(TrendXTheme.accent)
-                    .frame(width: 28, height: 28)
-                    .overlay(
-                        Image(systemName: "pencil")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                    )
-                    .overlay(Circle().stroke(Color.white, lineWidth: 2.5))
-                    .shadow(color: TrendXTheme.accent.opacity(0.35), radius: 6, x: 0, y: 3)
-                    .offset(x: 4, y: 4)
+                Button(action: onEdit) {
+                    Circle()
+                        .fill(TrendXTheme.accent)
+                        .frame(width: 28, height: 28)
+                        .overlay(
+                            Image(systemName: "pencil")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        )
+                        .overlay(Circle().stroke(Color.white, lineWidth: 2.5))
+                        .shadow(color: TrendXTheme.accent.opacity(0.35), radius: 6, x: 0, y: 3)
+                }
+                .buttonStyle(.plain)
+                .offset(x: 4, y: 4)
             }
 
             VStack(spacing: 6) {
@@ -235,9 +249,9 @@ struct ProfileHeader: View {
                 .overlay(Capsule().stroke(Color.white.opacity(0.35), lineWidth: 0.6))
             }
 
-            Button { } label: {
+            Button(action: onEdit) {
                 HStack(spacing: 6) {
-                    Text("الملف الشخصي")
+                    Text("تعديل الملف الشخصي")
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                     Image(systemName: "chevron.left")
                         .font(.system(size: 10, weight: .heavy))
@@ -248,6 +262,7 @@ struct ProfileHeader: View {
                 .background(Capsule().fill(Color.white))
                 .shadow(color: TrendXTheme.primaryDeep.opacity(0.22), radius: 8, x: 0, y: 4)
             }
+            .buttonStyle(.plain)
         }
         .padding(.vertical, 28)
         .padding(.horizontal, 20)

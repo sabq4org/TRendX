@@ -454,10 +454,12 @@ struct PollCoverView: View {
                             .shadow(color: .black.opacity(0.22), radius: 8, x: 0, y: 3)
 
                         HStack(spacing: 6) {
-                            Text(style.label.uppercased())
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                .tracking(1.2)
-                                .foregroundStyle(.white.opacity(0.85))
+                            // Note: no `.tracking()` here — positive letter-spacing
+                            // on Arabic text breaks the connected glyphs and the
+                            // label renders as detached characters.
+                            Text(style.label)
+                                .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.92))
 
                             Rectangle()
                                 .fill(.white.opacity(0.5))
@@ -465,7 +467,7 @@ struct PollCoverView: View {
 
                             Text("قراءة مجتمعية")
                                 .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.75))
+                                .foregroundStyle(.white.opacity(0.78))
                         }
                     }
                 }

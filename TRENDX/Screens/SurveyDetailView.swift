@@ -175,15 +175,14 @@ struct SurveyDetailView: View {
                 .frame(height: 140)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     Image(systemName: survey.coverStyle.glyph)
                         .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(.white.opacity(0.92))
                     Text(survey.coverStyle.heroPhrase)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.75))
-                        .textCase(.uppercase)
-                        .tracking(1.5)
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 2)
                 }
             }
             .padding(.bottom, 16)

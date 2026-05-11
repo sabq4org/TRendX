@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SurveyTakingSheet: View {
     @EnvironmentObject private var store: AppStore
@@ -222,49 +223,227 @@ struct SurveyTakingSheet: View {
 
     // MARK: - Completion screen
 
+    @ViewBuilder
     private var completionView: some View {
-        VStack(spacing: 18) {
-            Spacer()
+        ZStack {
+            LinearGradient(
+                colors: [
+                    TrendXTheme.background,
+                    TrendXTheme.primary.opacity(0.08),
+                    TrendXTheme.accent.opacity(0.06)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            TrendXConfetti()
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 22) {
+                    completionSeal
+                        .padding(.top, 24)
+
+                    completionHeadline
+
+                    completionStats
+
+                    completionTier
+
+                    completionActions
+                        .padding(.top, 6)
+
+                    Spacer(minLength: 16)
+                }
+                .padding(.horizontal, 22)
+            }
+        }
+        .onAppear {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+    }
+
+    private var completionSeal: some View {
+        ZStack {
+            Circle()
+                .fill(TrendXTheme.primary.opacity(0.10))
+                .frame(width: 148, height: 148)
+            Circle()
+                .stroke(TrendXTheme.primary.opacity(0.28), lineWidth: 2)
+                .frame(width: 120, height: 120)
+            Circle()
+                .fill(TrendXTheme.primaryGradient)
+                .frame(width: 96, height: 96)
+                .shadow(color: TrendXTheme.primary.opacity(0.45), radius: 22, x: 0, y: 12)
+            Image(systemName: "checkmark")
+                .font(.system(size: 40, weight: .heavy))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var completionHeadline: some View {
+        VStack(spacing: 6) {
+            Text("صوتك سُجّل ✨")
+                .font(.system(size: 26, weight: .black, design: .rounded))
+                .foregroundStyle(TrendXTheme.ink)
+            Text("جاوبت على \(survey.questions.count) سؤال — رأيك جزء من نبض الرأي السعودي.")
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(TrendXTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private var completionStats: some View {
+        HStack(spacing: 12) {
+            statTile(
+                icon: "star.circle.fill",
+                value: "+\(survey.rewardPoints)",
+                label: "نقطة جديدة",
+                tint: TrendXTheme.accent
+            )
+            statTile(
+                icon: "questionmark.circle.fill",
+                value: "\(survey.questions.count)",
+                label: "إجابة",
+                tint: TrendXTheme.primary
+            )
+            statTile(
+                icon: "clock.fill",
+                value: timeLabel,
+                label: "الوقت",
+                tint: TrendXTheme.aiIndigo
+            )
+        }
+    }
+
+    private func statTile(icon: String, value: String, label: String, tint: Color) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(tint)
+            Text(value)
+                .font(.system(size: 20, weight: .black, design: .rounded))
+                .foregroundStyle(TrendXTheme.ink)
+            Text(label)
+                .font(.system(size: 10.5, weight: .heavy))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(0.08))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(tint.opacity(0.14), lineWidth: 1)
+                )
+        )
+    }
+
+    private var completionTier: some View {
+        let pointsAfter = store.currentUser.points
+        let tier = MemberTier.from(points: pointsAfter)
+        let pointsToNext = tier.pointsToNext(points: pointsAfter)
+        return HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(TrendXTheme.primaryGradient)
-                    .frame(width: 92, height: 92)
-                    .shadow(color: TrendXTheme.primary.opacity(0.25), radius: 18, x: 0, y: 10)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 38, weight: .heavy))
+                    .fill(tier.gradient)
+                    .frame(width: 42, height: 42)
+                Image(systemName: tier.icon)
+                    .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(.white)
             }
 
-            VStack(spacing: 6) {
-                Text("شكراً لمشاركتك ✨")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(TrendXTheme.ink)
-                Text("سُجّلت إجاباتك. حصلت على \(survey.rewardPoints) نقطة جديدة.")
-                    .font(.system(size: 14))
-                    .foregroundStyle(TrendXTheme.secondaryInk)
-                    .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("مستواك:")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                    Text(tier.label)
+                        .font(.system(size: 14, weight: .black))
+                        .foregroundStyle(TrendXTheme.ink)
+                }
+                if let next = tier.next, pointsToNext > 0 {
+                    Text("يبقى \(pointsToNext) نقطة للوصول إلى \(next.label)")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                } else {
+                    Text("وصلت لأعلى مستوى — ✦")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(tier.tint)
+                }
             }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(tier.tint.opacity(0.16), lineWidth: 1)
+                )
+        )
+    }
 
-            Spacer()
-
+    private var completionActions: some View {
+        VStack(spacing: 10) {
             Button {
-                dismiss()
+                let text = "شاركت في «\(survey.title)» على TRENDX وحصلت على \(survey.rewardPoints) نقطة. شاركني رأيك!"
+                let av = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+                presentSheet(av)
             } label: {
-                Text("العودة")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(TrendXTheme.primaryGradient)
-                    )
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("شارك مع صديق")
+                        .font(.system(size: 14, weight: .heavy))
+                }
+                .foregroundStyle(TrendXTheme.primaryDeep)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(TrendXTheme.primary.opacity(0.10))
+                )
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
+
+            Button {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Text("استكشف استبيانات أخرى")
+                        .font(.system(size: 15, weight: .heavy))
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12, weight: .heavy))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(TrendXTheme.primaryGradient)
+                )
+                .shadow(color: TrendXTheme.primary.opacity(0.35), radius: 14, x: 0, y: 6)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(.top, 60)
+    }
+
+    private var timeLabel: String {
+        let s = max(1, Int(Date().timeIntervalSince(startedAt)))
+        return s >= 60 ? "\(s / 60)د \(s % 60)ث" : "\(s)ث"
+    }
+
+    private func presentSheet(_ vc: UIViewController) {
+        let scenes = UIApplication.shared.connectedScenes
+        guard let scene = scenes.first as? UIWindowScene,
+              let root = scene.windows.first(where: \.isKeyWindow)?.rootViewController else { return }
+        var presenter = root
+        while let next = presenter.presentedViewController { presenter = next }
+        presenter.present(vc, animated: true)
     }
 
     // MARK: - Submit

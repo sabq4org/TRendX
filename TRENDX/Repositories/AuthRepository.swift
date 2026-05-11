@@ -106,6 +106,34 @@ final class AuthRepository {
         let _: UserDTO = try await client.post("/profile", accessToken: session.accessToken, body: payload)
     }
 
+    /// Update arbitrary profile fields. Only non-nil keys are sent to the
+    /// backend, so callers can selectively patch (name + city) without
+    /// nuking the rest. Returns the freshly-decoded domain user.
+    func updateProfile(
+        name: String?,
+        email: String?,
+        avatarInitial: String?,
+        avatarUrl: String?,
+        gender: String?,
+        birthYear: Int?,
+        city: String?,
+        region: String?,
+        session: AuthSession
+    ) async throws -> TrendXUser {
+        let payload = ProfileUpdatePayload(
+            name: name,
+            email: email,
+            avatarInitial: avatarInitial,
+            avatarUrl: avatarUrl,
+            gender: gender,
+            birthYear: birthYear,
+            city: city,
+            region: region
+        )
+        let dto: UserDTO = try await client.post("/profile", accessToken: session.accessToken, body: payload)
+        return dto.domain
+    }
+
     private func save(_ session: AuthSession) {
         if let data = try? JSONEncoder().encode(session) {
             defaults.set(data, forKey: sessionKey)
@@ -119,6 +147,33 @@ final class AuthRepository {
             userId: UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID(),
             email: email
         )
+    }
+}
+
+private struct ProfileUpdatePayload: Encodable {
+    let name: String?
+    let email: String?
+    let avatarInitial: String?
+    let avatarUrl: String?
+    let gender: String?
+    let birthYear: Int?
+    let city: String?
+    let region: String?
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        if let name { try container.encode(name, forKey: .name) }
+        if let email { try container.encode(email, forKey: .email) }
+        if let avatarInitial { try container.encode(avatarInitial, forKey: .avatarInitial) }
+        if let avatarUrl { try container.encode(avatarUrl, forKey: .avatarUrl) }
+        if let gender { try container.encode(gender, forKey: .gender) }
+        if let birthYear { try container.encode(birthYear, forKey: .birthYear) }
+        if let city { try container.encode(city, forKey: .city) }
+        if let region { try container.encode(region, forKey: .region) }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, email, avatarInitial, avatarUrl, gender, birthYear, city, region
     }
 }
 

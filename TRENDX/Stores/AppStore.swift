@@ -19,7 +19,25 @@ final class AppStore: ObservableObject {
     @Published var showCreatePoll: Bool = false
     @Published var isAuthenticated: Bool
     @Published var isLoading: Bool = false
-    @Published var appMessage: String?
+    @Published var appMessage: String? {
+        didSet {
+            // Auto-dismiss after 4s so transient banners like
+            // "تم إنشاء كود تجريبي محلياً" don't hang at the top of the
+            // app forever. Setting to nil cancels any pending dismissal.
+            appMessageDismissTask?.cancel()
+            guard appMessage != nil else { return }
+            let captured = appMessage
+            appMessageDismissTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard let self else { return }
+                    if self.appMessage == captured { self.appMessage = nil }
+                }
+            }
+        }
+    }
+    private var appMessageDismissTask: Task<Void, Never>?
 
     /// Set to `true` immediately after a successful first-time sign-up.
     /// `ContentView` uses this to overlay `WelcomeAfterSignUpScreen`
@@ -250,6 +268,49 @@ final class AppStore: ObservableObject {
     
     var followedTopics: [Topic] {
         topics.filter { $0.isFollowing }
+    }
+
+    /// Update user profile fields against the backend and reflect the
+    /// response locally. Throws on failure so the calling screen can show
+    /// inline validation; on success returns the fresh user record.
+    @discardableResult
+    func updateProfile(
+        name: String?,
+        email: String?,
+        avatarInitial: String?,
+        avatarUrl: String?,
+        gender: String?,
+        birthYear: Int?,
+        city: String?,
+        region: String?
+    ) async throws -> TrendXUser {
+        guard let session = authSession, isRemoteEnabled else {
+            // Apply locally so the offline flow still updates the UI.
+            if let name { currentUser.name = name }
+            if let email { currentUser.email = email }
+            if let avatarInitial { currentUser.avatarInitial = avatarInitial }
+            if let avatarUrl { currentUser.avatarUrl = avatarUrl }
+            if let gender, let g = UserGender(rawValue: gender) { currentUser.gender = g }
+            if let birthYear { currentUser.birthYear = birthYear }
+            if let city { currentUser.city = city }
+            if let region { currentUser.region = region }
+            persistUser()
+            return currentUser
+        }
+        let updated = try await authRepository.updateProfile(
+            name: name,
+            email: email,
+            avatarInitial: avatarInitial,
+            avatarUrl: avatarUrl,
+            gender: gender,
+            birthYear: birthYear,
+            city: city,
+            region: region,
+            session: session
+        )
+        currentUser = updated
+        persistUser()
+        return updated
     }
 
     /// Apply onboarding extras gathered by the AI sign-up flow (preferred topics

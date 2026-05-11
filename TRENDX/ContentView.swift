@@ -42,10 +42,15 @@ struct ContentView: View {
                     TrendXTabBar(selectedTab: $store.selectedTab)
 
                     if let message = store.appMessage {
-                        BetaStatusBanner(message: message)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 12)
-                            .frame(maxHeight: .infinity, alignment: .top)
+                        BetaStatusBanner(message: message) {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                store.appMessage = nil
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
                 // Only the authed shell ignores the keyboard so the
@@ -76,6 +81,7 @@ struct ContentView: View {
 
 private struct BetaStatusBanner: View {
     let message: String
+    let onDismiss: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -85,6 +91,14 @@ private struct BetaStatusBanner: View {
                 .font(.trendxSmall())
                 .lineLimit(2)
             Spacer(minLength: 0)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.primaryDeep.opacity(0.7))
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.white.opacity(0.6)))
+            }
+            .buttonStyle(.plain)
         }
         .foregroundStyle(TrendXTheme.primaryDeep)
         .padding(.horizontal, 12)
@@ -95,6 +109,7 @@ private struct BetaStatusBanner: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(TrendXTheme.primary.opacity(0.16), lineWidth: 0.8)
         )
+        .onTapGesture(perform: onDismiss)
     }
 }
 

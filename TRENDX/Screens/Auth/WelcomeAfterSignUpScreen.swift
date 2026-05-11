@@ -61,9 +61,15 @@ struct WelcomeAfterSignUpScreen: View {
                 .padding(.horizontal, 24)
 
                 if stage == .ready {
-                    insightsRow
-                        .padding(.horizontal, 26)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    VStack(spacing: 16) {
+                        if !interests.isEmpty {
+                            interestsCloud
+                        }
+                        aiPersonalizedQuote
+                        insightsRow
+                    }
+                    .padding(.horizontal, 26)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
 
                 Spacer()
@@ -104,13 +110,33 @@ struct WelcomeAfterSignUpScreen: View {
 
     // MARK: - Stages
 
-    private var headline: String {
-        let firstName = store.currentUser.name.split(separator: " ").first.map(String.init)
+    private var firstName: String {
+        store.currentUser.name.split(separator: " ").first.map(String.init)
             ?? store.currentUser.name
+    }
+
+    private var interests: [Topic] { store.followedTopics }
+
+    private var voiceLine: String? {
+        let raw = UserDefaults.standard.string(forKey: "trendx_onboarding_voice")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (raw?.isEmpty == false) ? raw : nil
+    }
+
+    private var headline: String {
         switch stage {
         case .greeting: return "أهلاً \(firstName) ✨"
-        case .tuning:   return "أُهيّئ بوصلتك الآن…"
-        case .ready:    return "كلّ شيء جاهز"
+        case .tuning:
+            // Personalize the "tuning" phase with the user's chosen
+            // interests when we have them — otherwise fall back to a
+            // generic message.
+            if let primary = interests.first?.name {
+                return interests.count > 1
+                    ? "أهيّئ بوصلتك لـ\(primary) و\(interests.count - 1) اهتمام آخر…"
+                    : "أهيّئ بوصلتك لقطاع \(primary)…"
+            }
+            return "أُهيّئ بوصلتك الآن…"
+        case .ready:    return "بوصلتك جاهزة، \(firstName)"
         }
     }
 
@@ -119,8 +145,12 @@ struct WelcomeAfterSignUpScreen: View {
         case .greeting:
             return "انضممت لأكثر مجتمع رأي ذكاء في المنطقة — رأيك من اليوم محسوب."
         case .tuning:
-            return "أربط اهتماماتك ببيانات اليوم… أبحث عن أوّل اتجاه يستحقّ مشاركتك فيه."
+            return "أربط اختياراتك بآلاف الاستجابات الحيّة… أبحث عن أوّل اتجاه يستحقّ مشاركتك فيه."
         case .ready:
+            // Personalized "what's waiting" pitch based on interests.
+            if let primary = interests.first?.name {
+                return "اخترت لك ٣ اتّجاهات صاعدة في \(primary)\(interests.count > 1 ? " و\(interests.count - 1) موضوع آخر" : ""). ابدأ بأقواها الآن."
+            }
             return "ابدأ بنبض اليوم، أو استكشف الاتجاهات على لوحتك الشخصية."
         }
     }
@@ -169,6 +199,72 @@ struct WelcomeAfterSignUpScreen: View {
                     .animation(.spring(response: 0.4, dampingFraction: 0.7), value: stage)
             }
         }
+    }
+
+    // Interest chips — pulled from the topics the user picked during sign-up.
+    private var interestsCloud: some View {
+        VStack(spacing: 8) {
+            Text("اهتماماتك المختارة")
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            // Horizontal scroller — works for any number of interests
+            // without needing a custom flow layout.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(interests) { topic in
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 9, weight: .heavy))
+                            Text(topic.name)
+                                .font(.system(size: 11.5, weight: .heavy))
+                        }
+                        .foregroundStyle(TrendXTheme.primaryDeep)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(TrendXTheme.primary.opacity(0.12)))
+                        .overlay(Capsule().strokeBorder(TrendXTheme.primary.opacity(0.18), lineWidth: 0.8))
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    // Editorial-style AI quote that references both interests and (when
+    // available) the user's free-text voice line from sign-up.
+    private var aiPersonalizedQuote: some View {
+        let body: String = {
+            if let voice = voiceLine {
+                return "سمعتك تقول: \u{201C}\(voice)\u{201D}.\nسأبني لوحتك حول هذي العبارة — ابدأ بأقرب اتجاه يلامسها."
+            }
+            if let primary = interests.first?.name {
+                return "اخترت \(primary). الجمهور السعودي الآن منقسم تماماً حول قضية فيها — رأيك يقدر يرجّح كفّة."
+            }
+            return "اختر أول استطلاع يلفت نظرك — كل صوت يضيف بُعداً للنبض الذي نرسمه."
+        }()
+        return HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "quote.opening")
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundStyle(TrendXTheme.primary.opacity(0.7))
+            Text(body)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(TrendXTheme.ink)
+                .lineSpacing(4)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(TrendXTheme.primary.opacity(0.16), lineWidth: 1)
+                )
+                .shadow(color: TrendXTheme.primary.opacity(0.08), radius: 10, x: 0, y: 4)
+        )
     }
 
     private var insightsRow: some View {
