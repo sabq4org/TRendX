@@ -92,11 +92,11 @@ struct CreateSurveySheet: View {
             .navigationTitle("استبيان جديد")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إلغاء") { dismiss() }
                         .foregroundStyle(TrendXTheme.secondaryInk)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("نشر") { publish() }
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(canPublish ? TrendXTheme.primary : TrendXTheme.tertiaryInk)

@@ -53,11 +53,14 @@ struct PollDetailView: View {
             .navigationTitle("تفاصيل الاستطلاع")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Close on the trailing edge (left side in RTL) — a convention
+                // we use across every sheet in TRENDX so users always reach
+                // for the same spot to dismiss.
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إغلاق") { dismiss() }
                         .foregroundStyle(TrendXTheme.primary)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     if let poll {
                         Button {
                             showAnalytics = true

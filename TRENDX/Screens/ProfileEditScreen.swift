@@ -99,10 +99,9 @@ struct ProfileEditScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("حفظ") { Task { await save() } }
+                Button("إغلاق") { dismiss() }
                     .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(canSave ? TrendXTheme.primary : TrendXTheme.tertiaryInk)
-                    .disabled(!canSave)
+                    .foregroundStyle(TrendXTheme.primary)
             }
         }
         .scrollDismissesKeyboard(.interactively)

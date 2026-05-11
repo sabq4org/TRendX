@@ -289,14 +289,14 @@ struct CreatePollSheet: View {
                         .foregroundStyle(TrendXTheme.ink)
                 }
                 
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إلغاء") {
                         dismiss()
                     }
                     .foregroundStyle(TrendXTheme.error)
                 }
-                
-                ToolbarItem(placement: .topBarTrailing) {
+
+                ToolbarItem(placement: .topBarLeading) {
                     Button("نشر") {
                         publishPoll()
                     }

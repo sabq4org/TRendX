@@ -752,7 +752,7 @@ private struct RedemptionHistoryView: View {
             .navigationTitle("سجل الاستبدال")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إغلاق") {
                         dismiss()
                     }

@@ -78,11 +78,11 @@ struct SurveyAnalyticsView: View {
             .navigationTitle("التحليل الشامل")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إغلاق") { dismiss() }
                         .foregroundStyle(TrendXTheme.primary)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
                     } label: {
                         Image(systemName: "square.and.arrow.up")

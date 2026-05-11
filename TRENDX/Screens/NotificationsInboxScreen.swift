@@ -134,8 +134,13 @@ struct NotificationsInboxScreen: View {
         .navigationTitle("الإشعارات")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("إغلاق") { dismiss() }
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.primary)
+            }
             if !vm.notifications.isEmpty && vm.unreadCount > 0 {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("تعليم الكل كمقروء") {
                         vm.markAllRead()
                     }

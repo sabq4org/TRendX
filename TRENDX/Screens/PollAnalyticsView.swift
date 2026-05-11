@@ -176,11 +176,11 @@ struct PollAnalyticsView: View {
             .navigationTitle("لوحة التحليل")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إغلاق") { dismiss() }
                         .foregroundStyle(TrendXTheme.primary)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     ShareLink(
                         item: shareSummary,
                         subject: Text("ملخص استطلاع TRENDX"),

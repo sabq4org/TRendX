@@ -145,7 +145,7 @@ struct SurveyDetailView: View {
             .navigationTitle(survey.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("إغلاق") { dismiss() }
                         .foregroundStyle(TrendXTheme.primary)
                 }
