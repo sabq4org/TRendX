@@ -65,7 +65,17 @@ Layered access to the backend:
 3. **`AppStore`** — orchestrates repositories, holds `@Published` state, mirrors data to `UserDefaults` under keyed snapshots (`trendx_user_v1`, `trendx_polls_v1`, etc.) so the UI keeps working offline.
 4. **Read-only "intelligence" endpoints** (Pulse, DNA, Index, Prediction Accuracy) call `TrendXAPIClient` directly via `store.apiClient` + `store.accessToken` — the store exposes both. See [TRENDX/Networking/TrendXIntelligenceAPI.swift](TRENDX/Networking/TrendXIntelligenceAPI.swift) and the related screens.
 
-`isAuthenticated` is `true` when either an `AuthSession` is restored *or* the API is not configured (offline mode). That dual path is intentional — keep it when refactoring auth.
+**Authentication has three states**, not two:
+
+| state | `isAuthenticated` | `isGuest` | what the user sees |
+|-------|-------------------|-----------|--------------------|
+| guest (fresh install OR after `signOut()`) | `true` | `true` | full tab interface, but `HomeHeader` and `AccountScreen` swap their personalized chrome for sign-in CTAs that flip `store.showLoginSheet = true` |
+| authenticated | `true` | `false` | normal personalized UI |
+| offline build (no backend URL) | `true` | `false` | local samples |
+
+`isAuthenticated` is **always** true so the tab interface is always rendered; the auth distinction is `isGuest`. Don't bring back a standalone `LoginScreen` root — present it as a sheet via `showLoginSheet`.
+
+**Signup→welcome transition is order-sensitive.** `AppStore.signUp()` stages the session and sets `showWelcomeAfterSignUp = true` *before* flipping `isAuthenticated` so SwiftUI batches both into a single render. ContentView treats `showWelcomeAfterSignUp` as the highest-priority surface — that's what keeps the welcome screen from being preempted by a one-frame flash of the tab UI. If you refactor the auth flow, preserve this ordering or the flash returns.
 
 The bootstrap call (`GET /bootstrap`) returns topics + active polls + the user's votes in one shot. `AppStore.refreshBootstrap()` is also invoked on every `scenePhase == .active` transition (see `ContentView`) so dashboard-published content appears without a manual pull-to-refresh.
 
@@ -86,7 +96,25 @@ RTL: every top-level surface (auth shell, sheets, tab content) applies `.trendxR
 
 ### Dashboard
 
-Next.js 15 App Router. Routes are split between `app/login` (public) and `app/(authed)/...` (account, overview, polls, surveys, sectors, pulse, accuracy, audiences, trendx-index, admin). Shared API client in [dashboard/lib/api.ts](dashboard/lib/api.ts), auth context in [dashboard/lib/auth.tsx](dashboard/lib/auth.tsx). Live updates use SSE against `/events` on the Railway API. Charts via Recharts.
+Next.js 15 App Router. Routes are split between:
+- `app/login` (public)
+- `app/(authed)/...` — account, overview, polls, surveys, sectors, pulse, accuracy, audiences, trendx-index, admin
+- `app/business/` — **public** B2B/marketing page (no auth) backed by `GET /public/audience-stats`; refreshes every 30s. Live URL: <https://t-rend-x.vercel.app/business>
+- `app/reports/{sector,survey}/[id]` — printable HTML reports auth'd via `?token=` query, linked from inside each detail page
+
+Shared API client in [dashboard/lib/api.ts](dashboard/lib/api.ts), auth context in [dashboard/lib/auth.tsx](dashboard/lib/auth.tsx). Live updates use SSE against `/events/dashboard` on the Railway API; [LiveTicker](dashboard/components/LiveTicker.tsx) consumes `vote_cast`, `vote_milestone`, and `gift_redeemed` event types. Charts via Recharts.
+
+Deployed URL: <https://t-rend-x.vercel.app>
+
+### Retention & engagement layer (added 2026-05-11)
+
+Three on-device hooks back this engagement loop:
+
+- **Smart notifications inbox** — [`/me/notifications`](backend/railway-api/src/lib/notifications.ts) synthesizes 5 notification kinds (close_to_gift, pulse_pending, challenge_open, expiring_poll, reward_earned) on demand from the user's current state. No notifications table — iOS tracks read state in `UserDefaults` (`trendx_notifications_read_v1`). UI: [NotificationsInboxScreen](TRENDX/Screens/NotificationsInboxScreen.swift), bell badge in `HomeHeader`.
+- **Daily bonus** — [`GET /me/daily-bonus`](backend/railway-api/src/index.ts) / [`POST /me/daily-bonus/claim`](backend/railway-api/src/index.ts), backed by `points_ledger.type = daily_bonus` (migration `20260511000000_add_daily_bonus`). Streak ladder is 5→8→12→18→25→35→50. UI: [DailyBonusCard](TRENDX/Components/DailyBonusCard.swift) on Home.
+- **Member tiers** — computed client-side from points balance: Bronze (0) / Silver (300) / Gold (1000) / Diamond (3000). See [MemberTier](TRENDX/Components/MemberTier.swift) for the badge + progress card.
+
+Other engagement screens: [WeeklyChallengeScreen](TRENDX/Screens/WeeklyChallengeScreen.swift), [GiftRedemptionSuccessSheet](TRENDX/Screens/GiftRedemptionSuccessSheet.swift) (confetti + code capsule + share), [ProfileEditScreen](TRENDX/Screens/ProfileEditScreen.swift). Confetti is a shared component: [TrendXConfetti](TRENDX/Components/TrendXConfetti.swift).
 
 ## Conventions worth knowing
 
@@ -94,3 +122,11 @@ Next.js 15 App Router. Routes are split between `app/login` (public) and `app/(a
 - **Sample data fallbacks**: iOS screens always have local samples (`Topic.samples`, `Poll.samples`, `Survey.techSamples`, `Gift.samples`). Keep these in sync conceptually when adding fields, since they're what the offline + first-run experience renders.
 - **Migrations are deploy-time**: any DB change must be a new file under `prisma/migrations/` written so it can re-run safely. The schema header explains why columns get denormalized — follow that pattern rather than fixing it with a join.
 - **Don't split the Hono router file** unless a section is genuinely independent; the backend README explicitly calls this out and the file is structured to be read end-to-end.
+- **Pulse falls back to anonymous**: `/pulse/today/anon` is hit first so the screen renders something even with a stale token. Don't wrap every API call in `try?` — surface errors with a retry button (see `PulseTodayScreen.errorState`).
+
+### iOS UX conventions
+
+- **Never use `.tracking()` with positive values on Arabic text.** Positive letter-spacing disconnects the joined glyphs and makes labels look "cut." This burned us on `PollCoverView`, `SurveyDetailView` hero, and elsewhere. English-only labels are fine.
+- **Sheet close buttons go on `.topBarTrailing`** (= left side of the screen in RTL). Secondary actions (Share, Save, "تعليم الكل كمقروء") go on `.topBarLeading`. If a save button already exists at the bottom of a form, **don't duplicate it** as a top toolbar item — put "إغلاق" there instead.
+- **Banner messages auto-dismiss after 4s.** `AppStore.appMessage`'s `didSet` schedules the dismissal; the user can also tap to clear. Don't add long-lived banners — they should be transient.
+- **Apply `.trendxRTL()` to every new top-level sheet.** Earlier commits (`5e95543`, `25dafab`, `08f8a0f`) were dedicated to fixing the consequences of forgetting this.
