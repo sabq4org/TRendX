@@ -163,6 +163,7 @@ model User {
 
   publishedPolls   Poll[]           @relation("PollPublisher")
   publishedSurveys Survey[]         @relation("SurveyPublisher")
+  publishedStories Story[]          @relation("StoryPublisher")
   votes            Vote[]
   surveyResponses  SurveyResponse[]
   redemptions      Redemption[]
@@ -185,6 +186,42 @@ model User {
   @@index([accountType])
   @@index([isVerified])
   @@map("users")
+}
+
+// Editorial collection: a sequence of polls/surveys/events grouped
+// under a single narrative thread. Used for "Sector takeover" days
+// and ministry-led ongoing series (e.g. "موسم الرياض 2026 — 12
+// استطلاع متسلسل"). Items reference back via `storyId`.
+model Story {
+  id          String  @id @default(uuid()) @db.Uuid
+  publisherId String  @map("publisher_id") @db.Uuid
+  publisher   User    @relation("StoryPublisher", fields: [publisherId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  coverImage  String? @map("cover_image")
+  // Visual tone (tech / economy / health / etc.) — falls back to the
+  // publisher's account color when null.
+  coverStyle  String? @map("cover_style")
+
+  // pinned: surfaces above feed for follower timelines while active.
+  isPinned Boolean @default(false) @map("is_pinned")
+  // featured: included in the public discovery row on Home.
+  isFeatured Boolean @default(false) @map("is_featured")
+
+  status    String   @default("active") // active | closed | draft
+  startsAt  DateTime @default(now()) @map("starts_at")
+  endsAt    DateTime? @map("ends_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  polls   Poll[]
+  surveys Survey[]
+
+  @@index([publisherId])
+  @@index([isFeatured])
+  @@index([isPinned])
+  @@map("stories")
 }
 
 // One-way social graph (Twitter-style). `followerId` follows
@@ -264,6 +301,13 @@ model Poll {
   topic     Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
   topicTags String[] @default([]) @map("topic_tags")
 
+  // Optional grouping into an editorial Story (sequential narrative
+  // published by an account). Setting `storyId` adds this poll to the
+  // story's items in order of `storyOrder` (ASC).
+  storyId    String? @map("story_id") @db.Uuid
+  story      Story?  @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  storyOrder Int     @default(0) @map("story_order")
+
   type   PollType   @default(single_choice)
   status PollStatus @default(active)
 
@@ -333,6 +377,9 @@ model Vote {
 
   secondsToVote Int?    @map("seconds_to_vote")
   changedVote   Boolean @default(false) @map("changed_vote")
+  // Opt-in visibility for the social timeline. Default is `false` —
+  // user must explicitly tick "أظهر تصويتي لمتابعيّ" at vote time.
+  isPublic Boolean @default(false) @map("is_public")
 
   votedAt DateTime @default(now()) @map("voted_at")
 
@@ -341,6 +388,7 @@ model Vote {
   @@index([votedAt])
   @@index([city])
   @@index([gender])
+  @@index([isPublic])
   @@map("votes")
 }
 
@@ -359,6 +407,11 @@ model Survey {
   topicId   String?  @map("topic_id") @db.Uuid
   topic     Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
   topicTags String[] @default([]) @map("topic_tags")
+
+  // Optional grouping into an editorial Story collection (see Poll).
+  storyId    String? @map("story_id") @db.Uuid
+  story      Story?  @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  storyOrder Int     @default(0) @map("story_order")
 
   status SurveyStatus @default(active)
 

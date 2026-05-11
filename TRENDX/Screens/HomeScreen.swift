@@ -102,6 +102,16 @@ struct HomeScreen: View {
             // accounts in the user's sectors. Empty for guests.
             if !store.isGuest {
                 SuggestedFollowsCarousel(store: store)
+
+                NavigationLink {
+                    TimelineScreen(store: store)
+                        .environmentObject(store)
+                        .trendxRTL()
+                } label: {
+                    TimelineHomeEntry()
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
             }
 
             // Daily Pulse spotlight — same JSON as the Web /pulse page.
@@ -187,6 +197,9 @@ struct HomeScreen: View {
                             },
                             onShare: {
                                 store.sharePoll(poll.id)
+                            },
+                            onVoteWithVisibility: { optionId, isPublic in
+                                store.voteOnPoll(poll.id, optionId: optionId, isPublic: isPublic)
                             }
                         )
                         .onTapGesture {
@@ -342,4 +355,59 @@ struct TopicFilterChip: View {
     HomeScreen()
         .environmentObject(AppStore())
         .trendxRTL()
+}
+
+// MARK: - Timeline Home Entry
+
+private struct TimelineHomeEntry: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [TrendXTheme.aiIndigo, TrendXTheme.aiViolet],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 48, height: 48)
+                    .shadow(color: TrendXTheme.aiIndigo.opacity(0.35), radius: 10, x: 0, y: 5)
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("الرادار")
+                        .font(.system(size: 15, weight: .black, design: .rounded))
+                        .foregroundStyle(TrendXTheme.ink)
+                    Text("جديد")
+                        .font(.system(size: 9, weight: .heavy))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(TrendXTheme.aiViolet))
+                        .foregroundStyle(.white)
+                }
+                Text("نشاط المتابعين، الجهات الرسمية، وأقسامك المفضّلة لحظياً")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(TrendXTheme.aiIndigo)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: TrendXTheme.aiIndigo.opacity(0.10), radius: 12, x: 0, y: 5)
+        )
+    }
 }

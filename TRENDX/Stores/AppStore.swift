@@ -450,7 +450,7 @@ final class AppStore: ObservableObject {
 
     // MARK: - Poll Actions
     
-    func voteOnPoll(_ pollId: UUID, optionId: UUID) {
+    func voteOnPoll(_ pollId: UUID, optionId: UUID, isPublic: Bool = false) {
         guard let pollIndex = polls.firstIndex(where: { $0.id == pollId }),
               !polls[pollIndex].hasUserVoted else { return }
         
@@ -481,6 +481,7 @@ final class AppStore: ObservableObject {
                 let mutation = try await pollRepository.vote(
                     pollId: pollId,
                     optionId: optionId,
+                    isPublic: isPublic,
                     session: authSession
                 )
                 replacePoll(mutation.poll.domain)

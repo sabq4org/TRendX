@@ -553,8 +553,14 @@ struct PollCard: View {
     let onVote: (UUID) -> Void
     let onBookmark: () -> Void
     let onShare: () -> Void
+    /// Optional richer vote callback — invoked instead of `onVote` when
+    /// the parent wants to pass through the opt-in visibility flag.
+    var onVoteWithVisibility: ((UUID, Bool) -> Void)? = nil
 
     @State private var selectedOption: UUID?
+    /// Per-card opt-in switch: "أظهر تصويتي لمتابعيّ". Default OFF —
+    /// matches the backend's default `is_public = false`.
+    @State private var voteIsPublic: Bool = false
 
     private var statusKind: StatusBadge.Kind {
         if poll.isExpired { return .ended }
@@ -726,10 +732,47 @@ struct PollCard: View {
                     ) {
                         if !poll.hasUserVoted {
                             selectedOption = option.id
-                            onVote(option.id)
+                            if let richer = onVoteWithVisibility {
+                                richer(option.id, voteIsPublic)
+                            } else {
+                                onVote(option.id)
+                            }
                         }
                     }
                 }
+            }
+
+            // Opt-in vote visibility — only shown before the user has
+            // voted, so the choice is made at the moment of action and
+            // never retroactively. Defaults to private.
+            if !poll.hasUserVoted {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        voteIsPublic.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: voteIsPublic ? "eye.fill" : "eye.slash.fill")
+                            .font(.system(size: 11, weight: .heavy))
+                        Text(voteIsPublic ? "تصويتي ظاهر لمتابعيّ" : "تصويتي خاص")
+                            .font(.system(size: 11.5, weight: .heavy))
+                        Spacer(minLength: 0)
+                        Text(voteIsPublic ? "اضغط للإخفاء" : "اضغط للإظهار")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                    .foregroundStyle(voteIsPublic ? TrendXTheme.primary : TrendXTheme.secondaryInk)
+                    .padding(.horizontal, 11).padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(voteIsPublic ? TrendXTheme.primary.opacity(0.10) : TrendXTheme.paleFill)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(voteIsPublic ? TrendXTheme.primary.opacity(0.22) : Color.clear, lineWidth: 0.8)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
             }
 
             // AI Insight after voting

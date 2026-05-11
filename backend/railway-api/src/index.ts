@@ -90,6 +90,7 @@ import {
   unfollowUser,
   viewerFollows,
 } from "./lib/follows.js";
+import { buildTimeline, type TimelineFilter } from "./lib/timeline.js";
 import { startDailyJob } from "./jobs/daily.js";
 
 // MARK: - Types
@@ -426,6 +427,136 @@ app.get("/me/suggested-follows", async (c) => {
   return c.json({ items });
 });
 
+// MARK: - Timeline (الرادار)
+
+app.get("/me/timeline", async (c) => {
+  const userId = c.get("userId");
+  const cursor = c.req.query("cursor");
+  const filterRaw = (c.req.query("filter") ?? "all") as TimelineFilter;
+  const limit = Number(c.req.query("limit") ?? "24");
+
+  const cutoff = cursor ? new Date(cursor) : new Date();
+  const result = await buildTimeline(userId, {
+    cutoff,
+    filter: ["all", "accounts", "sectors", "results"].includes(filterRaw) ? filterRaw : "all",
+    limit,
+  });
+  return c.json(result);
+});
+
+// MARK: - Stories (editorial collections)
+
+app.post("/stories", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{
+    title: string;
+    description?: string;
+    cover_image?: string;
+    cover_style?: string;
+    is_featured?: boolean;
+    is_pinned?: boolean;
+    ends_at?: string;
+  }>();
+  if (!body.title || body.title.trim().length < 4) {
+    return c.json({ error: "العنوان قصير جداً." }, 400);
+  }
+  const story = await prisma.story.create({
+    data: {
+      publisherId: userId,
+      title: body.title.trim(),
+      description: body.description ?? null,
+      coverImage: body.cover_image ?? null,
+      coverStyle: body.cover_style ?? null,
+      isFeatured: body.is_featured ?? false,
+      isPinned: body.is_pinned ?? false,
+      endsAt: body.ends_at ? new Date(body.ends_at) : null,
+    },
+  });
+  return c.json(story);
+});
+
+app.get("/stories/:id", async (c) => {
+  const story = await prisma.story.findUnique({
+    where: { id: c.req.param("id") },
+    include: {
+      publisher: true,
+      polls: {
+        orderBy: { storyOrder: "asc" },
+        include: {
+          options: { orderBy: { displayOrder: "asc" } },
+          topic: true,
+          publisher: { select: { accountType: true, isVerified: true, handle: true } },
+        },
+      },
+      surveys: {
+        orderBy: { storyOrder: "asc" },
+        include: {
+          questions: { orderBy: { displayOrder: "asc" }, include: { options: true } },
+          topic: true,
+          publisher: { select: { accountType: true, isVerified: true, handle: true, name: true } },
+        },
+      },
+    },
+  });
+  if (!story) return c.json({ error: "Story not found" }, 404);
+  return c.json({
+    id: story.id,
+    title: story.title,
+    description: story.description,
+    cover_image: story.coverImage,
+    cover_style: story.coverStyle,
+    is_pinned: story.isPinned,
+    is_featured: story.isFeatured,
+    status: story.status,
+    starts_at: story.startsAt.toISOString(),
+    ends_at: story.endsAt?.toISOString() ?? null,
+    publisher: userDTO(story.publisher),
+    polls: story.polls.map((p) => pollDTO(p, { userId: c.get("userId") })),
+    surveys: story.surveys.map(surveyDTO),
+  });
+});
+
+app.get("/stories", async (c) => {
+  const featured = c.req.query("featured") === "true";
+  const publisherId = c.req.query("publisher_id");
+  const stories = await prisma.story.findMany({
+    where: {
+      status: "active",
+      ...(featured ? { isFeatured: true } : {}),
+      ...(publisherId ? { publisherId } : {}),
+    },
+    include: {
+      publisher: { select: { id: true, name: true, handle: true, accountType: true, isVerified: true, avatarUrl: true, avatarInitial: true, bio: true } },
+      _count: { select: { polls: true, surveys: true } },
+    },
+    orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+    take: 20,
+  });
+  return c.json({
+    items: stories.map((s) => ({
+      id: s.id,
+      title: s.title,
+      description: s.description,
+      cover_image: s.coverImage,
+      cover_style: s.coverStyle,
+      is_pinned: s.isPinned,
+      is_featured: s.isFeatured,
+      publisher: {
+        id: s.publisher.id,
+        name: s.publisher.name,
+        handle: s.publisher.handle,
+        account_type: s.publisher.accountType,
+        is_verified: s.publisher.isVerified,
+        avatar_url: s.publisher.avatarUrl,
+        avatar_initial: s.publisher.avatarInitial,
+        bio: s.publisher.bio,
+      },
+      item_count: (s._count?.polls ?? 0) + (s._count?.surveys ?? 0),
+      created_at: s.createdAt.toISOString(),
+    })),
+  });
+});
+
 // MARK: - Topics
 
 app.get("/topics", async (c) => {
@@ -642,9 +773,12 @@ app.post("/polls/vote", async (c) => {
     option_id?: string;
     optionId?: string;
     seconds_to_vote?: number;
+    is_public?: boolean;
+    isPublic?: boolean;
   }>();
   const pollId = body.poll_id ?? body.pollId;
   const optionId = body.option_id ?? body.optionId;
+  const isPublic = body.is_public ?? body.isPublic ?? false;
   if (!pollId || !optionId) return c.json({ error: "Missing poll or option" }, 400);
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -671,6 +805,7 @@ app.post("/polls/vote", async (c) => {
           gender: user.gender,
           ageGroup,
           secondsToVote: body.seconds_to_vote ?? null,
+          isPublic,
         },
       }),
       prisma.pollOption.update({

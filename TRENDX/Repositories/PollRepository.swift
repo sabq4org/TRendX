@@ -56,7 +56,7 @@ final class PollRepository {
         return response.poll.domain
     }
 
-    func vote(pollId: UUID, optionId: UUID, session: AuthSession?) async throws -> VoteMutation {
+    func vote(pollId: UUID, optionId: UUID, isPublic: Bool = false, session: AuthSession?) async throws -> VoteMutation {
         guard client.config.isConfigured else {
             throw TrendXAPIError.notConfigured
         }
@@ -64,7 +64,7 @@ final class PollRepository {
         return try await client.post(
             "/polls/vote",
             accessToken: session?.accessToken,
-            body: VoteRequest(pollId: pollId, optionId: optionId)
+            body: VoteRequest(pollId: pollId, optionId: optionId, isPublic: isPublic)
         )
     }
 
@@ -122,6 +122,7 @@ private struct PollMutationResponse: Decodable {
 private struct VoteRequest: Encodable {
     let pollId: UUID
     let optionId: UUID
+    let isPublic: Bool
 }
 
 struct UserDTO: Codable {
