@@ -19,8 +19,16 @@ struct AccountScreen: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 18) {
-                ProfileHeader(user: store.currentUser) {
-                    showProfileEdit = true
+                if store.isGuest {
+                    GuestAccountHero {
+                        store.showLoginSheet = true
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                } else {
+                    ProfileHeader(user: store.currentUser) {
+                        showProfileEdit = true
+                    }
                 }
 
                 StatsGrid(
@@ -492,4 +500,92 @@ struct SettingsRow: View {
     AccountScreen()
         .environmentObject(AppStore())
         .trendxRTL()
+}
+
+// MARK: - Guest hero (shown when there is no real session)
+
+private struct GuestAccountHero: View {
+    let onSignIn: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(TrendXTheme.primary.opacity(0.10))
+                    .frame(width: 132, height: 132)
+                Circle()
+                    .stroke(TrendXTheme.primary.opacity(0.18), lineWidth: 1.5)
+                    .frame(width: 108, height: 108)
+                Circle()
+                    .fill(TrendXTheme.primaryGradient)
+                    .frame(width: 88, height: 88)
+                    .shadow(color: TrendXTheme.primary.opacity(0.45), radius: 18, x: 0, y: 10)
+                Image(systemName: "person.crop.circle.fill.badge.plus")
+                    .font(.system(size: 36, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(spacing: 6) {
+                Text("ابدأ رحلتك مع TRENDX")
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(TrendXTheme.ink)
+                Text("سجّل دخولك للمشاركة في الاستطلاعات، جمع النقاط، واستبدال الهدايا.")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 30)
+            }
+
+            HStack(spacing: 16) {
+                pitchTile(icon: "star.circle.fill", title: "اربح نقاط", tint: TrendXTheme.accent)
+                pitchTile(icon: "gift.fill", title: "استبدل هدايا", tint: TrendXTheme.success)
+                pitchTile(icon: "waveform.path.ecg", title: "صوّت يومياً", tint: TrendXTheme.primary)
+            }
+            .padding(.horizontal, 10)
+
+            Button(action: onSignIn) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .heavy))
+                    Text("سجّل دخولك الآن")
+                        .font(.system(size: 15, weight: .heavy))
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 12, weight: .heavy))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(TrendXTheme.primaryGradient)
+                )
+                .shadow(color: TrendXTheme.primary.opacity(0.35), radius: 14, x: 0, y: 6)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .shadow(color: TrendXTheme.shadow, radius: 18, x: 0, y: 6)
+        )
+    }
+
+    private func pitchTile(icon: String, title: String, tint: Color) -> some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(tint)
+            }
+            Text(title)
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(TrendXTheme.secondaryInk)
+        }
+        .frame(maxWidth: .infinity)
+    }
 }

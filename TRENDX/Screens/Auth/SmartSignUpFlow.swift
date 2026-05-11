@@ -151,8 +151,21 @@ struct SmartSignUpFlow: View {
                     }
                 }
             }
+
+            // Centered "preparing your profile" overlay during the
+            // .finishing step — replaces the chat-bubble-at-the-bottom
+            // approach which was getting tucked underneath the soft
+            // keyboard on the smaller iPhones. Also covers the moment
+            // between sign-up success and the welcome screen so we never
+            // flash the unhydrated chat behind it.
+            if step == .finishing || step == .done {
+                SignUpFinishingOverlay(name: name)
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
         }
         .trendxRTL()
+        .animation(.easeInOut(duration: 0.25), value: step)
         .onAppear { Task { await runStep(.greeting) } }
         .onChange(of: store.appMessage) { _, value in
             // Surface API errors back into the conversation.
@@ -436,7 +449,11 @@ struct SmartSignUpFlow: View {
             focusedField = .askVoice
 
         case .finishing:
-            await aiTypeAndSay("ممتاز \(name) — أُعدّ ملفّك الآن…")
+            // The centered SignUpFinishingOverlay is what the user sees
+            // during this phase — no more chat messages, no keyboard
+            // race. Just kick off the backend registration; ContentView
+            // will swap to the welcome screen the instant signUp wins.
+            dismissKeyboard()
             await registerOnBackend()
 
         case .done:
@@ -560,7 +577,6 @@ struct SmartSignUpFlow: View {
                 followedTopics: matchedTopicIds,
                 voiceLine: voiceLine
             )
-            await aiTypeAndSay("جاهز ✨ ملفّك أصبح حيّاً، ولوحة TRENDX اليوم أصبحت موجّهة لاهتماماتك.")
             step = .done
         }
         // If signUp failed, the .onChange(appMessage) handler nudges
@@ -772,4 +788,102 @@ private struct InputCardStyle: ViewModifier {
 #Preview {
     SmartSignUpFlow(onSwitchToSignIn: {})
         .environmentObject(AppStore())
+}
+
+// MARK: - Finishing overlay
+
+/// Full-screen "preparing your profile" panel shown while the backend
+/// completes the sign-up call. Sits above the chat transcript so the
+/// keyboard, chat bubbles and any half-rendered transitions never poke
+/// through. Disappears the moment ContentView swaps in the welcome
+/// screen (driven by store.showWelcomeAfterSignUp).
+private struct SignUpFinishingOverlay: View {
+    let name: String
+    @State private var orbScale: CGFloat = 0.92
+    @State private var orbGlow: Double = 0.35
+    @State private var dotIndex: Int = 0
+
+    var body: some View {
+        ZStack {
+            // Solid backdrop so the chat behind doesn't bleed through
+            // (mimics the ambient background but at full opacity).
+            LinearGradient(
+                colors: [
+                    TrendXTheme.background,
+                    TrendXTheme.primary.opacity(0.10),
+                    TrendXTheme.aiViolet.opacity(0.08)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 28) {
+                Spacer()
+
+                ZStack {
+                    Circle()
+                        .fill(TrendXTheme.primary.opacity(orbGlow * 0.30))
+                        .frame(width: 220, height: 220)
+                        .blur(radius: 30)
+                    Circle()
+                        .fill(TrendXTheme.aiViolet.opacity(orbGlow * 0.22))
+                        .frame(width: 170, height: 170)
+                        .blur(radius: 26)
+                        .offset(x: 22, y: -14)
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [TrendXTheme.aiIndigo, TrendXTheme.primary, TrendXTheme.aiViolet],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 116, height: 116)
+                        .scaleEffect(orbScale)
+                        .shadow(color: TrendXTheme.primary.opacity(0.5), radius: 22, x: 0, y: 10)
+                        .overlay(
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 36, weight: .heavy))
+                                .foregroundStyle(.white)
+                        )
+                }
+
+                VStack(spacing: 8) {
+                    Text("أُعدّ ملفّك يا \(name)…")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(TrendXTheme.ink)
+                    Text("أربط اختياراتك ببيانات اليوم.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
+                HStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .fill(TrendXTheme.primary)
+                            .frame(width: 8, height: 8)
+                            .scaleEffect(dotIndex == i ? 1.3 : 1.0)
+                            .opacity(dotIndex == i ? 1.0 : 0.4)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.4), value: dotIndex)
+
+                Spacer()
+                Spacer()
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                orbScale = 1.06
+                orbGlow = 1.0
+            }
+            Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 380_000_000)
+                    await MainActor.run { dotIndex = (dotIndex + 1) % 3 }
+                }
+            }
+        }
+    }
 }

@@ -81,6 +81,8 @@ struct HomeHeader: View {
     let userName: String
     let points: Int
     var unreadNotifications: Int = 0
+    var isGuest: Bool = false
+    var onSignInTap: () -> Void = {}
     let onNotificationsTap: () -> Void
     let onSearchTap: () -> Void
 
@@ -90,68 +92,10 @@ struct HomeHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.18))
-                        .frame(width: 52, height: 52)
-                    Circle()
-                        .stroke(Color.white.opacity(0.45), lineWidth: 1)
-                        .frame(width: 52, height: 52)
-                    Text(String(userName.prefix(1)))
-                        .font(.system(size: 20, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(greeting.eyebrow)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.78))
-
-                    Text(greeting.title)
-                        .font(.system(size: 24, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-
-                Spacer(minLength: 0)
-
-                HeaderIconButton(icon: "magnifyingglass", action: onSearchTap)
-
-                Button(action: onNotificationsTap) {
-                    Image(systemName: "bell.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(Color.white.opacity(0.16)))
-                        .overlay(alignment: .topTrailing) {
-                            if unreadNotifications > 0 {
-                                Text(unreadNotifications > 9 ? "9+" : "\(unreadNotifications)")
-                                    .font(.system(size: 9, weight: .heavy, design: .rounded))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 5)
-                                    .frame(minWidth: 16, minHeight: 16)
-                                    .background(Capsule().fill(TrendXTheme.accent))
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.5))
-                                    .offset(x: -4, y: 2)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-            }
-
-            Text(greeting.whisper)
-                .font(.system(size: 15, weight: .medium, design: .serif))
-                .foregroundStyle(.white.opacity(0.86))
-                .lineSpacing(4)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                MetricCapsule(icon: "star.circle.fill", value: "\(points)", label: "رصيد", tint: TrendXTheme.accent)
-                MetricCapsule(icon: "sparkles", value: "AI", label: "رادار", tint: TrendXTheme.info)
-                MetricCapsule(icon: "newspaper.fill", value: "مجلة", label: "اليوم", tint: TrendXTheme.warning)
+            if isGuest {
+                guestContent
+            } else {
+                authedContent
             }
         }
         .padding(20)
@@ -182,6 +126,124 @@ struct HomeHeader: View {
         .padding(.top, 14)
         .padding(.bottom, 2)
     }
+
+    @ViewBuilder private var authedContent: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 52, height: 52)
+                Circle()
+                    .stroke(Color.white.opacity(0.45), lineWidth: 1)
+                    .frame(width: 52, height: 52)
+                Text(String(userName.prefix(1)))
+                    .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(greeting.eyebrow)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.78))
+
+                Text(greeting.title)
+                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            Spacer(minLength: 0)
+
+            HeaderIconButton(icon: "magnifyingglass", action: onSearchTap)
+
+            Button(action: onNotificationsTap) {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(Color.white.opacity(0.16)))
+                    .overlay(alignment: .topTrailing) {
+                        if unreadNotifications > 0 {
+                            Text(unreadNotifications > 9 ? "9+" : "\(unreadNotifications)")
+                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .background(Capsule().fill(TrendXTheme.accent))
+                                .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.5))
+                                .offset(x: -4, y: 2)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+        }
+
+        Text(greeting.whisper)
+            .font(.system(size: 15, weight: .medium, design: .serif))
+            .foregroundStyle(.white.opacity(0.86))
+            .lineSpacing(4)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+
+        HStack(spacing: 10) {
+            MetricCapsule(icon: "star.circle.fill", value: "\(points)", label: "رصيد", tint: TrendXTheme.accent)
+            MetricCapsule(icon: "sparkles", value: "AI", label: "رادار", tint: TrendXTheme.info)
+            MetricCapsule(icon: "newspaper.fill", value: "مجلة", label: "اليوم", tint: TrendXTheme.warning)
+        }
+    }
+
+    @ViewBuilder private var guestContent: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 52, height: 52)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("مرحباً بك في TRENDX")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(.white.opacity(0.82))
+                Text("نبض الرأي السعودي")
+                    .font(.system(size: 22, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            Spacer(minLength: 0)
+
+            HeaderIconButton(icon: "magnifyingglass", action: onSearchTap)
+        }
+
+        Text("استكشف الاتجاهات اليومية، توقّع نبض السعودية، واربح نقاطك الأولى — تسجيلك يستغرق دقيقة واحدة.")
+            .font(.system(size: 14, weight: .medium, design: .serif))
+            .foregroundStyle(.white.opacity(0.88))
+            .lineSpacing(4)
+            .fixedSize(horizontal: false, vertical: true)
+
+        Button(action: onSignInTap) {
+            HStack(spacing: 8) {
+                Image(systemName: "person.crop.circle.fill.badge.plus")
+                    .font(.system(size: 14, weight: .heavy))
+                Text("سجّل الآن وابدأ مع TRENDX")
+                    .font(.system(size: 14, weight: .heavy))
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .heavy))
+            }
+            .foregroundStyle(TrendXTheme.primaryDeep)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(Capsule().fill(.white))
+            .shadow(color: .black.opacity(0.18), radius: 10, x: 0, y: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
 }
 
 private struct HeaderIconButton: View {

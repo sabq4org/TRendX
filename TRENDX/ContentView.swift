@@ -13,7 +13,10 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if store.isAuthenticated && store.showWelcomeAfterSignUp {
+            if store.showWelcomeAfterSignUp {
+                // Welcome wins over both the tab interface and the login
+                // screen so the signup → welcome transition never flashes
+                // through anything else.
                 WelcomeAfterSignUpScreen(onContinue: {
                     withAnimation(.easeInOut(duration: 0.35)) {
                         store.showWelcomeAfterSignUp = false
@@ -66,6 +69,11 @@ struct ContentView: View {
         .trendxRTL()
         .sheet(isPresented: $store.showCreatePoll) {
             CreatePollSheet()
+                .environmentObject(store)
+                .trendxRTL()
+        }
+        .sheet(isPresented: $store.showLoginSheet) {
+            LoginScreen()
                 .environmentObject(store)
                 .trendxRTL()
         }

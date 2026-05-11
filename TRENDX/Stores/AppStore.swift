@@ -45,6 +45,14 @@ final class AppStore: ObservableObject {
     /// dropping the user into the regular tab interface.
     @Published var showWelcomeAfterSignUp: Bool = false
 
+    /// Becomes true after `signOut()` — the user stays inside the main tab
+    /// interface but the personalized chrome (greeting, points, profile)
+    /// swaps to sign-in CTAs.
+    @Published var isGuest: Bool = false
+    /// Drives a sheet presentation of `LoginScreen` from anywhere in the
+    /// authed shell (typically triggered by a guest-mode CTA).
+    @Published var showLoginSheet: Bool = false
+
     private let userKey      = "trendx_user_v1"
     private let surveysKey   = "trendx_surveys_v1"
     private let topicsKey = "trendx_topics_v1"
@@ -76,7 +84,11 @@ final class AppStore: ObservableObject {
         self.rewardsRepository = RewardsRepository(client: client)
         self.aiRepository = AIRepository(client: client)
         self.authSession = authRepository.restoreSession()
-        self.isAuthenticated = !client.config.isConfigured || authSession != nil
+        // The app shell is always "authenticated" in the sense that we
+        // show the tab interface — but when there is no real session we
+        // run as a guest (read-only) until the user signs in.
+        self.isAuthenticated = true
+        self.isGuest = client.config.isConfigured && authSession == nil
 
         // Load user
         if let data = UserDefaults.standard.data(forKey: userKey),
@@ -139,6 +151,10 @@ final class AppStore: ObservableObject {
         await authenticate {
             try await authRepository.signIn(email: email, password: password)
         }
+        if isAuthenticated {
+            isGuest = false
+            showLoginSheet = false
+        }
     }
 
     func signUp(
@@ -150,8 +166,12 @@ final class AppStore: ObservableObject {
         city: String? = nil,
         region: String? = nil
     ) async {
-        await authenticate {
-            try await authRepository.signUp(
+        isLoading = true
+        appMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let session = try await authRepository.signUp(
                 name: name,
                 email: email,
                 password: password,
@@ -160,27 +180,53 @@ final class AppStore: ObservableObject {
                 city: city,
                 region: region
             )
-        }
-        if isAuthenticated {
+            // Stage everything *before* the isAuthenticated flip so SwiftUI
+            // batches all the state changes into a single render. Setting
+            // showWelcomeAfterSignUp first guarantees ContentView never
+            // sees `isAuthenticated == true` and `showWelcomeAfterSignUp ==
+            // false` in the same frame, which is what caused the brief
+            // flash of the main tab interface between sign-up and welcome.
+            authSession = session
             currentUser.name = name
-            currentUser.email = email
+            currentUser.email = session.email.isEmpty ? email : session.email
             currentUser.avatarInitial = String(name.prefix(1))
             currentUser.gender = gender
             currentUser.birthYear = birthYear
             currentUser.city = city
             currentUser.region = region
+            if isRemoteEnabled,
+               let profile = try? await authRepository.fetchProfile(session: session) {
+                currentUser = profile
+            }
             persistUser()
-            // Defer to next tick so the smart sign-up flow has a chance
-            // to show its final "جاهز ✨" message before we transition.
             showWelcomeAfterSignUp = true
+            isGuest = false
+            isAuthenticated = true
+            showLoginSheet = false
+            await refreshBootstrap()
+        } catch {
+            appMessage = "تعذر تسجيل الدخول. تحقق من البيانات أو إعداد TRENDX API."
         }
     }
 
     func signOut() {
         authRepository.signOut()
         authSession = nil
-        isAuthenticated = !isRemoteEnabled
+        // After signing out we keep the user *inside* the app as a guest
+        // instead of bouncing to the login screen — they continue to see
+        // public content (Pulse, polls, gifts catalogue) with a sign-in
+        // CTA replacing the personalized header.
+        if isRemoteEnabled {
+            isGuest = true
+            isAuthenticated = true
+            currentUser = TrendXUser()
+        } else {
+            // Offline build — nothing to "log out" from; stay authenticated.
+            isGuest = false
+            isAuthenticated = true
+        }
         appMessage = nil
+        showWelcomeAfterSignUp = false
     }
 
     private func authenticate(_ operation: () async throws -> AuthSession) async {

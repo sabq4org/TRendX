@@ -33,6 +33,10 @@ struct HomeScreen: View {
                         userName: store.currentUser.name,
                         points: store.currentUser.points,
                         unreadNotifications: notificationsCounter.unreadCount,
+                        isGuest: store.isGuest,
+                        onSignInTap: {
+                            store.showLoginSheet = true
+                        },
                         onNotificationsTap: {
                             showNotifications = true
                         },
