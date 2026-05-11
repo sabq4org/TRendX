@@ -84,6 +84,12 @@ import {
 } from "./lib/comments.js";
 import { buildNotifications } from "./lib/notifications.js";
 import { normalizeHandle, validateHandle } from "./lib/handle.js";
+import {
+  followUser,
+  suggestedFollows,
+  unfollowUser,
+  viewerFollows,
+} from "./lib/follows.js";
 import { startDailyJob } from "./jobs/daily.js";
 
 // MARK: - Types
@@ -348,7 +354,76 @@ app.get("/users/:idOrHandle", async (c) => {
     ? await prisma.user.findUnique({ where: { id: idOrHandle } })
     : await prisma.user.findUnique({ where: { handle: normalizeHandle(idOrHandle) } });
   if (!user) return c.json({ error: "User not found" }, 404);
-  return c.json(userDTO(user));
+  const follows = await viewerFollows(c.get("userId"), user.id);
+  return c.json(userDTO(user, { viewerFollows: follows }));
+});
+
+// MARK: - Follow / Unfollow
+
+app.post("/users/:id/follow", async (c) => {
+  const userId = c.get("userId");
+  try {
+    const result = await followUser(userId, c.req.param("id"));
+    return c.json(result);
+  } catch (err) {
+    const status = (err as { httpStatus?: number }).httpStatus ?? 400;
+    return c.json({ error: (err as Error).message }, status as 400);
+  }
+});
+
+app.post("/users/:id/unfollow", async (c) => {
+  const userId = c.get("userId");
+  const result = await unfollowUser(userId, c.req.param("id"));
+  return c.json(result);
+});
+
+// Lists. `me/following` and `me/followers` return the slimmer "card"
+// shape used to render a follow list — full profile is one tap away.
+async function followListResponse(rows: Array<{ id: string }>, viewerId: string) {
+  const users = await prisma.user.findMany({
+    where: { id: { in: rows.map((r) => r.id) } },
+  });
+  // Preserve the original ordering.
+  const byId = new Map(users.map((u) => [u.id, u]));
+  const ordered = rows.map((r) => byId.get(r.id)).filter((u): u is typeof users[number] => u !== undefined);
+  const followingSet = new Set(
+    (await prisma.userFollow.findMany({
+      where: { followerId: viewerId, followedId: { in: ordered.map((u) => u.id) } },
+      select: { followedId: true },
+    })).map((r) => r.followedId),
+  );
+  return ordered.map((u) => userDTO(u, { viewerFollows: followingSet.has(u.id) }));
+}
+
+app.get("/me/following", async (c) => {
+  const userId = c.get("userId");
+  const rows = await prisma.userFollow.findMany({
+    where: { followerId: userId },
+    orderBy: { createdAt: "desc" },
+    select: { followedId: true },
+  });
+  const items = await followListResponse(rows.map((r) => ({ id: r.followedId })), userId);
+  return c.json({ items });
+});
+
+app.get("/me/followers", async (c) => {
+  const userId = c.get("userId");
+  const rows = await prisma.userFollow.findMany({
+    where: { followedId: userId },
+    orderBy: { createdAt: "desc" },
+    select: { followerId: true },
+  });
+  const items = await followListResponse(rows.map((r) => ({ id: r.followerId })), userId);
+  return c.json({ items });
+});
+
+app.get("/me/suggested-follows", async (c) => {
+  const userId = c.get("userId");
+  const users = await suggestedFollows(userId, 12);
+  // We know none of these are followed (the helper filters them out),
+  // so viewerFollows is false for all.
+  const items = users.map((u) => userDTO(u, { viewerFollows: false }));
+  return c.json({ items });
 });
 
 // MARK: - Topics

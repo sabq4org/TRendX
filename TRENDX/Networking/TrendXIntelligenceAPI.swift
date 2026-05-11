@@ -540,4 +540,55 @@ extension TrendXAPIClient {
     }
 }
 
+// MARK: - Social graph (follow / unfollow / suggestions)
+
+private struct UserListResponse: Decodable {
+    let items: [UserDTO]
+}
+
+struct FollowMutationResponse: Decodable {
+    let ok: Bool
+    let already: Bool?
+    let followersCount: Int?
+}
+
+extension TrendXAPIClient {
+    func followUser(id: UUID, accessToken: String) async throws -> FollowMutationResponse {
+        try await post("/users/\(id.uuidString)/follow",
+                       accessToken: accessToken,
+                       body: EmptyBody())
+    }
+
+    func unfollowUser(id: UUID, accessToken: String) async throws -> FollowMutationResponse {
+        try await post("/users/\(id.uuidString)/unfollow",
+                       accessToken: accessToken,
+                       body: EmptyBody())
+    }
+
+    func suggestedFollows(accessToken: String) async throws -> [TrendXUser] {
+        let list: UserListResponse = try await get("/me/suggested-follows", accessToken: accessToken)
+        return list.items.map(\.domain)
+    }
+
+    func myFollowing(accessToken: String) async throws -> [TrendXUser] {
+        let list: UserListResponse = try await get("/me/following", accessToken: accessToken)
+        return list.items.map(\.domain)
+    }
+
+    func myFollowers(accessToken: String) async throws -> [TrendXUser] {
+        let list: UserListResponse = try await get("/me/followers", accessToken: accessToken)
+        return list.items.map(\.domain)
+    }
+
+    /// Public profile lookup (UUID or @handle, leading `@` stripped).
+    func userProfile(idOrHandle: String, accessToken: String?) async throws -> TrendXUser {
+        let escaped = idOrHandle
+            .replacingOccurrences(of: "@", with: "")
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? idOrHandle
+        let dto: UserDTO = try await get("/users/\(escaped)", accessToken: accessToken)
+        return dto.domain
+    }
+}
+
+
 private struct EmptyBody: Encodable {}

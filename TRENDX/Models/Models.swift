@@ -78,6 +78,14 @@ struct TrendXUser: Codable, Identifiable, Equatable {
     var region: String?
     var country: String
 
+    // Social graph counters and the viewer-follows flag, mirrored from
+    // user_follows server-side. `viewerFollows` is only meaningful when
+    // the user was decoded from a public lookup like GET /users/:id —
+    // it stays false for the local current user.
+    var followersCount: Int
+    var followingCount: Int
+    var viewerFollows: Bool
+
     init(
         id: UUID = UUID(),
         name: String = "مستخدم",
@@ -100,7 +108,10 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         birthYear: Int? = nil,
         city: String? = nil,
         region: String? = nil,
-        country: String = "SA"
+        country: String = "SA",
+        followersCount: Int = 0,
+        followingCount: Int = 0,
+        viewerFollows: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -124,6 +135,9 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         self.city = city
         self.region = region
         self.country = country
+        self.followersCount = followersCount
+        self.followingCount = followingCount
+        self.viewerFollows = viewerFollows
     }
 }
 

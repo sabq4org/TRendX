@@ -98,6 +98,12 @@ struct HomeScreen: View {
             DailyBonusCard(store: store)
                 .padding(.horizontal, 20)
 
+            // Suggested follows — prioritizes government + verified
+            // accounts in the user's sectors. Empty for guests.
+            if !store.isGuest {
+                SuggestedFollowsCarousel(store: store)
+            }
+
             // Daily Pulse spotlight — same JSON as the Web /pulse page.
             NavigationLink {
                 PulseTodayScreen()

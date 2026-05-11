@@ -147,6 +147,9 @@ struct UserDTO: Codable {
     let city: String?
     let region: String?
     let country: String?
+    let followersCount: Int?
+    let followingCount: Int?
+    let viewerFollows: Bool?
 
     var domain: TrendXUser {
         TrendXUser(
@@ -171,7 +174,10 @@ struct UserDTO: Codable {
             birthYear: birthYear,
             city: city,
             region: region,
-            country: country ?? "SA"
+            country: country ?? "SA",
+            followersCount: followersCount ?? 0,
+            followingCount: followingCount ?? 0,
+            viewerFollows: viewerFollows ?? false
         )
     }
 }

@@ -25,8 +25,12 @@ struct PublicProfileScreen: View {
     var loadFromBackend: Bool = false
 
     @State private var resolved: TrendXUser?
+    @State private var isFollowing: Bool = false
+    @State private var followersCount: Int = 0
+    @State private var isFollowBusy: Bool = false
 
     private var current: TrendXUser { resolved ?? user }
+    private var isSelf: Bool { current.id == store.currentUser.id }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -321,11 +325,15 @@ struct PublicProfileScreen: View {
 
     private var content: some View {
         VStack(spacing: 18) {
-            // Stats row — placeholder counts until Phase 2 (follow) and
-            // Phase 3 (timeline) wire in real numbers.
+            if !isSelf {
+                followButton
+                    .padding(.horizontal, 20)
+                    .padding(.top, current.accountType == .government ? 36 : 8)
+            }
+
             statsRow
                 .padding(.horizontal, 20)
-                .padding(.top, current.accountType == .government ? 36 : 8)
+                .padding(.top, isSelf && current.accountType == .government ? 36 : 0)
 
             if current.accountType == .government {
                 governmentPledge
@@ -337,13 +345,85 @@ struct PublicProfileScreen: View {
         }
     }
 
+    private var followButton: some View {
+        Button {
+            Task { await toggleFollow() }
+        } label: {
+            HStack(spacing: 8) {
+                if isFollowBusy {
+                    ProgressView()
+                        .tint(isFollowing ? current.accountType.tint : .white)
+                        .scaleEffect(0.85)
+                }
+                Image(systemName: isFollowing ? "checkmark" : "plus")
+                    .font(.system(size: 13, weight: .heavy))
+                Text(isFollowing ? "متابَع" : "متابعة")
+                    .font(.system(size: 14, weight: .heavy))
+            }
+            .foregroundStyle(isFollowing ? current.accountType.tint : .white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isFollowing
+                          ? AnyShapeStyle(current.accountType.wash)
+                          : (current.accountType == .government
+                             ? AnyShapeStyle(TrendXTheme.saudiGreenGradient)
+                             : (current.accountType == .organization
+                                ? AnyShapeStyle(TrendXTheme.orgGoldGradient)
+                                : AnyShapeStyle(TrendXTheme.primaryGradient))))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(current.accountType.tint.opacity(isFollowing ? 0.32 : 0), lineWidth: 1)
+                    )
+            )
+            .shadow(color: current.accountType.tint.opacity(isFollowing ? 0 : 0.30),
+                    radius: 12, x: 0, y: 5)
+        }
+        .buttonStyle(.plain)
+        .disabled(isFollowBusy)
+    }
+
     private var statsRow: some View {
         HStack(spacing: 12) {
-            statTile(label: "متابعون", value: "—", icon: "person.2.fill")
-            statTile(label: "يتابع", value: "—", icon: "person.crop.circle.badge.checkmark")
+            statTile(label: "متابعون", value: shortNumber(followersCount), icon: "person.2.fill")
+            statTile(label: "يتابع", value: shortNumber(current.followingCount), icon: "person.crop.circle.badge.checkmark")
             statTile(label: current.accountType == .individual ? "تصويتات" : "منشورات",
                      value: "\(current.completedPolls.count)",
                      icon: "doc.text.fill")
+        }
+    }
+
+    private func shortNumber(_ n: Int) -> String {
+        switch n {
+        case ..<1_000:     return "\(n)"
+        case ..<1_000_000:
+            let v = Double(n) / 1_000
+            return v < 10 ? String(format: "%.1fK", v) : String(format: "%.0fK", v)
+        default:
+            let v = Double(n) / 1_000_000
+            return String(format: "%.1fM", v)
+        }
+    }
+
+    private func toggleFollow() async {
+        guard !isFollowBusy else { return }
+        isFollowBusy = true
+        defer { isFollowBusy = false }
+        let wasFollowing = isFollowing
+        // Optimistic flip.
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            isFollowing.toggle()
+            followersCount += wasFollowing ? -1 : 1
+        }
+        let success = wasFollowing
+            ? await store.unfollow(userId: current.id)
+            : await store.follow(userId: current.id)
+        if !success {
+            withAnimation { // Rollback on failure
+                isFollowing = wasFollowing
+                followersCount += wasFollowing ? 1 : -1
+            }
         }
     }
 
@@ -428,11 +508,19 @@ struct PublicProfileScreen: View {
     // MARK: - Data
 
     private func refreshIfNeeded() async {
-        guard loadFromBackend, let token = store.accessToken else { return }
+        // Seed state from the user we were initialized with so the
+        // button renders the right label immediately.
+        if !isFollowBusy {
+            isFollowing = current.viewerFollows
+            followersCount = current.followersCount
+        }
+
+        guard loadFromBackend else { return }
         let key = user.handle ?? user.id.uuidString
-        struct Response: Decodable { let id: UUID; let name: String }
-        // We rely on the existing UserDTO decode path via the API client.
-        let dto: UserDTO? = try? await store.apiClient.get("/users/\(key)", accessToken: token)
-        if let dto { resolved = dto.domain }
+        if let fresh = await store.loadUserProfile(idOrHandle: key) {
+            resolved = fresh
+            isFollowing = fresh.viewerFollows
+            followersCount = fresh.followersCount
+        }
     }
 }

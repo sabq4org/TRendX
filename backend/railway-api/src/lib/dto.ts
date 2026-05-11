@@ -13,7 +13,7 @@ import type {
 
 // MARK: - User
 
-export function userDTO(u: User) {
+export function userDTO(u: User, options: { viewerFollows?: boolean } = {}) {
   return {
     id: u.id,
     name: u.name,
@@ -40,6 +40,9 @@ export function userDTO(u: User) {
     is_premium: u.isPremium,
     followed_topics: u.followedTopics,
     completed_polls: u.completedPolls,
+    followers_count: u.followersCount,
+    following_count: u.followingCount,
+    viewer_follows: options.viewerFollows ?? false,
     joined_at: u.joinedAt.toISOString(),
     last_active_at: u.lastActiveAt.toISOString(),
     updated_at: u.updatedAt.toISOString(),

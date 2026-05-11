@@ -379,6 +379,49 @@ final class AppStore: ObservableObject {
             ?? "تعذّر فحص المعرّف الآن — حاول مرة أخرى."
     }
 
+    // MARK: - Follow / Unfollow
+
+    /// Follow another user. Optimistic — updates `currentUser.followingCount`
+    /// immediately, then reconciles with the backend response. Returns
+    /// the latest viewer→target follow state so calling views can flip.
+    @discardableResult
+    func follow(userId: UUID) async -> Bool {
+        guard let token = accessToken else { return false }
+        currentUser.followingCount += 1
+        persistUser()
+        let result = (try? await apiClient.followUser(id: userId, accessToken: token))
+        if result == nil {
+            // Rollback on failure.
+            currentUser.followingCount = max(0, currentUser.followingCount - 1)
+            persistUser()
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    func unfollow(userId: UUID) async -> Bool {
+        guard let token = accessToken else { return false }
+        currentUser.followingCount = max(0, currentUser.followingCount - 1)
+        persistUser()
+        let result = (try? await apiClient.unfollowUser(id: userId, accessToken: token))
+        if result == nil {
+            currentUser.followingCount += 1
+            persistUser()
+            return false
+        }
+        return true
+    }
+
+    func loadSuggestedFollows() async -> [TrendXUser] {
+        guard let token = accessToken else { return [] }
+        return (try? await apiClient.suggestedFollows(accessToken: token)) ?? []
+    }
+
+    func loadUserProfile(idOrHandle: String) async -> TrendXUser? {
+        try? await apiClient.userProfile(idOrHandle: idOrHandle, accessToken: accessToken)
+    }
+
     /// Apply onboarding extras gathered by the AI sign-up flow (preferred topics
     /// and a free-text "voice line"). Topics are merged into followedTopics and
     /// reflected in the local topics list so the UI updates immediately. The

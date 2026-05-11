@@ -150,6 +150,12 @@ model User {
   followedTopics String[] @default([]) @map("followed_topics")
   completedPolls String[] @default([]) @map("completed_polls")
 
+  // Denormalized social counters — single-source-of-truth is the
+  // user_follows table; these mirror the counts for fast feed reads
+  // so we don't aggregate on every profile load.
+  followersCount Int @default(0) @map("followers_count")
+  followingCount Int @default(0) @map("following_count")
+
   joinedAt     DateTime @default(now()) @map("joined_at")
   lastActiveAt DateTime @default(now()) @map("last_active_at")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -162,6 +168,9 @@ model User {
   redemptions      Redemption[]
   ledgerEntries    PointsLedger[]
   webhooks         Webhook[]
+
+  followsOut UserFollow[] @relation("UserFollowsOut")
+  followsIn  UserFollow[] @relation("UserFollowsIn")
 
   pulseResponses       DailyPulseResponse[]
   streak               UserStreak?
@@ -176,6 +185,23 @@ model User {
   @@index([accountType])
   @@index([isVerified])
   @@map("users")
+}
+
+// One-way social graph (Twitter-style). `followerId` follows
+// `followedId`. The composite primary key gives us idempotency on
+// (POST /users/:id/follow) without an extra uniqueness check.
+model UserFollow {
+  followerId String   @map("follower_id") @db.Uuid
+  followedId String   @map("followed_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  follower User @relation("UserFollowsOut", fields: [followerId], references: [id], onDelete: Cascade)
+  followed User @relation("UserFollowsIn",  fields: [followedId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followedId])
+  @@index([followedId])
+  @@index([followerId])
+  @@map("user_follows")
 }
 
 // Handles reserved before public claim. Lookup is exact-match against
