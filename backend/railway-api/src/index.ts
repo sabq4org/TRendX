@@ -596,6 +596,76 @@ app.post("/events", async (c) => {
   return c.json(eventDTO(event));
 });
 
+// MARK: - Sector takeovers + verification
+
+app.get("/sectors/:topicId/takeover", async (c) => {
+  const takeover = await prisma.sectorTakeover.findFirst({
+    where: {
+      topicId: c.req.param("topicId"),
+      status: "active",
+      endsAt: { gt: new Date() },
+    },
+    include: { publisher: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!takeover) return c.json({ active: false });
+  const featuredPoll = takeover.featuredPollId
+    ? await prisma.poll.findUnique({
+        where: { id: takeover.featuredPollId },
+        include: {
+          options: { orderBy: { displayOrder: "asc" } },
+          topic: true,
+          publisher: { select: { accountType: true, isVerified: true, handle: true } },
+        },
+      })
+    : null;
+  return c.json({
+    active: true,
+    id: takeover.id,
+    publisher: userDTO(takeover.publisher),
+    starts_at: takeover.startsAt.toISOString(),
+    ends_at: takeover.endsAt.toISOString(),
+    featured_poll: featuredPoll ? pollDTO(featuredPoll, { userId: c.get("userId") }) : null,
+  });
+});
+
+app.post("/admin/sector-takeovers", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json<{
+    topic_id: string;
+    publisher_id: string;
+    featured_poll_id?: string;
+    hours?: number;
+  }>();
+  if (!body.topic_id || !body.publisher_id) {
+    return c.json({ error: "topic_id + publisher_id مطلوبان." }, 400);
+  }
+  const hours = Math.max(1, Math.min(72, body.hours ?? 24));
+  const takeover = await prisma.sectorTakeover.create({
+    data: {
+      topicId: body.topic_id,
+      publisherId: body.publisher_id,
+      featuredPollId: body.featured_poll_id ?? null,
+      startsAt: new Date(),
+      endsAt: new Date(Date.now() + hours * 60 * 60 * 1000),
+      status: "active",
+    },
+  });
+  return c.json(takeover);
+});
+
+app.post("/admin/users/:id/verify", async (c) => {
+  const actor = await loadActor(c);
+  if (!actor || actor.role !== "admin") return c.json({ error: "Forbidden" }, 403);
+  const body = await c.req.json<{ is_verified?: boolean }>();
+  const updated = await prisma.user.update({
+    where: { id: c.req.param("id") },
+    data: { isVerified: body.is_verified ?? true },
+  });
+  return c.json(userDTO(updated));
+});
+
 app.post("/events/:id/rsvp", async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json<{ status?: "attending" | "maybe" | "not_attending" }>();
@@ -815,15 +885,25 @@ app.post("/polls/create", async (c) => {
       reward_points?: number;
       duration_days?: number;
       expires_at?: string;
+      voter_audience?: "public" | "verified" | "verified_citizen";
     };
     options: Array<{ text: string }>;
   }>();
 
   const profile = await prisma.user.findUnique({
     where: { id: userId },
-    select: { name: true, avatarInitial: true },
+    select: { name: true, avatarInitial: true, isVerified: true, accountType: true },
   });
   if (!profile) return c.json({ error: "Profile not found" }, 404);
+
+  // Only verified accounts may publish gated polls; only government
+  // accounts may publish national (verified_citizen) polls.
+  let voterAudience: "public" | "verified" | "verified_citizen" = "public";
+  if (body.poll.voter_audience === "verified" && profile.isVerified) {
+    voterAudience = "verified";
+  } else if (body.poll.voter_audience === "verified_citizen" && profile.accountType === "government") {
+    voterAudience = "verified_citizen";
+  }
 
   const durationDays = Number(body.poll.duration_days ?? 7);
   const expiresAt = body.poll.expires_at
@@ -844,6 +924,7 @@ app.post("/polls/create", async (c) => {
       rewardPoints: body.poll.reward_points ?? 50,
       durationDays,
       expiresAt,
+      voterAudience,
       options: {
         create: (body.options ?? []).map((opt, idx) => ({
           text: opt.text,
@@ -881,6 +962,25 @@ app.post("/polls/vote", async (c) => {
 
   const poll = await prisma.poll.findUnique({ where: { id: pollId } });
   if (!poll) return c.json({ error: "Poll not found" }, 404);
+
+  // Audience gate — verified-only polls block unverified users.
+  if (poll.voterAudience === "verified" && !user.isVerified) {
+    return c.json({
+      error: "هذا استطلاع للحسابات الموثّقة فقط.",
+      reason: "verified_only",
+    }, 403);
+  }
+  if (poll.voterAudience === "verified_citizen") {
+    const hasCity = (user.city ?? "").trim().length > 0;
+    const hasBirth = user.birthYear !== null && user.birthYear !== undefined;
+    const hasGender = user.gender !== "unspecified";
+    if (!user.isVerified || !hasCity || !hasBirth || !hasGender) {
+      return c.json({
+        error: "هذا استطلاع وطني — يتطلب حساباً موثّقاً مع مدينة وسنة ميلاد وجنس.",
+        reason: "verified_citizen_only",
+      }, 403);
+    }
+  }
 
   const ageGroup = ageGroupFromBirthYear(user.birthYear);
 

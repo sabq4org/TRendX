@@ -166,6 +166,7 @@ model User {
   publishedStories Story[]          @relation("StoryPublisher")
   publishedEvents  Event[]          @relation("EventPublisher")
   eventResponses   EventResponse[]
+  sectorTakeovers  SectorTakeover[] @relation("SectorTakeoverPublisher")
   votes            Vote[]
   surveyResponses  SurveyResponse[]
   redemptions      Redemption[]
@@ -292,6 +293,28 @@ model Story {
   @@map("stories")
 }
 
+// "Sector takeover" — admin-pinned association between a verified
+// account (typically a ministry) and a topic for a finite window.
+// While active, the sector page surfaces the account's banner +
+// featured poll at the top.
+model SectorTakeover {
+  id          String   @id @default(uuid()) @db.Uuid
+  topicId     String   @map("topic_id") @db.Uuid
+  publisherId String   @map("publisher_id") @db.Uuid
+  publisher   User     @relation("SectorTakeoverPublisher", fields: [publisherId], references: [id], onDelete: Cascade)
+  topic       Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  featuredPollId String? @map("featured_poll_id") @db.Uuid
+  startsAt    DateTime @map("starts_at")
+  endsAt      DateTime @map("ends_at")
+  status      String   @default("active") // active | ended
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([topicId])
+  @@index([publisherId])
+  @@index([status])
+  @@map("sector_takeovers")
+}
+
 // One-way social graph (Twitter-style). `followerId` follows
 // `followedId`. The composite primary key gives us idempotency on
 // (POST /users/:id/follow) without an extra uniqueness check.
@@ -343,6 +366,7 @@ model Topic {
   polls   Poll[]
   surveys Survey[]
   pulses  DailyPulse[]
+  takeovers SectorTakeover[]
 
   @@index([parentId])
   @@map("topics")
@@ -386,6 +410,11 @@ model Poll {
 
   rewardPoints Int @default(50) @map("reward_points")
   durationDays Int @default(7) @map("duration_days")
+
+  // Audience gate for voting: public (default), verified (only badged
+  // accounts), or verified_citizen (only verified citizens with full
+  // demographics — used by gov accounts for "National polls").
+  voterAudience String @default("public") @map("voter_audience")
 
   isFeatured Boolean @default(false) @map("is_featured")
   isBreaking Boolean @default(false) @map("is_breaking")

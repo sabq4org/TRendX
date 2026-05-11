@@ -114,6 +114,7 @@ export function pollDTO(
     total_saves: p.totalSaves,
     reward_points: p.rewardPoints,
     duration_days: p.durationDays,
+    voter_audience: p.voterAudience,
     is_featured: p.isFeatured,
     is_breaking: p.isBreaking,
     ai_insight: p.aiInsight,

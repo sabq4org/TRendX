@@ -407,6 +407,8 @@ struct Poll: Codable, Identifiable, Equatable {
     /// marker and green border for government-published polls.
     var authorAccountType: AccountType
     var authorHandle: String?
+    /// Audience gate for voting: "public" / "verified" / "verified_citizen".
+    var voterAudience: String
     /// Optional AI-generated insight shown as an elegant chip inside the card
     var aiInsight: String?
 
@@ -437,6 +439,7 @@ struct Poll: Codable, Identifiable, Equatable {
         savesCount: Int = 0,
         authorAccountType: AccountType = .individual,
         authorHandle: String? = nil,
+        voterAudience: String = "public",
         aiInsight: String? = nil
     ) {
         self.id = id
@@ -465,6 +468,7 @@ struct Poll: Codable, Identifiable, Equatable {
         self.savesCount = savesCount
         self.authorAccountType = authorAccountType
         self.authorHandle = authorHandle
+        self.voterAudience = voterAudience
         self.aiInsight = aiInsight
     }
     

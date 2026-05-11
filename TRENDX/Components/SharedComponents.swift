@@ -571,7 +571,9 @@ struct PollCard: View {
 
     private var topicStyle: PollCoverStyle { poll.topicStyle }
     private var tint: Color { topicStyle.tint }
-    private var isOfficial: Bool { poll.authorAccountType == .government }
+    private var isOfficial: Bool {
+        poll.authorAccountType == .government || poll.voterAudience != "public"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -623,11 +625,12 @@ struct PollCard: View {
     }
 
     /// "استطلاع رسمي" eyebrow that crowns government-published polls.
+    /// Surfaces audience gating ("للموثّقين", "استطلاع وطني") inline.
     private var officialBanner: some View {
         HStack(spacing: 6) {
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 10, weight: .heavy))
-            Text("استطلاع رسمي")
+            Text(officialBannerLabel)
                 .font(.system(size: 11, weight: .heavy))
             Spacer(minLength: 0)
             Text(poll.authorName)
@@ -639,6 +642,14 @@ struct PollCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(TrendXTheme.saudiGreenGradient)
+    }
+
+    private var officialBannerLabel: String {
+        switch poll.voterAudience {
+        case "verified_citizen": return "استطلاع وطني · للمواطنين الموثّقين"
+        case "verified":         return "استطلاع رسمي · للحسابات الموثّقة"
+        default:                  return "استطلاع رسمي"
+        }
     }
 
     private var cardBody: some View {
