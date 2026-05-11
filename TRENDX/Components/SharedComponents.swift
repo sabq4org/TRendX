@@ -565,38 +565,74 @@ struct PollCard: View {
 
     private var topicStyle: PollCoverStyle { poll.topicStyle }
     private var tint: Color { topicStyle.tint }
+    private var isOfficial: Bool { poll.authorAccountType == .government }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            // Topic accent stripe — the single strongest visual cue that
-            // differentiates one card from the next in a long feed.
-            LinearGradient(
-                colors: topicStyle.gradient,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: 5)
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 20,
-                    bottomLeadingRadius: 20,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-            )
+        VStack(spacing: 0) {
+            if isOfficial {
+                officialBanner
+            }
 
-            cardBody
+            HStack(alignment: .top, spacing: 0) {
+                // Topic accent stripe — government polls override with a
+                // solid Saudi-green stripe so the official marker reads
+                // from across the screen.
+                Group {
+                    if isOfficial {
+                        TrendXTheme.saudiGreenGradient
+                    } else {
+                        LinearGradient(
+                            colors: topicStyle.gradient,
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                }
+                .frame(width: isOfficial ? 6 : 5)
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: isOfficial ? 0 : 20,
+                        bottomLeadingRadius: 20,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: 0,
+                        style: .continuous
+                    )
+                )
+
+                cardBody
+            }
         }
         .background(TrendXTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(TrendXTheme.outline, lineWidth: 0.8)
+                .stroke(
+                    isOfficial ? TrendXTheme.saudiGreen.opacity(0.32) : TrendXTheme.outline,
+                    lineWidth: isOfficial ? 1.2 : 0.8
+                )
         )
-        .shadow(color: tint.opacity(0.12), radius: 18, x: 0, y: 8)
+        .shadow(color: (isOfficial ? TrendXTheme.saudiGreen : tint).opacity(0.14), radius: 18, x: 0, y: 8)
         .shadow(color: TrendXTheme.shadow, radius: 4, x: 0, y: 1)
         .opacity(poll.isExpired ? 0.82 : 1.0)
+    }
+
+    /// "استطلاع رسمي" eyebrow that crowns government-published polls.
+    private var officialBanner: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.shield.fill")
+                .font(.system(size: 10, weight: .heavy))
+            Text("استطلاع رسمي")
+                .font(.system(size: 11, weight: .heavy))
+            Spacer(minLength: 0)
+            Text(poll.authorName)
+                .font(.system(size: 10.5, weight: .semibold))
+                .opacity(0.85)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(TrendXTheme.saudiGreenGradient)
     }
 
     private var cardBody: some View {

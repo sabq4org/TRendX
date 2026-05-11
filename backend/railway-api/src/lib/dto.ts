@@ -68,6 +68,7 @@ type PollWithRelations = Poll & {
   options?: PollOption[];
   votes?: Pick<Vote, "userId" | "optionId">[];
   topic?: Topic | null;
+  publisher?: Pick<User, "accountType" | "isVerified" | "handle"> | null;
 };
 
 export function pollDTO(
@@ -97,6 +98,8 @@ export function pollDTO(
     author_name: p.authorName,
     author_avatar: p.authorAvatar,
     author_is_verified: p.authorIsVerified,
+    author_account_type: p.publisher?.accountType ?? null,
+    author_handle: p.publisher?.handle ?? null,
     topic_id: p.topicId,
     topic_name: p.topic?.name ?? null,
     topic_tags: p.topicTags,
@@ -128,6 +131,7 @@ type SurveyWithRelations = Survey & {
     options?: SurveyQuestionOption[];
   })[];
   topic?: Topic | null;
+  publisher?: Pick<User, "accountType" | "isVerified" | "handle" | "name"> | null;
 };
 
 export function surveyDTO(s: SurveyWithRelations) {
@@ -138,6 +142,10 @@ export function surveyDTO(s: SurveyWithRelations) {
     image_url: s.imageUrl,
     cover_style: s.coverStyle,
     publisher_id: s.publisherId,
+    author_account_type: s.publisher?.accountType ?? null,
+    author_is_verified: s.publisher?.isVerified ?? false,
+    author_handle: s.publisher?.handle ?? null,
+    author_name: s.publisher?.name ?? null,
     topic_id: s.topicId,
     topic_name: s.topic?.name ?? null,
     topic_tags: s.topicTags,

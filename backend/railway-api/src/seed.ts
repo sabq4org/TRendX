@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { hashPassword, makeSalt } from "./auth.js";
 
 const prisma = new PrismaClient();
 
@@ -45,11 +46,55 @@ async function main(): Promise<void> {
     });
   }
 
-  const [topicCount, giftCount] = await Promise.all([
+  // Government showcase account: وزارة الإعلام (Ministry of Media).
+  // Acts as the live demo of the government profile layout — formal
+  // green frame, Islamic-pattern banner, official badge, sample bio.
+  // Password is rotated by Mizan post-launch; the seed keeps the
+  // account fresh on every deploy without overwriting the password.
+  console.log("[seed] upserting government showcase account…");
+  const moiaEmail = "moia@trendx.sa";
+  const existingMoia = await prisma.user.findUnique({ where: { email: moiaEmail } });
+  if (!existingMoia) {
+    const salt = makeSalt();
+    const passwordHash = await hashPassword("ChangeMe-TRENDX-Beta!", salt);
+    await prisma.user.create({
+      data: {
+        email: moiaEmail,
+        passwordHash,
+        passwordSalt: salt,
+        name: "وزارة الإعلام",
+        avatarInitial: "وم",
+        handle: "moia",
+        bio: "الحساب الرسمي لوزارة الإعلام في المملكة العربية السعودية — صوت رسمي على نبض الرأي.",
+        accountType: "government",
+        isVerified: true,
+        role: "publisher",
+        tier: "enterprise",
+        country: "SA",
+        city: "الرياض",
+      },
+    });
+  } else {
+    await prisma.user.update({
+      where: { email: moiaEmail },
+      data: {
+        name: "وزارة الإعلام",
+        handle: "moia",
+        bio: "الحساب الرسمي لوزارة الإعلام في المملكة العربية السعودية — صوت رسمي على نبض الرأي.",
+        accountType: "government",
+        isVerified: true,
+        role: "publisher",
+        tier: "enterprise",
+      },
+    });
+  }
+
+  const [topicCount, giftCount, govCount] = await Promise.all([
     prisma.topic.count(),
     prisma.gift.count(),
+    prisma.user.count({ where: { accountType: "government" } }),
   ]);
-  console.log(`[seed] done. topics=${topicCount} gifts=${giftCount}`);
+  console.log(`[seed] done. topics=${topicCount} gifts=${giftCount} gov=${govCount}`);
 }
 
 main()

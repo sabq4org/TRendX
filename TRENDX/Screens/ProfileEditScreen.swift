@@ -18,14 +18,18 @@ struct ProfileEditScreen: View {
     @State private var name: String
     @State private var email: String
     @State private var avatarUrl: String
+    @State private var handle: String
+    @State private var bio: String
     @State private var city: String
     @State private var region: String
     @State private var gender: UserGender
     @State private var birthYear: Int
+    @State private var accountType: AccountType
 
     @State private var isSaving = false
     @State private var errorMessage: String?
     @State private var showSuccessToast = false
+    @State private var handleHint: String?
 
     private let originalUser: TrendXUser
 
@@ -34,20 +38,26 @@ struct ProfileEditScreen: View {
         _name = State(initialValue: user.name)
         _email = State(initialValue: user.email)
         _avatarUrl = State(initialValue: user.avatarUrl ?? "")
+        _handle = State(initialValue: user.handle ?? "")
+        _bio = State(initialValue: user.bio ?? "")
         _city = State(initialValue: user.city ?? "")
         _region = State(initialValue: user.region ?? "")
         _gender = State(initialValue: user.gender)
         _birthYear = State(initialValue: user.birthYear ?? 2000)
+        _accountType = State(initialValue: user.accountType)
     }
 
     private var hasChanges: Bool {
         name != originalUser.name
             || email != originalUser.email
             || (avatarUrl.isEmpty ? nil : avatarUrl) != originalUser.avatarUrl
+            || (handle.isEmpty ? nil : handle) != originalUser.handle
+            || (bio.isEmpty ? nil : bio) != originalUser.bio
             || (city.isEmpty ? nil : city) != originalUser.city
             || (region.isEmpty ? nil : region) != originalUser.region
             || gender != originalUser.gender
             || birthYear != (originalUser.birthYear ?? 2000)
+            || accountType != originalUser.accountType
     }
 
     private var isValid: Bool {
@@ -179,7 +189,19 @@ struct ProfileEditScreen: View {
         VStack(spacing: 0) {
             FieldRow(icon: "person.fill", label: "الاسم", placeholder: "اسمك الكامل", text: $name)
             divider
+            FieldRow(icon: "at", label: "المعرّف", placeholder: "username بدون @", text: $handle, keyboard: .asciiCapable, autocap: false)
+            if let handleHint {
+                Text(handleHint)
+                    .font(.system(size: 10.5, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.warning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
+            }
+            divider
             FieldRow(icon: "envelope.fill", label: "البريد", placeholder: "you@example.com", text: $email, keyboard: .emailAddress)
+            divider
+            FieldRow(icon: "text.alignright", label: "نبذة", placeholder: "وصف قصير عنك أو عن حسابك", text: $bio)
             divider
             FieldRow(icon: "photo.fill", label: "رابط الصورة", placeholder: "URL اختياري", text: $avatarUrl, keyboard: .URL, autocap: false)
             divider
@@ -187,6 +209,27 @@ struct ProfileEditScreen: View {
             divider
             FieldRow(icon: "map.fill", label: "المنطقة", placeholder: "اختياري", text: $region)
             divider
+
+            // Account type — individual or organization. Government is
+            // promoted only by admin operations, so we exclude it here.
+            if accountType != .government {
+                HStack(spacing: 12) {
+                    fieldIcon("building.2.fill")
+                    Text("نوع الحساب")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                        .frame(width: 84, alignment: .leading)
+                    Picker("نوع الحساب", selection: $accountType) {
+                        Text("فرد").tag(AccountType.individual)
+                        Text("منظّمة").tag(AccountType.organization)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                divider
+            }
 
             // Gender picker
             HStack(spacing: 12) {
@@ -307,8 +350,11 @@ struct ProfileEditScreen: View {
             _ = try await store.updateProfile(
                 name: name.trimmingCharacters(in: .whitespaces),
                 email: email.trimmingCharacters(in: .whitespaces),
+                handle: handle.isEmpty ? nil : handle.replacingOccurrences(of: "@", with: ""),
+                bio: bio.isEmpty ? nil : bio,
                 avatarInitial: String(name.trimmingCharacters(in: .whitespaces).prefix(1)),
                 avatarUrl: avatarUrl.isEmpty ? nil : avatarUrl,
+                accountType: accountType == .government ? nil : accountType,
                 gender: gender.rawValue,
                 birthYear: birthYear,
                 city: city.isEmpty ? nil : city,

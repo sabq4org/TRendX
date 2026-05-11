@@ -41,6 +41,33 @@ enum TrendXTheme {
     static let info    = Color(hex: "1971C2")
     static let muted   = Color(hex: "868E96")
 
+    // MARK: - Account-type accents
+    // Used for badges, profile rings, and "official poll" markers on
+    // government accounts. Saudi national green for gov; warm gold for
+    // verified organizations.
+    static let saudiGreen      = Color(hex: "0F5132")
+    static let saudiGreenDeep  = Color(hex: "0A3D26")
+    static let saudiGreenLight = Color(hex: "1B7A45")
+    static let saudiGreenWash  = Color(hex: "E8F3EE")
+    static let orgGold         = Color(hex: "B45309")
+    static let orgGoldLight    = Color(hex: "D97706")
+    static let orgGoldWash     = Color(hex: "FEF3C7")
+
+    static var saudiGreenGradient: LinearGradient {
+        LinearGradient(
+            colors: [saudiGreenDeep, saudiGreen, saudiGreenLight],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    static var orgGoldGradient: LinearGradient {
+        LinearGradient(
+            colors: [orgGold, orgGoldLight],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     // MARK: - Border & Shadows
     static let outline      = Color(hex: "DEE2E6")
     static let strongOutline = Color(hex: "CED4DA")

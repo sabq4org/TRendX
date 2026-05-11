@@ -224,6 +224,8 @@ struct PollDTO: Codable {
     let totalShares: Int?
     let totalViews: Int?
     let totalSaves: Int?
+    let authorAccountType: String?
+    let authorHandle: String?
     let aiInsight: String?
 
     init(domain: Poll) {
@@ -250,6 +252,8 @@ struct PollDTO: Codable {
         self.totalShares = domain.sharesCount
         self.totalViews = domain.viewsCount
         self.totalSaves = domain.savesCount
+        self.authorAccountType = domain.authorAccountType.rawValue
+        self.authorHandle = domain.authorHandle
         self.aiInsight = domain.aiInsight
     }
 
@@ -279,6 +283,8 @@ struct PollDTO: Codable {
             repostsCount: 0,
             viewsCount: totalViews ?? 0,
             savesCount: totalSaves ?? 0,
+            authorAccountType: authorAccountType.flatMap(AccountType.init(rawValue:)) ?? .individual,
+            authorHandle: authorHandle?.isEmpty == false ? authorHandle : nil,
             aiInsight: aiInsight
         )
     }

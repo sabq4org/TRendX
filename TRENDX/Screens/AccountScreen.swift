@@ -8,6 +8,7 @@ import SwiftUI
 struct AccountScreen: View {
     @EnvironmentObject private var store: AppStore
     @State private var showProfileEdit = false
+    @State private var showPublicProfile = false
 
     private var votedCount: Int { store.currentUser.completedPolls.count }
     private var followedCount: Int { store.currentUser.followedTopics.count }

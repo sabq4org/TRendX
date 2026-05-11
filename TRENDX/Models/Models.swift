@@ -389,6 +389,10 @@ struct Poll: Codable, Identifiable, Equatable {
     var repostsCount: Int
     var viewsCount: Int
     var savesCount: Int
+    /// Account type of the publishing entity — drives the "استطلاع رسمي"
+    /// marker and green border for government-published polls.
+    var authorAccountType: AccountType
+    var authorHandle: String?
     /// Optional AI-generated insight shown as an elegant chip inside the card
     var aiInsight: String?
 
@@ -417,6 +421,8 @@ struct Poll: Codable, Identifiable, Equatable {
         repostsCount: Int = 0,
         viewsCount: Int = 0,
         savesCount: Int = 0,
+        authorAccountType: AccountType = .individual,
+        authorHandle: String? = nil,
         aiInsight: String? = nil
     ) {
         self.id = id
@@ -443,6 +449,8 @@ struct Poll: Codable, Identifiable, Equatable {
         self.repostsCount = repostsCount
         self.viewsCount = viewsCount
         self.savesCount = savesCount
+        self.authorAccountType = authorAccountType
+        self.authorHandle = authorHandle
         self.aiInsight = aiInsight
     }
     
