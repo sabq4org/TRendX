@@ -98,13 +98,20 @@ struct PulseHomeCard: View {
     }
 
     private func load() async {
-        guard let token = store.accessToken else { return }
-        async let p = try? store.apiClient.pulseToday(accessToken: token)
-        async let s = try? store.apiClient.myStreak(accessToken: token)
-        let (pulseV, streakV) = await (p, s)
-        await MainActor.run {
-            self.pulse = pulseV
-            self.streak = streakV
+        // Fall back to the anonymous pulse endpoint when no token —
+        // keeps the Home card useful for unauthenticated / fresh-install
+        // sessions instead of leaving an empty area.
+        let anon = try? await store.apiClient.pulseTodayAnonymous()
+        if let token = store.accessToken {
+            async let p = try? store.apiClient.pulseToday(accessToken: token)
+            async let s = try? store.apiClient.myStreak(accessToken: token)
+            let (pulseV, streakV) = await (p, s)
+            await MainActor.run {
+                self.pulse = pulseV ?? anon
+                self.streak = streakV
+            }
+        } else {
+            await MainActor.run { self.pulse = anon }
         }
     }
 }

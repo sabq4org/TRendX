@@ -36,20 +36,67 @@ struct PulseTodayScreen: View {
                             .padding(.horizontal, 20)
                     }
                 } else if let errorMessage {
-                    Text(errorMessage)
-                        .foregroundStyle(TrendXTheme.error)
-                        .padding()
+                    errorState(message: errorMessage)
                 } else {
-                    ProgressView()
-                        .padding(40)
+                    loadingState
                 }
             }
             .padding(.bottom, 120)
         }
         .trendxScreenBackground()
+        .refreshable { await loadAll() }
         .task {
             await loadAll()
         }
+    }
+
+    private var loadingState: some View {
+        VStack(spacing: 14) {
+            ProgressView().tint(TrendXTheme.primary)
+            Text("جاري تحميل نبض اليوم…")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+    }
+
+    private func errorState(message: String) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
+            VStack(spacing: 4) {
+                Text("تعذّر تحميل النبض")
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.ink)
+                Text(message)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+            }
+            .padding(.horizontal, 30)
+
+            Button {
+                Task { await loadAll() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .heavy))
+                    Text("إعادة المحاولة")
+                        .font(.system(size: 13, weight: .heavy))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(TrendXTheme.primaryGradient))
+                .shadow(color: TrendXTheme.primary.opacity(0.30), radius: 10, x: 0, y: 4)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 40)
+        .padding(.horizontal, 20)
     }
 
     private var header: some View {
@@ -313,17 +360,46 @@ struct PulseTodayScreen: View {
     // MARK: - Actions
 
     private func loadAll() async {
-        guard let token = store.accessToken else { return }
-        async let pulseTask = try? store.apiClient.pulseToday(accessToken: token)
-        async let streakTask = try? store.apiClient.myStreak(accessToken: token)
-        async let yestTask = try? store.apiClient.pulseYesterday(accessToken: token)
-        let p = await pulseTask
-        let s = await streakTask
-        let y = await yestTask
-        await MainActor.run {
-            self.pulse = p
-            self.streak = s
-            self.yesterday = y?.pulse
+        // Always try the anonymous endpoint first — that way the screen
+        // renders something even when the user's auth session is missing
+        // or expired (a frequent failure mode after migrations / fresh
+        // installs). Then we layer the authenticated extras on top.
+        await MainActor.run { errorMessage = nil }
+
+        let anon: TrendXDailyPulse?
+        do {
+            anon = try await store.apiClient.pulseTodayAnonymous()
+        } catch {
+            anon = nil
+            await MainActor.run {
+                errorMessage = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+        }
+
+        // If we have a token, fetch the authed pulse (includes user_responded
+        // + user_choice) and the auxiliary streak/yesterday data.
+        if let token = store.accessToken {
+            async let pulseTask: TrendXDailyPulse? = try? store.apiClient.pulseToday(accessToken: token)
+            async let streakTask: TrendXUserStreak? = try? store.apiClient.myStreak(accessToken: token)
+            async let yestTask: TrendXPulseYesterday? = try? store.apiClient.pulseYesterday(accessToken: token)
+
+            let p = await pulseTask
+            let s = await streakTask
+            let y = await yestTask
+
+            await MainActor.run {
+                self.pulse = p ?? anon
+                self.streak = s
+                self.yesterday = y?.pulse
+                if self.pulse != nil { self.errorMessage = nil }
+            }
+        } else {
+            // Anonymous fallback only.
+            await MainActor.run {
+                self.pulse = anon
+                if anon != nil { self.errorMessage = nil }
+            }
         }
     }
 

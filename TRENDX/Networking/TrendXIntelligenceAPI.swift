@@ -306,6 +306,12 @@ extension TrendXAPIClient {
     func pulseToday(accessToken: String) async throws -> TrendXDailyPulse {
         try await get("/pulse/today", accessToken: accessToken)
     }
+    /// Public read-only variant. Used as a fallback when the user has no
+    /// valid token (just signed up, offline-first build, or session
+    /// expired) so the Pulse screen still has something to render.
+    func pulseTodayAnonymous() async throws -> TrendXDailyPulse {
+        try await get("/pulse/today/anon")
+    }
     func pulseRespond(optionIndex: Int, predictedPct: Int?, accessToken: String) async throws -> TrendXPulseResponse {
         try await post("/pulse/today/respond",
                        accessToken: accessToken,
