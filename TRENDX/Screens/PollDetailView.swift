@@ -128,6 +128,14 @@ private struct PollDetailInsights: View {
                 DetailMetricTile(icon: "clock.fill", value: poll.deadlineLabel, label: "الوقت", tint: poll.isEndingSoon ? TrendXTheme.warning : TrendXTheme.success)
             }
 
+            if poll.viewsCount + poll.sharesCount + poll.savesCount > 0 {
+                HStack(spacing: 10) {
+                    DetailMetricTile(icon: "eye.fill", value: PollDetailFormatter.compact(poll.viewsCount), label: "مشاهدة", tint: TrendXTheme.aiIndigo)
+                    DetailMetricTile(icon: "square.and.arrow.up.fill", value: PollDetailFormatter.compact(poll.sharesCount), label: "مشاركة", tint: TrendXTheme.aiViolet)
+                    DetailMetricTile(icon: "bookmark.fill", value: PollDetailFormatter.compact(poll.savesCount), label: "حفظ", tint: TrendXTheme.accent)
+                }
+            }
+
             if let leader {
                 AIInsightChip(
                     text: poll.aiInsight ?? TrendXAI.postVoteInsight(for: poll),
@@ -172,6 +180,20 @@ private struct DetailMetricTile: View {
         .padding(14)
         .background(TrendXTheme.paleFill)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private enum PollDetailFormatter {
+    static func compact(_ value: Int) -> String {
+        switch value {
+        case ..<1_000: return "\(value)"
+        case ..<1_000_000:
+            let v = Double(value) / 1_000
+            return v < 10 ? String(format: "%.1fK", v) : String(format: "%.0fK", v)
+        default:
+            let v = Double(value) / 1_000_000
+            return String(format: "%.1fM", v)
+        }
     }
 }
 

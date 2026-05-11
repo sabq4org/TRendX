@@ -15,6 +15,8 @@ struct GiftsScreen: View {
     @State private var selectedGift: Gift?
     @State private var lastRedemption: Redemption?
     @State private var showHistory = false
+    @State private var recentReward: TrendXLedgerEntry?
+    @State private var dismissedRewardId: UUID?
 
     /// A realistic minimum-for-redemption tier used to drive the progress bar.
     /// Picks the cheapest gift in the catalog (or a sensible default).
@@ -90,6 +92,16 @@ struct GiftsScreen: View {
                     showHistory = true
                 }
                     .padding(.horizontal, 20)
+
+                if let reward = recentReward, reward.id != dismissedRewardId {
+                    RecentRewardBanner(entry: reward) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            dismissedRewardId = reward.id
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
 
                 WalletHero(
                     points: store.currentUser.points,
@@ -187,19 +199,97 @@ struct GiftsScreen: View {
         } message: { gift in
             Text(store.giftRecommendationReason(for: gift))
         }
-        .alert("تم الاستبدال", isPresented: Binding(get: { lastRedemption != nil }, set: { if !$0 { lastRedemption = nil } })) {
-            Button("حسناً") {
-                lastRedemption = nil
-            }
-        } message: {
-            if let lastRedemption {
-                Text("كود الهدية: \(lastRedemption.code)")
-            }
+        .sheet(item: $lastRedemption) { redemption in
+            GiftRedemptionSuccessSheet(
+                redemption: redemption,
+                remainingPoints: store.currentUser.points,
+                onDismiss: { lastRedemption = nil }
+            )
+            .trendxRTL()
         }
         .sheet(isPresented: $showHistory) {
             RedemptionHistoryView(redemptions: store.redemptions)
                 .trendxRTL()
         }
+        .task { await loadRecentReward() }
+    }
+
+    private func loadRecentReward() async {
+        guard let token = store.accessToken else { return }
+        guard let entries = try? await store.apiClient.pointsLedger(accessToken: token) else { return }
+        // Pick the most recent positive entry from the last 24 hours so the
+        // banner only celebrates fresh rewards, not historical ones.
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        recentReward = entries.first { $0.amount > 0 && $0.createdAt >= cutoff }
+    }
+}
+
+// MARK: - Recent reward banner
+
+private struct RecentRewardBanner: View {
+    let entry: TrendXLedgerEntry
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(TrendXTheme.accent.opacity(0.18))
+                    .frame(width: 40, height: 40)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.accentDeep)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text("حصلت على")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                    Text("+\(entry.amount) نقطة")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundStyle(TrendXTheme.accentDeep)
+                }
+                if let description = entry.description, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                        .lineLimit(1)
+                } else {
+                    Text(relativeTime(entry.createdAt))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .frame(width: 26, height: 26)
+                    .background(Circle().fill(TrendXTheme.paleFill))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(TrendXTheme.accent.opacity(0.18), lineWidth: 1)
+                )
+                .shadow(color: TrendXTheme.accent.opacity(0.10), radius: 8, x: 0, y: 3)
+        )
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "ar")
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -274,6 +364,8 @@ struct WalletHero: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(Capsule().fill(TrendXTheme.softFill))
+
+                MemberTierBadge(tier: MemberTier.from(points: points), compact: true)
 
                 Spacer()
 
@@ -413,9 +505,7 @@ private struct AIPickCard: View {
                             )
                             .frame(width: 74, height: 74)
 
-                        Text(gift.brandMonogram)
-                            .font(.system(size: 22, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white)
+                        GiftBrandMark(gift: gift, size: 54, monogramFont: 20)
                     }
 
                     if canAfford {

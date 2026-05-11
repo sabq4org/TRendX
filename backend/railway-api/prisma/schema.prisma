@@ -89,6 +89,7 @@ enum LedgerType {
   refund
   challenge_winner
   pulse_streak_bonus
+  daily_bonus
 }
 
 // MARK: - Identity

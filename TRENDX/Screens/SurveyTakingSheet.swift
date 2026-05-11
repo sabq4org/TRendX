@@ -21,7 +21,7 @@ struct SurveyTakingSheet: View {
     @State private var startedAt = Date()
     @State private var didSubmit = false
 
-    private var question: Poll? {
+    private var question: SurveyQuestion? {
         guard currentIndex < survey.questions.count else { return nil }
         return survey.questions[currentIndex]
     }
@@ -76,7 +76,7 @@ struct SurveyTakingSheet: View {
     // MARK: - Question screen
 
     @ViewBuilder
-    private func questionView(_ q: Poll) -> some View {
+    private func questionView(_ q: SurveyQuestion) -> some View {
         VStack(spacing: 0) {
             // Progress bar
             VStack(spacing: 8) {
@@ -181,7 +181,7 @@ struct SurveyTakingSheet: View {
         }
     }
 
-    private func optionRow(question q: Poll, option: PollOption) -> some View {
+    private func optionRow(question q: SurveyQuestion, option: PollOption) -> some View {
         let selected = answers[q.id] == option.id
 
         return Button {

@@ -361,4 +361,35 @@ export const api = {
   voteComment(token: string, id: string, value: 1 | -1): Promise<{ score: number; upvotes: number; downvotes: number }> {
     return request(`/comments/${id}/vote`, { method: "POST", body: { value }, token });
   },
+
+  // ----- B2B audience stats (public) -----
+
+  audienceStats(): Promise<AudienceStats> {
+    return request("/public/audience-stats");
+  },
+};
+
+export type AudienceStatsBucket = {
+  key: string;
+  count: number;
+  percentage: number;
+};
+
+export type AudienceStats = {
+  headline: {
+    total_users: number;
+    active_last_week: number;
+    active_last_month: number;
+    votes_today: number;
+    votes_last_week: number;
+    redemptions_last_week: number;
+    polls_active: number;
+    surveys_active: number;
+  };
+  gender: AudienceStatsBucket[];
+  age: AudienceStatsBucket[];
+  cities: AudienceStatsBucket[];
+  device: AudienceStatsBucket[];
+  top_topics: Array<{ topic_id: string | null; name: string; icon: string; polls_count: number }>;
+  generated_at: string;
 };

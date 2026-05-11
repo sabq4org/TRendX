@@ -81,6 +81,8 @@ struct GiftDTO: Codable {
     let imageUrl: String?
     let isRedeemAtStore: Bool?
     let isAvailable: Bool?
+    let weeklyRedemptions: Int?
+    let lastRedeemedAt: Date?
 
     var domain: Gift {
         Gift(
@@ -93,7 +95,9 @@ struct GiftDTO: Codable {
             valueInRiyal: valueInRiyal,
             imageURL: imageUrl,
             isRedeemAtStore: isRedeemAtStore ?? true,
-            isAvailable: isAvailable ?? true
+            isAvailable: isAvailable ?? true,
+            weeklyRedemptions: weeklyRedemptions ?? 0,
+            lastRedeemedAt: lastRedeemedAt
         )
     }
 }

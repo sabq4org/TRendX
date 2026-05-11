@@ -31,9 +31,9 @@ final class SurveyRepository {
                 "/surveys",
                 accessToken: session?.accessToken
             )
-            let surveys = response.map(\.domain)
-            cache(surveys)
-            return surveys
+            let domain = response.map(\.domain)
+            cache(domain)
+            return domain
         } catch {
             return cachedSurveys()
         }
@@ -156,7 +156,10 @@ private struct SurveyDTO: Decodable {
             authorAvatar: "T",
             authorIsVerified: true,
             coverStyle: PollCoverStyle.from(rawValue: coverStyle) ?? .generic,
-            questions: (questions ?? []).map(\.domainPoll),
+            questions: (questions ?? [])
+                .sorted { ($0.displayOrder ?? 0) < ($1.displayOrder ?? 0) }
+                .enumerated()
+                .map { idx, q in q.domain(fallbackOrder: idx) },
             topicName: topicName,
             totalResponses: totalResponses ?? 0,
             completionRate: Double(completionRate ?? 0),
@@ -180,37 +183,25 @@ private struct SurveyQuestionDTO: Decodable {
     let isRequired: Bool?
     let options: [SurveyOptionDTO]?
 
-    /// Express each survey question as a Poll so the existing iOS
-    /// model graph (Survey.questions: [Poll]) keeps working without
-    /// a parallel hierarchy.
-    var domainPoll: Poll {
-        let opts = (options ?? []).map { o in
-            PollOption(id: o.id, text: o.text, votesCount: o.votesCount ?? 0, percentage: 0)
+    func domain(fallbackOrder: Int) -> SurveyQuestion {
+        let sortedOptions = (options ?? []).sorted {
+            ($0.displayOrder ?? 0) < ($1.displayOrder ?? 0)
         }
-        return Poll(
+        let totalVotes = sortedOptions.reduce(0) { $0 + ($1.votesCount ?? 0) }
+        let opts: [PollOption] = sortedOptions.map { o in
+            let votes = o.votesCount ?? 0
+            let pct = totalVotes > 0 ? Double(votes) / Double(totalVotes) * 100 : 0
+            return PollOption(id: o.id, text: o.text, votesCount: votes, percentage: pct)
+        }
+        return SurveyQuestion(
             id: id,
             title: title,
             description: description,
-            imageURL: nil,
-            coverStyle: .generic,
-            authorName: "TrendX",
-            authorAvatar: "T",
-            authorIsVerified: true,
-            options: opts,
-            topicId: nil,
-            topicName: nil,
             type: PollType(rawValue: type ?? "single_choice") ?? .singleChoice,
-            status: .active,
-            totalVotes: opts.reduce(0) { $0 + $1.votesCount },
+            options: opts,
+            displayOrder: displayOrder ?? fallbackOrder,
             rewardPoints: rewardPoints ?? 25,
-            durationDays: 14,
-            createdAt: Date(),
-            expiresAt: Date().addingTimeInterval(14 * 24 * 60 * 60),
-            userVotedOptionId: nil,
-            isBookmarked: false,
-            sharesCount: 0,
-            repostsCount: 0,
-            aiInsight: nil
+            isRequired: isRequired ?? true
         )
     }
 }

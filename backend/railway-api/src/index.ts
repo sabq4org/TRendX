@@ -82,6 +82,7 @@ import {
   postComment,
   voteOnComment,
 } from "./lib/comments.js";
+import { buildNotifications } from "./lib/notifications.js";
 import { startDailyJob } from "./jobs/daily.js";
 
 // MARK: - Types
@@ -913,7 +914,32 @@ app.get("/gifts", async () => {
     where: { isAvailable: true },
     orderBy: { pointsRequired: "asc" },
   });
-  return Response.json(rows.map(giftDTO));
+
+  // Compute redemption stats for social proof badges. One groupBy for the
+  // last-7-days count, one findMany for the latest redemption per gift.
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const [weekly, latest] = await Promise.all([
+    prisma.redemption.groupBy({
+      by: ["giftId"],
+      where: { redeemedAt: { gte: since } },
+      _count: { _all: true },
+    }),
+    prisma.redemption.findMany({
+      where: { giftId: { in: rows.map((g) => g.id) } },
+      orderBy: { redeemedAt: "desc" },
+      distinct: ["giftId"],
+      select: { giftId: true, redeemedAt: true },
+    }),
+  ]);
+
+  const weeklyByGift = new Map(weekly.map((w) => [w.giftId, w._count._all]));
+  const latestByGift = new Map(latest.map((r) => [r.giftId, r.redeemedAt]));
+
+  return Response.json(rows.map((g) => ({
+    ...giftDTO(g),
+    weekly_redemptions: weeklyByGift.get(g.id) ?? 0,
+    last_redeemed_at: latestByGift.get(g.id)?.toISOString() ?? null,
+  })));
 });
 
 app.get("/redemptions", async (c) => {
@@ -971,6 +997,15 @@ app.post("/gifts/redeem", async (c) => {
       },
     }),
   ]);
+
+  broadcastEvent({
+    type: "gift_redeemed",
+    giftId,
+    giftName: gift.name,
+    brandName: gift.brandName,
+    pointsSpent: gift.pointsRequired,
+    valueInRiyal: Number(gift.valueInRiyal),
+  });
 
   return c.json({
     redemption: redemptionDTO(redemption),
@@ -1665,6 +1700,237 @@ app.get("/me/streak", async (c) => {
   return c.json(streak);
 });
 
+// MARK: - Smart notifications
+
+app.get("/me/notifications", async (c) => {
+  const userId = c.get("userId");
+  const items = await buildNotifications(userId);
+  return c.json({ items });
+});
+
+// MARK: - Daily bonus
+//
+// Awards a small streak-amplifying bonus once per calendar day. State is
+// tracked entirely through the existing `points_ledger` table — we look
+// for a `daily_bonus` entry in the last 24 hours to decide whether the
+// user is eligible. Reward grows with the streak of consecutive daily
+// claims (capped at 7).
+
+app.get("/me/daily-bonus", async (c) => {
+  const userId = c.get("userId");
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const recent = await prisma.pointsLedger.findFirst({
+    where: { userId, type: "daily_bonus", createdAt: { gte: since } },
+    orderBy: { createdAt: "desc" },
+  });
+  const streak = await dailyBonusStreak(userId);
+  const nextReward = dailyBonusAmount(streak + (recent ? 0 : 1));
+
+  return c.json({
+    can_claim: recent === null,
+    current_streak: streak,
+    next_reward: nextReward,
+    last_claimed_at: recent?.createdAt.toISOString() ?? null,
+  });
+});
+
+app.post("/me/daily-bonus/claim", async (c) => {
+  const userId = c.get("userId");
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const recent = await prisma.pointsLedger.findFirst({
+    where: { userId, type: "daily_bonus", createdAt: { gte: since } },
+  });
+  if (recent) {
+    return c.json({ error: "Already claimed today" }, 409);
+  }
+
+  const streak = (await dailyBonusStreak(userId)) + 1;
+  const amount = dailyBonusAmount(streak);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return c.json({ error: "User not found" }, 404);
+
+  const newBalance = user.points + amount;
+  const [, updatedUser] = await prisma.$transaction([
+    prisma.pointsLedger.create({
+      data: {
+        userId,
+        amount,
+        type: "daily_bonus",
+        refType: "daily_bonus",
+        refId: null,
+        description: `مكافأة الدخول اليومي · يوم ${streak}`,
+        balanceAfter: newBalance,
+      },
+    }),
+    prisma.user.update({
+      where: { id: userId },
+      data: { points: newBalance, coins: newBalance / 6 },
+    }),
+  ]);
+
+  return c.json({
+    awarded: amount,
+    new_streak: streak,
+    user: userDTO(updatedUser),
+  });
+});
+
+async function dailyBonusStreak(userId: string): Promise<number> {
+  // Count consecutive days (back-to-back, including today) the user has
+  // claimed the bonus. We look at the latest 14 entries and walk back.
+  const recent = await prisma.pointsLedger.findMany({
+    where: { userId, type: "daily_bonus" },
+    orderBy: { createdAt: "desc" },
+    take: 14,
+  });
+  if (recent.length === 0) return 0;
+
+  let streak = 1;
+  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
+  let prevDay = dayKey(recent[0].createdAt);
+
+  for (let i = 1; i < recent.length; i += 1) {
+    const day = dayKey(recent[i].createdAt);
+    const expectedPrev = new Date(prevDay);
+    expectedPrev.setUTCDate(expectedPrev.getUTCDate() - 1);
+    if (day !== dayKey(expectedPrev)) break;
+    streak += 1;
+    prevDay = day;
+  }
+  return streak;
+}
+
+function dailyBonusAmount(streakDay: number): number {
+  // Day 1 → 5 pts, day 2 → 8, day 3 → 12, day 4 → 18, day 5 → 25,
+  // day 6 → 35, day 7+ → 50 (caps).
+  const table = [5, 8, 12, 18, 25, 35, 50];
+  const idx = Math.max(1, Math.min(streakDay, table.length)) - 1;
+  return table[idx];
+}
+
+// MARK: - Publisher audience stats
+//
+// One endpoint that powers the "Reach + Demographics" story for the
+// publisher dashboard. Everything is aggregated live — no caching —
+// because the values move slowly enough that recomputing per request
+// (~6 indexed queries) is still cheap, and freshness matters here.
+//
+// The endpoint is intentionally public so the marketing/business page
+// can render the totals before sign-in. We only return aggregates, no
+// individual user data.
+
+app.get("/public/audience-stats", async () => {
+  const now = new Date();
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [
+    totalUsers,
+    activeWeek,
+    activeMonth,
+    votesToday,
+    votesWeek,
+    redemptionsWeek,
+    pollsActive,
+    surveysActive,
+    genderRows,
+    ageRows,
+    cityRows,
+    deviceRows,
+    topicCountRows,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { lastActiveAt: { gte: weekAgo } } }),
+    prisma.user.count({ where: { lastActiveAt: { gte: monthAgo } } }),
+    prisma.vote.count({ where: { votedAt: { gte: dayAgo } } }),
+    prisma.vote.count({ where: { votedAt: { gte: weekAgo } } }),
+    prisma.redemption.count({ where: { redeemedAt: { gte: weekAgo } } }),
+    prisma.poll.count({ where: { status: "active" } }),
+    prisma.survey.count({ where: { status: "active" } }),
+    prisma.user.groupBy({ by: ["gender"], _count: { _all: true } }),
+    // Vote table denormalizes age_group per response, so it's the cleanest
+    // source for an "audience demographics" aggregation.
+    prisma.vote.groupBy({
+      by: ["ageGroup"],
+      _count: { _all: true },
+      where: { ageGroup: { not: null } },
+    }),
+    prisma.user.groupBy({
+      by: ["city"],
+      _count: { _all: true },
+      where: { city: { not: null } },
+      orderBy: { _count: { id: "desc" } },
+      take: 6,
+    }),
+    prisma.user.groupBy({ by: ["deviceType"], _count: { _all: true } }),
+    prisma.poll.groupBy({
+      by: ["topicId"],
+      _count: { _all: true },
+      where: { status: "active", topicId: { not: null } },
+      orderBy: { _count: { id: "desc" } },
+      take: 5,
+    }),
+  ]);
+
+  const topicIds = topicCountRows
+    .map((r) => r.topicId)
+    .filter((id): id is string => typeof id === "string");
+  const topics = topicIds.length
+    ? await prisma.topic.findMany({
+        where: { id: { in: topicIds } },
+        select: { id: true, name: true, icon: true },
+      })
+    : [];
+  const topicById = new Map(topics.map((t) => [t.id, t]));
+
+  const pct = (count: number, denominator: number) =>
+    denominator > 0 ? Math.round((count / denominator) * 1000) / 10 : 0;
+
+  return Response.json({
+    headline: {
+      total_users: totalUsers,
+      active_last_week: activeWeek,
+      active_last_month: activeMonth,
+      votes_today: votesToday,
+      votes_last_week: votesWeek,
+      redemptions_last_week: redemptionsWeek,
+      polls_active: pollsActive,
+      surveys_active: surveysActive,
+    },
+    gender: genderRows.map((r) => ({
+      key: r.gender,
+      count: r._count._all,
+      percentage: pct(r._count._all, totalUsers),
+    })),
+    age: ageRows.map((r) => ({
+      key: r.ageGroup ?? "غير محدد",
+      count: r._count._all,
+      percentage: pct(r._count._all, totalUsers),
+    })),
+    cities: cityRows.map((r) => ({
+      key: r.city ?? "غير محدد",
+      count: r._count._all,
+      percentage: pct(r._count._all, totalUsers),
+    })),
+    device: deviceRows.map((r) => ({
+      key: r.deviceType,
+      count: r._count._all,
+      percentage: pct(r._count._all, totalUsers),
+    })),
+    top_topics: topicCountRows.map((r) => ({
+      topic_id: r.topicId,
+      name: topicById.get(r.topicId ?? "")?.name ?? "—",
+      icon: topicById.get(r.topicId ?? "")?.icon ?? "tag",
+      polls_count: r._count._all,
+    })),
+    generated_at: now.toISOString(),
+  });
+});
+
 // MARK: - Opinion DNA
 
 app.get("/me/dna", async (c) => {
@@ -1857,8 +2123,23 @@ app.post("/polls/:id/predict", async (c) => {
 });
 
 app.post("/polls/:id/predict/score", async (c) => {
-  // Open to publisher of the poll OR admin; cron triggers it on close.
+  // Restricted to the poll's publisher OR an admin. Without this check any
+  // signed-in user could settle predictions and award points on any poll.
   const id = c.req.param("id");
+  const actor = await loadActor(c);
+  if (!actor) return c.json({ error: "Forbidden" }, 403);
+
+  if (actor.role !== "admin") {
+    const poll = await prisma.poll.findUnique({
+      where: { id },
+      select: { publisherId: true },
+    });
+    if (!poll) return c.json({ error: "Poll not found" }, 404);
+    if (poll.publisherId !== actor.id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
+
   const result = await scorePollPredictions(id);
   return c.json(result);
 });

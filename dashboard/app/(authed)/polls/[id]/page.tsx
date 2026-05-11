@@ -15,7 +15,7 @@ import { StackedBar } from "@/components/charts/StackedBar";
 import { AreaTrend } from "@/components/charts/Area";
 import { Heatmap } from "@/components/charts/Heatmap";
 import { fmtInt, fmtSeconds, fmtPctRaw, deviceLabel, genderLabel } from "@/lib/format";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Download } from "lucide-react";
 
 const AGE_BUCKETS_ORDER = ["18-24", "25-34", "35-44", "45-54", "55+"];
 
@@ -98,6 +98,14 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
         eyebrow="POLL ANALYTICS"
         title={poll?.title ?? "تحليل الاستطلاع"}
         subtitle={poll?.description ?? "تحليل ديموغرافي وسلوكي كامل مع جودة العيّنة."}
+        right={
+          <button
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition print:hidden"
+          >
+            <Download size={12} /> اطبع التحليل
+          </button>
+        }
       />
 
       <main className="flex-1 px-10 pb-10 space-y-7">

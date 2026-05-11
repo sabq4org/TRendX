@@ -41,6 +41,7 @@ struct TrendXUser: Codable, Identifiable, Equatable {
     var name: String
     var email: String
     var avatarInitial: String
+    var avatarUrl: String?
     var points: Int
     var coins: Double
     var followedTopics: [UUID]
@@ -60,6 +61,7 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         name: String = "مستخدم",
         email: String = "",
         avatarInitial: String = "م",
+        avatarUrl: String? = nil,
         points: Int = 100,
         coins: Double = 16.67,
         followedTopics: [UUID] = [],
@@ -77,6 +79,7 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         self.name = name
         self.email = email
         self.avatarInitial = avatarInitial
+        self.avatarUrl = avatarUrl
         self.points = points
         self.coins = coins
         self.followedTopics = followedTopics
@@ -352,6 +355,8 @@ struct Poll: Codable, Identifiable, Equatable {
     var isBookmarked: Bool
     var sharesCount: Int
     var repostsCount: Int
+    var viewsCount: Int
+    var savesCount: Int
     /// Optional AI-generated insight shown as an elegant chip inside the card
     var aiInsight: String?
 
@@ -378,6 +383,8 @@ struct Poll: Codable, Identifiable, Equatable {
         isBookmarked: Bool = false,
         sharesCount: Int = 0,
         repostsCount: Int = 0,
+        viewsCount: Int = 0,
+        savesCount: Int = 0,
         aiInsight: String? = nil
     ) {
         self.id = id
@@ -402,6 +409,8 @@ struct Poll: Codable, Identifiable, Equatable {
         self.isBookmarked = isBookmarked
         self.sharesCount = sharesCount
         self.repostsCount = repostsCount
+        self.viewsCount = viewsCount
+        self.savesCount = savesCount
         self.aiInsight = aiInsight
     }
     
@@ -472,6 +481,10 @@ struct Gift: Codable, Identifiable, Equatable {
     var imageURL: String?
     var isRedeemAtStore: Bool
     var isAvailable: Bool
+    /// Number of redemptions in the last 7 days. Used for "شائع هذا الأسبوع".
+    var weeklyRedemptions: Int = 0
+    /// Most recent redemption timestamp; drives the "آخر استبدال قبل X" chip.
+    var lastRedeemedAt: Date? = nil
 
     // MARK: - UI helpers
 
@@ -534,7 +547,9 @@ struct Gift: Codable, Identifiable, Equatable {
         valueInRiyal: Double,
         imageURL: String? = nil,
         isRedeemAtStore: Bool = true,
-        isAvailable: Bool = true
+        isAvailable: Bool = true,
+        weeklyRedemptions: Int = 0,
+        lastRedeemedAt: Date? = nil
     ) {
         self.id = id
         self.name = name
@@ -546,6 +561,8 @@ struct Gift: Codable, Identifiable, Equatable {
         self.imageURL = imageURL
         self.isRedeemAtStore = isRedeemAtStore
         self.isAvailable = isAvailable
+        self.weeklyRedemptions = weeklyRedemptions
+        self.lastRedeemedAt = lastRedeemedAt
     }
 }
 
@@ -733,6 +750,44 @@ extension Gift {
 
 // MARK: - Survey Model
 
+/// A single question inside a Survey. Distinct from `Poll` because survey
+/// questions live only inside their parent and don't carry the standalone
+/// poll metadata (author, shares, votes-total etc.). Backend DTO returned
+/// by `/surveys/:id` includes `display_order`, `is_required`, and
+/// `reward_points` per question — none of which exist on `Poll`.
+struct SurveyQuestion: Codable, Identifiable, Equatable {
+    let id: UUID
+    var title: String
+    var description: String?
+    var type: PollType
+    var options: [PollOption]
+    var displayOrder: Int
+    var rewardPoints: Int
+    var isRequired: Bool
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        description: String? = nil,
+        type: PollType = .singleChoice,
+        options: [PollOption] = [],
+        displayOrder: Int = 0,
+        rewardPoints: Int = 25,
+        isRequired: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.type = type
+        self.options = options
+        self.displayOrder = displayOrder
+        self.rewardPoints = rewardPoints
+        self.isRequired = isRequired
+    }
+
+    var totalVotes: Int { options.reduce(0) { $0 + $1.votesCount } }
+}
+
 struct Survey: Codable, Identifiable {
     let id: UUID
     var title: String
@@ -741,7 +796,7 @@ struct Survey: Codable, Identifiable {
     var authorAvatar: String
     var authorIsVerified: Bool
     var coverStyle: PollCoverStyle
-    var questions: [Poll]
+    var questions: [SurveyQuestion]
     var topicName: String?
     var totalResponses: Int
     var completionRate: Double      // % من أكمل كل الأسئلة
@@ -759,7 +814,7 @@ struct Survey: Codable, Identifiable {
         authorAvatar: String = "T",
         authorIsVerified: Bool = true,
         coverStyle: PollCoverStyle = .generic,
-        questions: [Poll] = [],
+        questions: [SurveyQuestion] = [],
         topicName: String? = nil,
         totalResponses: Int = 0,
         completionRate: Double = 0,
@@ -793,46 +848,40 @@ extension Survey {
             description: "دراسة شاملة حول تأثير تقنيات AI على سلوكيات وأولويات المجتمع السعودي",
             coverStyle: .tech,
             questions: [
-                Poll(title: "كم ساعة يومياً تستخدم أدوات الذكاء الاصطناعي؟",
-                     coverStyle: .tech,
+                SurveyQuestion(title: "كم ساعة يومياً تستخدم أدوات الذكاء الاصطناعي؟",
                      options: [
                         PollOption(text: "أقل من ساعة", votesCount: 180, percentage: 36),
                         PollOption(text: "1-3 ساعات", votesCount: 225, percentage: 45),
                         PollOption(text: "أكثر من 3 ساعات", votesCount: 95, percentage: 19)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
-                Poll(title: "ما مدى تأثير AI على إنتاجيتك المهنية؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 0, rewardPoints: 30),
+                SurveyQuestion(title: "ما مدى تأثير AI على إنتاجيتك المهنية؟",
                      options: [
                         PollOption(text: "زاد إنتاجيتي كثيراً", votesCount: 220, percentage: 44),
                         PollOption(text: "تحسن طفيف", votesCount: 175, percentage: 35),
                         PollOption(text: "لم يتغيّر شيء", votesCount: 65, percentage: 13),
                         PollOption(text: "أثّر سلباً", votesCount: 40, percentage: 8)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30,
-                     aiInsight: "مستخدمو AI المكثفون (+3ساعات) يرون زيادة أكبر في الإنتاجية"),
-                Poll(title: "هل تقلق من تأثير AI على سوق العمل؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 1, rewardPoints: 30),
+                SurveyQuestion(title: "هل تقلق من تأثير AI على سوق العمل؟",
                      options: [
                         PollOption(text: "نعم، قلق شديد", votesCount: 130, percentage: 26),
                         PollOption(text: "قلق متوسط", votesCount: 185, percentage: 37),
                         PollOption(text: "لست قلقاً", votesCount: 145, percentage: 29),
                         PollOption(text: "متفائل جداً", votesCount: 40, percentage: 8)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
-                Poll(title: "أي مجال ترى فيه AI التحول الأكبر؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 2, rewardPoints: 30),
+                SurveyQuestion(title: "أي مجال ترى فيه AI التحول الأكبر؟",
                      options: [
                         PollOption(text: "الصحة والطب",      votesCount: 165, percentage: 33),
                         PollOption(text: "التعليم والتدريب", votesCount: 150, percentage: 30),
                         PollOption(text: "الأعمال والاقتصاد",  votesCount: 110, percentage: 22),
                         PollOption(text: "الإعلام والمحتوى",   votesCount: 75,  percentage: 15)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
-                Poll(title: "ما مدى استعدادك للدفع مقابل استخدام AI؟",
-                     coverStyle: .economy,
+                     ], displayOrder: 3, rewardPoints: 30),
+                SurveyQuestion(title: "ما مدى استعدادك للدفع مقابل استخدام AI؟",
                      options: [
                         PollOption(text: "مستعد إذا كانت القيمة عادلة", votesCount: 195, percentage: 39),
                         PollOption(text: "فقط باشتراك مدفوع مسبقاً",           votesCount: 120, percentage: 24),
                         PollOption(text: "أفضل النماذج المجانية فقط",           votesCount: 110, percentage: 22),
                         PollOption(text: "لست مستعداً للدفع",                         votesCount: 75,  percentage: 15)
-                     ], topicName: "اقتصاد", totalVotes: 500, rewardPoints: 30)
+                     ], displayOrder: 4, rewardPoints: 30)
             ],
             topicName: "تقنية",
             totalResponses: 500,
@@ -847,34 +896,30 @@ extension Survey {
             description: "هل يثق الجمهور بقرارات تتخذها أنظمة الذكاء الاصطناعي؟",
             coverStyle: .tech,
             questions: [
-                Poll(title: "هل تثق بقرار طبي AI بدون مراجعة بشرية؟",
-                     coverStyle: .health,
+                SurveyQuestion(title: "هل تثق بقرار طبي AI بدون مراجعة بشرية؟",
                      options: [
                         PollOption(text: "نعم، أثق به",      votesCount: 180, percentage: 36),
                         PollOption(text: "بحذر، أحتاج مراجعة", votesCount: 245, percentage: 49),
                         PollOption(text: "لا، لا أثق",     votesCount: 75,  percentage: 15)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
-                Poll(title: "هل تثق بحكم قضائي AI في قضية بسيطة؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 0, rewardPoints: 30),
+                SurveyQuestion(title: "هل تثق بحكم قضائي AI في قضية بسيطة؟",
                      options: [
                         PollOption(text: "نعم",          votesCount: 140, percentage: 28),
                         PollOption(text: "بشروط محددة", votesCount: 210, percentage: 42),
                         PollOption(text: "لا إطلاقاً",   votesCount: 150, percentage: 30)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
-                Poll(title: "من يتحمل مسؤولية قرار AI الخاطئ؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 1, rewardPoints: 30),
+                SurveyQuestion(title: "من يتحمل مسؤولية قرار AI الخاطئ؟",
                      options: [
                         PollOption(text: "الشركة المطوّرة", votesCount: 225, percentage: 45),
                         PollOption(text: "المستخدم",        votesCount: 100, percentage: 20),
                         PollOption(text: "كلاهما معاً",    votesCount: 175, percentage: 35)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30),
-                Poll(title: "هل يجب تنظيم AI حكومياً في السعودية؟",
-                     coverStyle: .social,
+                     ], displayOrder: 2, rewardPoints: 30),
+                SurveyQuestion(title: "هل يجب تنظيم AI حكومياً في السعودية؟",
                      options: [
                         PollOption(text: "نعم، تنظيم صارم",  votesCount: 310, percentage: 62),
                         PollOption(text: "تنظيم خفيف فقط", votesCount: 140, percentage: 28),
                         PollOption(text: "لا حاجة لتنظيم",   votesCount: 50,  percentage: 10)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 30)
+                     ], displayOrder: 3, rewardPoints: 30)
             ],
             topicName: "تقنية", totalResponses: 500, completionRate: 74,
             avgCompletionSeconds: 195, rewardPoints: 130
@@ -886,35 +931,30 @@ extension Survey {
             description: "تقييم مدى جاهزية المنظومة التعليمية لاستيعاب تقنيات الذكاء الاصطناعي",
             coverStyle: .tech,
             questions: [
-                Poll(title: "هل تستخدم AI في دراستك أو عملك؟",
-                     coverStyle: .tech,
+                SurveyQuestion(title: "هل تستخدم AI في دراستك أو عملك؟",
                      options: [
                         PollOption(text: "نعم، يومياً",     votesCount: 280, percentage: 56),
                         PollOption(text: "أحياناً",         votesCount: 140, percentage: 28),
                         PollOption(text: "لا، لم أجرّبه", votesCount: 80,  percentage: 16)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25),
-                Poll(title: "هل AI يساعد في الفهم أو يضعف التفكير؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 0, rewardPoints: 25),
+                SurveyQuestion(title: "هل AI يساعد في الفهم أو يضعف التفكير؟",
                      options: [
                         PollOption(text: "يساعد كثيراً",    votesCount: 220, percentage: 44),
                         PollOption(text: "يساعد لكن بحذر", votesCount: 185, percentage: 37),
                         PollOption(text: "يضعف التفكير",   votesCount: 95,  percentage: 19)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25,
-                     aiInsight: "فجوة جيلية واضحة: الطلاب أكثر إيجابية من المعلمين"),
-                Poll(title: "ما أكثر استخدامات AI في التعليم؟",
-                     coverStyle: .tech,
+                     ], displayOrder: 1, rewardPoints: 25),
+                SurveyQuestion(title: "ما أكثر استخدامات AI في التعليم؟",
                      options: [
                         PollOption(text: "تلخيص المعلومات",  votesCount: 215, percentage: 43),
                         PollOption(text: "كتابة التقارير",     votesCount: 160, percentage: 32),
                         PollOption(text: "حل المسائل",       votesCount: 125, percentage: 25)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25),
-                Poll(title: "هل يجب تعليم AI كمادة مستقلة؟",
-                     coverStyle: .social,
+                     ], displayOrder: 2, rewardPoints: 25),
+                SurveyQuestion(title: "هل يجب تعليم AI كمادة مستقلة؟",
                      options: [
                         PollOption(text: "نعم، ضروري", votesCount: 300, percentage: 60),
                         PollOption(text: "يكفي ضمن مواد أخرى", votesCount: 150, percentage: 30),
                         PollOption(text: "ليست ضرورة", votesCount: 50, percentage: 10)
-                     ], topicName: "تقنية", totalVotes: 500, rewardPoints: 25)
+                     ], displayOrder: 3, rewardPoints: 25)
             ],
             topicName: "تقنية", totalResponses: 420, completionRate: 81,
             avgCompletionSeconds: 185, rewardPoints: 120

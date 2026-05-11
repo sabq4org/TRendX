@@ -80,6 +80,7 @@ struct TabBarButton: View {
 struct HomeHeader: View {
     let userName: String
     let points: Int
+    var unreadNotifications: Int = 0
     let onNotificationsTap: () -> Void
     let onSearchTap: () -> Void
 
@@ -125,11 +126,16 @@ struct HomeHeader: View {
                         .frame(width: 38, height: 38)
                         .background(Circle().fill(Color.white.opacity(0.16)))
                         .overlay(alignment: .topTrailing) {
-                            Circle()
-                                .fill(TrendXTheme.accent)
-                                .frame(width: 9, height: 9)
-                                .overlay(Circle().stroke(Color.white.opacity(0.9), lineWidth: 1.5))
-                                .offset(x: -3, y: 3)
+                            if unreadNotifications > 0 {
+                                Text(unreadNotifications > 9 ? "9+" : "\(unreadNotifications)")
+                                    .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 5)
+                                    .frame(minWidth: 16, minHeight: 16)
+                                    .background(Capsule().fill(TrendXTheme.accent))
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.9), lineWidth: 1.5))
+                                    .offset(x: -4, y: 2)
+                            }
                         }
                 }
                 .buttonStyle(.plain)
@@ -1073,12 +1079,10 @@ struct GiftCard: View {
                     .frame(height: 120)
                     .blendMode(.overlay)
 
-                    // Monogram + value chip
+                    // Brand mark + value chip
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(alignment: .top) {
-                            Text(gift.brandMonogram)
-                                .font(.system(size: 34, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
+                            GiftBrandMark(gift: gift, size: 48, monogramFont: 28)
                                 .shadow(color: tint.opacity(0.4), radius: 4, x: 0, y: 2)
 
                             Spacer()
@@ -1122,6 +1126,18 @@ struct GiftCard: View {
 
                 // Body
                 VStack(alignment: .leading, spacing: 10) {
+                    if let proof = GiftSocialProof.badge(for: gift) {
+                        HStack(spacing: 4) {
+                            Image(systemName: proof.icon)
+                                .font(.system(size: 9, weight: .heavy))
+                            Text(proof.label)
+                                .font(.system(size: 10, weight: .heavy))
+                        }
+                        .foregroundStyle(proof.tint)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(proof.tint.opacity(0.12)))
+                    }
+
                     Text(gift.brandName)
                         .font(.system(size: 14.5, weight: .bold, design: .rounded))
                         .foregroundStyle(TrendXTheme.ink)
@@ -1434,5 +1450,100 @@ struct TrendXSearchBar: View {
         .padding(.vertical, 12)
         .background(TrendXTheme.softFill)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+
+// MARK: - Gift brand mark
+//
+// Renders the brand logo when available (`gift.brandLogo` URL), otherwise
+// falls back to the brand monogram on a translucent disc.
+
+struct GiftBrandMark: View {
+    let gift: Gift
+    var size: CGFloat = 48
+    var monogramFont: CGFloat = 22
+
+    private var logoURL: URL? {
+        guard !gift.brandLogo.isEmpty else { return nil }
+        return URL(string: gift.brandLogo)
+    }
+
+    var body: some View {
+        Group {
+            if let url = logoURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit().padding(size * 0.18)
+                    default:
+                        monogramView
+                    }
+                }
+                .frame(width: size, height: size)
+                .background(Circle().fill(.white))
+                .clipShape(Circle())
+            } else {
+                monogramView
+            }
+        }
+    }
+
+    private var monogramView: some View {
+        ZStack {
+            Circle().fill(.white.opacity(0.18))
+            Text(gift.brandMonogram)
+                .font(.system(size: monogramFont, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+
+
+// MARK: - Gift social proof
+//
+// Picks a single badge per gift based on weekly redemption volume or how
+// recently it was last redeemed. Returns nil when neither signal is
+// strong enough to surface (we don't want to brag about cold inventory).
+
+enum GiftSocialProof {
+    struct Badge {
+        let label: String
+        let icon: String
+        let tint: Color
+    }
+
+    static func badge(for gift: Gift) -> Badge? {
+        if gift.weeklyRedemptions >= 5 {
+            return Badge(
+                label: "شائع هذا الأسبوع",
+                icon: "flame.fill",
+                tint: TrendXTheme.accent
+            )
+        }
+        if gift.weeklyRedemptions >= 2 {
+            return Badge(
+                label: "\(gift.weeklyRedemptions) استبدلوها هذا الأسبوع",
+                icon: "person.2.fill",
+                tint: TrendXTheme.aiIndigo
+            )
+        }
+        if let lastAt = gift.lastRedeemedAt {
+            let minutes = Int(Date().timeIntervalSince(lastAt) / 60)
+            if minutes < 60 {
+                return Badge(label: "استُبدلت قبل \(max(minutes, 1)) دقيقة",
+                             icon: "clock.fill",
+                             tint: TrendXTheme.success)
+            }
+            let hours = minutes / 60
+            if hours < 24 {
+                return Badge(label: "استُبدلت قبل \(hours) ساعة",
+                             icon: "clock.fill",
+                             tint: TrendXTheme.success)
+            }
+        }
+        return nil
     }
 }

@@ -12,6 +12,8 @@ struct HomeScreen: View {
     @State private var showFollowedOnly = false
     @State private var searchText = ""
     @State private var selectedPoll: Poll?
+    @State private var showNotifications = false
+    @StateObject private var notificationsCounter = NotificationsCounter()
 
     private var feedPolls: [Poll] {
         let base = store.smartFeedPolls
@@ -30,8 +32,9 @@ struct HomeScreen: View {
                     HomeHeader(
                         userName: store.currentUser.name,
                         points: store.currentUser.points,
+                        unreadNotifications: notificationsCounter.unreadCount,
                         onNotificationsTap: {
-                            store.selectedTab = .polls
+                            showNotifications = true
                         },
                         onSearchTap: {
                             withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
@@ -66,6 +69,14 @@ struct HomeScreen: View {
                     .environmentObject(store)
                     .trendxRTL()
             }
+            .sheet(isPresented: $showNotifications) {
+                NavigationStack {
+                    NotificationsInboxScreen(store: store)
+                        .environmentObject(store)
+                }
+                .trendxRTL()
+            }
+            .task { await notificationsCounter.refresh(store: store) }
 
             FloatingActionButton {
                 store.showCreatePoll = true
@@ -79,6 +90,10 @@ struct HomeScreen: View {
 
     private var postsContent: some View {
         VStack(spacing: 24) {
+            // Daily bonus claim — only renders when claimable or just claimed.
+            DailyBonusCard(store: store)
+                .padding(.horizontal, 20)
+
             // Daily Pulse spotlight — same JSON as the Web /pulse page.
             NavigationLink {
                 PulseTodayScreen()
@@ -93,6 +108,17 @@ struct HomeScreen: View {
 
             AIBriefCard(brief: TrendXAI.dailyBrief(activePolls: store.activePolls, topics: store.topics, user: store.currentUser))
                 .padding(.horizontal, 20)
+
+            // Weekly Challenge — predict-the-pulse leaderboard
+            NavigationLink {
+                WeeklyChallengeScreen(client: store.apiClient, accessToken: store.accessToken)
+                    .environmentObject(store)
+                    .trendxRTL()
+            } label: {
+                WeeklyChallengeHomeCard()
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
 
             // National TRENDX Index card
             NavigationLink {

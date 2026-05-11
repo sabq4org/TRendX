@@ -129,6 +129,7 @@ struct UserDTO: Codable {
     let name: String
     let email: String?
     let avatarInitial: String?
+    let avatarUrl: String?
     let points: Int
     let coins: Double
     let followedTopics: [UUID]?
@@ -148,6 +149,7 @@ struct UserDTO: Codable {
             name: name,
             email: email ?? "",
             avatarInitial: avatarInitial ?? String(name.prefix(1)),
+            avatarUrl: avatarUrl?.isEmpty == false ? avatarUrl : nil,
             points: points,
             coins: coins,
             followedTopics: followedTopics ?? [],
@@ -205,8 +207,13 @@ struct PollDTO: Codable {
     let expiresAt: Date?
     let userVotedOptionId: UUID?
     let isBookmarked: Bool?
-    let sharesCount: Int?
-    let repostsCount: Int?
+    // Backend returns `total_shares`, `total_views`, `total_saves` from the
+    // pollDTO mapper. After `convertFromSnakeCase` those become camelCase
+    // — `sharesCount`/`repostsCount` from older builds were never sent and
+    // would silently decode to nil here.
+    let totalShares: Int?
+    let totalViews: Int?
+    let totalSaves: Int?
     let aiInsight: String?
 
     init(domain: Poll) {
@@ -230,8 +237,9 @@ struct PollDTO: Codable {
         self.expiresAt = domain.expiresAt
         self.userVotedOptionId = domain.userVotedOptionId
         self.isBookmarked = domain.isBookmarked
-        self.sharesCount = domain.sharesCount
-        self.repostsCount = domain.repostsCount
+        self.totalShares = domain.sharesCount
+        self.totalViews = domain.viewsCount
+        self.totalSaves = domain.savesCount
         self.aiInsight = domain.aiInsight
     }
 
@@ -257,8 +265,10 @@ struct PollDTO: Codable {
             expiresAt: expiresAt ?? Date().addingTimeInterval(7 * 24 * 60 * 60),
             userVotedOptionId: userVotedOptionId,
             isBookmarked: isBookmarked ?? false,
-            sharesCount: sharesCount ?? 0,
-            repostsCount: repostsCount ?? 0,
+            sharesCount: totalShares ?? 0,
+            repostsCount: 0,
+            viewsCount: totalViews ?? 0,
+            savesCount: totalSaves ?? 0,
             aiInsight: aiInsight
         )
     }

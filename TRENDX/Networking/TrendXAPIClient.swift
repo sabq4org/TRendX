@@ -109,7 +109,7 @@ final class TrendXAPIClient {
 
 struct EmptyResponse: Decodable {}
 
-private extension ISO8601DateFormatter {
+extension ISO8601DateFormatter {
     static let trendxInternet: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

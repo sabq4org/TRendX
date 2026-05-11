@@ -231,13 +231,15 @@ struct CreateSurveySheet: View {
 
     private func publish() {
         let validDrafts = drafts.filter(\.isValid)
-        let questions: [Poll] = validDrafts.map { draft in
+        let perQuestionReward = max(20, rewardPoints / max(1, validDrafts.count))
+        let questions: [SurveyQuestion] = validDrafts.enumerated().map { idx, draft in
             let opts = draft.cleanedOptions().map { PollOption(text: $0) }
-            return Poll(
+            return SurveyQuestion(
                 title: draft.title.trimmingCharacters(in: .whitespacesAndNewlines),
-                options: opts,
                 type: .singleChoice,
-                rewardPoints: max(20, rewardPoints / max(1, validDrafts.count))
+                options: opts,
+                displayOrder: idx,
+                rewardPoints: perQuestionReward
             )
         }
 

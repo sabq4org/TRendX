@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, Zap } from "lucide-react";
+import { Activity, Gift, Zap } from "lucide-react";
 import { fmtInt } from "@/lib/format";
 
 type Event =
   | { type: "vote_cast"; pollId: string; pollTitle: string; city: string | null; deviceType: string; total: number; ts: number }
-  | { type: "vote_milestone"; pollId: string; pollTitle: string; total: number; milestone: number; ts: number };
+  | { type: "vote_milestone"; pollId: string; pollTitle: string; total: number; milestone: number; ts: number }
+  | { type: "gift_redeemed"; giftId: string; giftName: string; brandName: string; pointsSpent: number; valueInRiyal: number; ts: number };
 
 const API_BASE =
   process.env.NEXT_PUBLIC_TRENDX_API ?? "https://trendx-production.up.railway.app";
@@ -28,6 +29,7 @@ export function LiveTicker() {
 
     source.addEventListener("vote_cast", (ev) => ingest((ev as MessageEvent).data));
     source.addEventListener("vote_milestone", (ev) => ingest((ev as MessageEvent).data));
+    source.addEventListener("gift_redeemed", (ev) => ingest((ev as MessageEvent).data));
     source.onerror = () => setConnected(false);
 
     return () => source.close();
@@ -69,28 +71,44 @@ export function LiveTicker() {
                 className={`shrink-0 w-2 h-2 rounded-full mt-2 ${
                   event.type === "vote_milestone"
                     ? "bg-accent-500 shadow-[0_0_0_3px_rgba(250,124,18,0.25)]"
-                    : "bg-brand-500"
+                    : event.type === "gift_redeemed"
+                      ? "bg-positive shadow-[0_0_0_3px_rgba(34,197,94,0.22)]"
+                      : "bg-brand-500"
                 }`}
               />
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] text-ink font-medium leading-snug truncate">
-                  {event.pollTitle}
-                </div>
-                <div className="text-[11px] text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
-                  {event.type === "vote_milestone" ? (
-                    <>
-                      <span className="font-bold text-accent-700">
-                        وصل إلى {fmtInt(event.milestone)} صوت
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span>صوت من {(event as Extract<Event, { type: "vote_cast" }>).city ?? "غير محدد"}</span>
+                {event.type === "gift_redeemed" ? (
+                  <>
+                    <div className="text-[13px] text-ink font-medium leading-snug truncate flex items-center gap-1.5">
+                      <Gift size={12} className="text-positive shrink-0" />
+                      <span className="truncate">{event.giftName}</span>
+                    </div>
+                    <div className="text-[11px] text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
+                      <span>{event.brandName}</span>
                       <span>•</span>
-                      <span className="tabular">{fmtInt(event.total)} مجموع</span>
-                    </>
-                  )}
-                </div>
+                      <span className="tabular">{fmtInt(event.pointsSpent)} نقطة</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[13px] text-ink font-medium leading-snug truncate">
+                      {event.pollTitle}
+                    </div>
+                    <div className="text-[11px] text-ink-mute mt-1 flex items-center gap-2 flex-wrap">
+                      {event.type === "vote_milestone" ? (
+                        <span className="font-bold text-accent-700">
+                          وصل إلى {fmtInt(event.milestone)} صوت
+                        </span>
+                      ) : (
+                        <>
+                          <span>صوت من {event.city ?? "غير محدد"}</span>
+                          <span>•</span>
+                          <span className="tabular">{fmtInt(event.total)} مجموع</span>
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </li>
           ))}

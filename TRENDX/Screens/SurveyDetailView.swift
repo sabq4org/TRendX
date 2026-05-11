@@ -71,7 +71,6 @@ struct SurveyDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showAnalytics = false
     @State private var showTakingSheet = false
-    @State private var selectedPoll: Poll?
 
     var body: some View {
         NavigationStack {
@@ -116,9 +115,7 @@ struct SurveyDetailView: View {
                                 .foregroundStyle(TrendXTheme.tertiaryInk)
                         }
                         ForEach(Array(survey.questions.enumerated()), id: \.offset) { i, q in
-                            QuestionRow(index: i, poll: q) {
-                                selectedPoll = q
-                            }
+                            QuestionRow(index: i, question: q, accent: survey.coverStyle)
                         }
                     }
                     .surfaceCard(padding: 18, radius: 24)
@@ -158,11 +155,6 @@ struct SurveyDetailView: View {
             }
             .sheet(isPresented: $showTakingSheet) {
                 SurveyTakingSheet(survey: survey)
-                    .environmentObject(store)
-                    .trendxRTL()
-            }
-            .sheet(item: $selectedPoll) { poll in
-                PollDetailView(pollId: poll.id)
                     .environmentObject(store)
                     .trendxRTL()
             }
@@ -230,51 +222,48 @@ struct SurveyDetailView: View {
 
 private struct QuestionRow: View {
     let index: Int
-    let poll: Poll
-    let onTap: () -> Void
+    let question: SurveyQuestion
+    let accent: PollCoverStyle
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // رقم السؤال
-                Text("\(index + 1)")
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(poll.topicStyle.tint)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(poll.topicStyle.wash))
+        HStack(spacing: 12) {
+            // رقم السؤال
+            Text("\(index + 1)")
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(accent.tint)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(accent.wash))
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(poll.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(TrendXTheme.ink)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(question.title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.ink)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
 
-                    HStack(spacing: 6) {
-                        Text("\(poll.options.count) خيارات")
+                HStack(spacing: 6) {
+                    Text("\(question.options.count) خيارات")
+                    Text("·")
+                    Text("\(question.totalVotes) إجابة")
+                    if let leader = question.options.max(by: { $0.percentage < $1.percentage }) {
                         Text("·")
-                        Text("\(poll.totalVotes) تصويت")
-                        if let leader = poll.options.max(by: { $0.percentage < $1.percentage }) {
-                            Text("·")
-                            Text("مُتصدّر: \(Int(leader.percentage))%")
-                                .foregroundStyle(poll.topicStyle.tint)
-                        }
+                        Text("مُتصدّر: \(Int(leader.percentage))%")
+                            .foregroundStyle(accent.tint)
                     }
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(TrendXTheme.tertiaryInk)
                 }
-
-                Spacer()
-
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(TrendXTheme.mutedInk)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
             }
-            .padding(12)
-            .background(TrendXTheme.paleFill)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Spacer()
+
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TrendXTheme.mutedInk)
         }
-        .buttonStyle(.plain)
+        .padding(12)
+        .background(TrendXTheme.paleFill)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

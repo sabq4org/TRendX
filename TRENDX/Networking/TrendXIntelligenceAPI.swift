@@ -517,4 +517,21 @@ extension TrendXAPIClient {
     }
 }
 
+// MARK: - Points ledger
+
+struct TrendXLedgerEntry: Decodable, Identifiable {
+    let id: UUID
+    let amount: Int
+    let type: String
+    let description: String?
+    let balanceAfter: Int?
+    let createdAt: Date
+}
+
+extension TrendXAPIClient {
+    func pointsLedger(accessToken: String) async throws -> [TrendXLedgerEntry] {
+        try await get("/points/ledger", accessToken: accessToken)
+    }
+}
+
 private struct EmptyBody: Encodable {}

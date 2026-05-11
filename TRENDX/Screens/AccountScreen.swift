@@ -28,6 +28,9 @@ struct AccountScreen: View {
                 )
                 .padding(.horizontal, 20)
 
+                MemberTierProgressCard(points: store.currentUser.points)
+                    .padding(.horizontal, 20)
+
                 // NEW: Opinion DNA — direct entry to identity screen
                 NavigationLink {
                     OpinionDNAScreen()
@@ -170,21 +173,34 @@ struct ProfileHeader: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            // Avatar — white disc with AI-tinted ring & edit pencil badge
+            // Avatar — remote image when available, otherwise initial disc
             ZStack(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 92, height: 92)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.55), lineWidth: 3)
-                    )
-                    .overlay(
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 92, height: 92)
+                    if let urlString = user.avatarUrl, let url = URL(string: urlString) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            default:
+                                Text(user.avatarInitial)
+                                    .font(.system(size: 36, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(TrendXTheme.primaryDeep)
+                            }
+                        }
+                        .frame(width: 86, height: 86)
+                        .clipShape(Circle())
+                    } else {
                         Text(user.avatarInitial)
                             .font(.system(size: 36, weight: .heavy, design: .rounded))
                             .foregroundStyle(TrendXTheme.primaryDeep)
-                    )
-                    .shadow(color: TrendXTheme.primaryDeep.opacity(0.28), radius: 14, x: 0, y: 8)
+                    }
+                }
+                .frame(width: 92, height: 92)
+                .overlay(Circle().stroke(Color.white.opacity(0.55), lineWidth: 3))
+                .shadow(color: TrendXTheme.primaryDeep.opacity(0.28), radius: 14, x: 0, y: 8)
 
                 // Edit pencil
                 Circle()
