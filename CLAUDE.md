@@ -116,6 +116,54 @@ Three on-device hooks back this engagement loop:
 
 Other engagement screens: [WeeklyChallengeScreen](TRENDX/Screens/WeeklyChallengeScreen.swift), [GiftRedemptionSuccessSheet](TRENDX/Screens/GiftRedemptionSuccessSheet.swift) (confetti + code capsule + share), [ProfileEditScreen](TRENDX/Screens/ProfileEditScreen.swift). Confetti is a shared component: [TrendXConfetti](TRENDX/Components/TrendXConfetti.swift).
 
+### Social-graph layer (added 2026-05-12 — Phases 0→6, see [ROADMAP.md](ROADMAP.md))
+
+Turns TRENDX from a polling app into a social-opinion network. Three account tiers, one-way follow graph, public timeline, events with a Saudi map heatmap, verified-only polls, and gov↔citizen channels.
+
+**Account model:**
+- `AccountType` enum: `individual` / `organization` / `government` (Prisma + iOS + dashboard TS).
+- `users.handle` is unique and case-folded; reserved handles (ministries, royal court, top cities, top media, Vision 2030 brands) seeded into `reserved_handles` and validated by [`lib/handle.ts`](backend/railway-api/src/lib/handle.ts). Use `validateHandle()` — don't hand-roll.
+- `users.is_verified` is admin-promoted only (`POST /admin/users/:id/verify`).
+- Visual identity branches on accountType — see [AccountIdentity.swift](TRENDX/Components/AccountIdentity.swift): individual → round avatar + brand gradient; organization → squircle + gold; government → squircle + Saudi-green ring + corner shield + formal banner. The full layout lives in [PublicProfileScreen](TRENDX/Screens/PublicProfileScreen.swift).
+
+**Follow graph:**
+- `user_follows` (composite PK followerId/followedId) + denormalized `followers_count` / `following_count` on users. Counters are bumped in the same transaction as INSERT/DELETE so they don't drift.
+- Endpoints: `POST /users/:id/follow|unfollow`, `GET /me/following`, `/me/followers`, `/me/suggested-follows` (ranks gov > verified > sameCity > popular).
+- iOS: [SuggestedFollowsCarousel](TRENDX/Components/SuggestedFollowsCarousel.swift) on Home, follow CTA on `PublicProfileScreen`, all with optimistic flips + rollback on failure.
+
+**Timeline (الرادار):**
+- [`lib/timeline.ts`](backend/railway-api/src/lib/timeline.ts) — `buildTimeline()` merges 7 sources into a cursor-paginated feed: polls from followed accounts, polls in followed topics, surveys from followed, reposts by followed, public votes by followed, recently-ended polls, featured stories.
+- `GET /me/timeline?cursor=…&filter=all|accounts|sectors|results`.
+- iOS: [TimelineScreen](TRENDX/Screens/TimelineScreen.swift) with 7 activity-card kinds (`poll_published`, `survey_published`, `vote_cast`, `repost`, `poll_results`, `sector_trending`, `story`). Entry card on Home labelled "الرادار".
+
+**Stories** (editorial collections):
+- `stories` table + `polls.story_id` / `surveys.story_id` foreign keys + `storyOrder`. `isPinned` and `isFeatured` flags drive prioritization in feeds.
+- `POST /stories`, `GET /stories/:id`, `GET /stories?featured=…&publisher_id=…`.
+
+**Vote visibility (opt-in):**
+- `votes.is_public` defaults `false`. User explicitly opts in at vote time via a tiny chip on `PollCard` ("تصويتي خاص ↔ تصويتي ظاهر لمتابعيّ"). When public, the vote surfaces as a `vote_cast` activity to followers.
+
+**Reposts (إعادة نشر):**
+- `reposts` (composite PK userId/pollId) — toggle endpoints `POST /polls/:id/repost` and `/unrepost`. Reposts surface as their own activity kind on timeline.
+- iOS: pill in `PollCard` footer, AI-violet gradient when active.
+
+**Events + Saudi map:**
+- `events` + `event_responses` tables. Status: `upcoming`/`live`/`closed`. `attending_count` is denormalized.
+- `POST /events`, `GET /events/:id` (returns `viewer_status` + top-12 `city_breakdown`), `POST /events/:id/rsvp`.
+- iOS: [EventDetailScreen](TRENDX/Screens/EventDetailScreen.swift) renders a Canvas-drawn Saudi outline with one heat-dot per city, sized by attendee count. ~20 Saudi cities pre-mapped to normalized coordinates in `SaudiMapHeatmap`.
+
+**Verified-only polls + Sector takeover:**
+- `polls.voter_audience` enum: `public` (default) / `verified` (only badged accounts) / `verified_citizen` (only verified citizens with full demographics). Enforced in `POST /polls/vote` with localized 403 + machine-readable `reason`.
+- `sector_takeovers` table — admin-pinned (`POST /admin/sector-takeovers`) association between a verified account and a topic for a finite window with an optional featured poll. `GET /sectors/:topicId/takeover` drives the banner on the sector page.
+- iOS: PollCard's "official" banner adapts its label by audience gate — "استطلاع رسمي" / "استطلاع رسمي · للحسابات الموثّقة" / "استطلاع وطني · للمواطنين الموثّقين".
+
+**Notifications expansion:**
+- `lib/notifications.ts` gains 4 new kinds: `new_from_following`, `event_started`, `national_poll`, `sector_takeover`.
+- iOS `NotificationsInboxScreen` maps kinds to tints — national + takeover use Saudi-green so official notifications nest visually with the rest of the government UI.
+
+**Demo seed:**
+- [seed.ts](backend/railway-api/src/seed.ts) upserts **وزارة الإعلام** (`@moia`, government, verified, password `ChangeMe-TRENDX-Beta!`) plus full demo content: 3 polls (one of each audience tier), 1 survey, 1 event with venue/coords, 1 pinned featured story. Idempotent — re-running the seed doesn't duplicate.
+
 ## Conventions worth knowing
 
 - **JSON casing**: the API uses `snake_case`. The iOS client converts both directions automatically; the dashboard's `lib/types.ts` already mirrors API names. Don't hand-roll case conversion in handlers — use the existing `snake` helper or DTO mappers in `lib/dto.ts`.
