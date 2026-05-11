@@ -112,6 +112,16 @@ struct HomeScreen: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 20)
+
+                NavigationLink {
+                    EventsScreen(store: store)
+                        .environmentObject(store)
+                        .trendxRTL()
+                } label: {
+                    EventsHomeEntry()
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 20)
             }
 
             // Daily Pulse spotlight — same JSON as the Web /pulse page.
@@ -408,6 +418,54 @@ private struct TimelineHomeEntry: View {
                         .strokeBorder(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 1)
                 )
                 .shadow(color: TrendXTheme.aiIndigo.opacity(0.10), radius: 12, x: 0, y: 5)
+        )
+    }
+}
+
+// MARK: - Events Home Entry
+
+private struct EventsHomeEntry: View {
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [TrendXTheme.accent, Color(red: 0.95, green: 0.55, blue: 0.20)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 48, height: 48)
+                    .shadow(color: TrendXTheme.accent.opacity(0.35), radius: 10, x: 0, y: 5)
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 20, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("الفعاليات")
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(TrendXTheme.ink)
+                Text("سجّل حضورك في فعاليات الجهات والمنظمات — خريطة حيّة لكل فعالية")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(TrendXTheme.accent)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(TrendXTheme.accent.opacity(0.20), lineWidth: 1)
+                )
+                .shadow(color: TrendXTheme.accent.opacity(0.10), radius: 12, x: 0, y: 5)
         )
     }
 }

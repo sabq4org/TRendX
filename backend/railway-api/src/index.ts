@@ -91,6 +91,7 @@ import {
   viewerFollows,
 } from "./lib/follows.js";
 import { buildTimeline, type TimelineFilter } from "./lib/timeline.js";
+import { eventCityBreakdown, eventDTO, rsvpEvent } from "./lib/events.js";
 import { startDailyJob } from "./jobs/daily.js";
 
 // MARK: - Types
@@ -514,6 +515,100 @@ app.get("/stories/:id", async (c) => {
     polls: story.polls.map((p) => pollDTO(p, { userId: c.get("userId") })),
     surveys: story.surveys.map(surveyDTO),
   });
+});
+
+// MARK: - Events (الفعاليات)
+
+app.get("/events", async (c) => {
+  const status = c.req.query("status"); // upcoming | live | closed | all
+  const city = c.req.query("city");
+  const events = await prisma.event.findMany({
+    where: {
+      ...(status && status !== "all" ? { status } : {}),
+      ...(city ? { city } : {}),
+    },
+    include: { publisher: true },
+    orderBy: { startsAt: "asc" },
+    take: 60,
+  });
+  return c.json({ items: events.map((e) => eventDTO(e)) });
+});
+
+app.get("/events/:id", async (c) => {
+  const userId = c.get("userId");
+  const event = await prisma.event.findUnique({
+    where: { id: c.req.param("id") },
+    include: { publisher: true },
+  });
+  if (!event) return c.json({ error: "Event not found" }, 404);
+  const [viewerResponse, breakdown] = await Promise.all([
+    prisma.eventResponse.findUnique({
+      where: { eventId_userId: { eventId: event.id, userId } },
+      select: { status: true },
+    }),
+    eventCityBreakdown(event.id),
+  ]);
+  return c.json(eventDTO(event, {
+    viewerStatus: viewerResponse?.status ?? null,
+    cityBreakdown: breakdown,
+  }));
+});
+
+app.post("/events", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{
+    title: string;
+    description?: string;
+    banner_image?: string;
+    category?: string;
+    starts_at: string;
+    ends_at?: string;
+    city?: string;
+    venue?: string;
+    lat?: number;
+    lng?: number;
+  }>();
+  if (!body.title || body.title.trim().length < 4) {
+    return c.json({ error: "العنوان قصير جداً." }, 400);
+  }
+  if (!body.starts_at) {
+    return c.json({ error: "starts_at مطلوب." }, 400);
+  }
+
+  const startsAt = new Date(body.starts_at);
+  const event = await prisma.event.create({
+    data: {
+      publisherId: userId,
+      title: body.title.trim(),
+      description: body.description ?? null,
+      bannerImage: body.banner_image ?? null,
+      category: body.category ?? null,
+      startsAt,
+      endsAt: body.ends_at ? new Date(body.ends_at) : null,
+      city: body.city ?? null,
+      venue: body.venue ?? null,
+      lat: body.lat ?? null,
+      lng: body.lng ?? null,
+      status: startsAt > new Date() ? "upcoming" : "live",
+    },
+    include: { publisher: true },
+  });
+  return c.json(eventDTO(event));
+});
+
+app.post("/events/:id/rsvp", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{ status?: "attending" | "maybe" | "not_attending" }>();
+  if (!body.status) return c.json({ error: "Missing status" }, 400);
+  try {
+    const event = await rsvpEvent(c.req.param("id"), userId, body.status);
+    if (!event) return c.json({ error: "Event not found" }, 404);
+    const breakdown = await eventCityBreakdown(event.id);
+    return c.json(eventDTO(event, { viewerStatus: body.status, cityBreakdown: breakdown }));
+  } catch (err) {
+    const status = (err as { httpStatus?: number }).httpStatus ?? 400;
+    return c.json({ error: (err as Error).message }, status as 400);
+  }
 });
 
 app.get("/stories", async (c) => {

@@ -164,6 +164,8 @@ model User {
   publishedPolls   Poll[]           @relation("PollPublisher")
   publishedSurveys Survey[]         @relation("SurveyPublisher")
   publishedStories Story[]          @relation("StoryPublisher")
+  publishedEvents  Event[]          @relation("EventPublisher")
+  eventResponses   EventResponse[]
   votes            Vote[]
   surveyResponses  SurveyResponse[]
   redemptions      Redemption[]
@@ -186,6 +188,72 @@ model User {
   @@index([accountType])
   @@index([isVerified])
   @@map("users")
+}
+
+// Public events organized by accounts (typically gov or org). Each
+// event can embed polls (via `Poll.eventId`) and aggregate RSVPs
+// per city for the live Saudi map.
+model Event {
+  id          String  @id @default(uuid()) @db.Uuid
+  publisherId String  @map("publisher_id") @db.Uuid
+  publisher   User    @relation("EventPublisher", fields: [publisherId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  bannerImage String? @map("banner_image")
+  category    String? // 'cultural' | 'sports' | 'political' | 'technical' | 'religious' | 'social' | 'economic'
+
+  status   String  @default("upcoming") // upcoming | live | closed
+  startsAt DateTime @map("starts_at")
+  endsAt   DateTime? @map("ends_at")
+
+  // Venue + map plotting. City is the bucketed value used to size
+  // dots on the Saudi map. lat/lng are optional precision.
+  city  String?
+  venue String?
+  lat   Decimal? @db.Decimal(9, 6)
+  lng   Decimal? @db.Decimal(9, 6)
+
+  rsvpCount      Int @default(0) @map("rsvp_count")
+  attendingCount Int @default(0) @map("attending_count")
+
+  // Optional grouping into a Story collection.
+  storyId    String? @map("story_id") @db.Uuid
+  storyOrder Int     @default(0) @map("story_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  responses EventResponse[]
+
+  @@index([publisherId])
+  @@index([status])
+  @@index([startsAt])
+  @@index([city])
+  @@map("events")
+}
+
+model EventResponse {
+  id      String @id @default(uuid()) @db.Uuid
+  eventId String @map("event_id") @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String @map("user_id") @db.Uuid
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status String // 'attending' | 'maybe' | 'not_attending'
+  // Denormalized for the Saudi map aggregation — set at RSVP time so
+  // even users who later update their city still appear where they
+  // RSVPed from.
+  city String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([status])
+  @@index([city])
+  @@map("event_responses")
 }
 
 // Editorial collection: a sequence of polls/surveys/events grouped
