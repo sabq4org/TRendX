@@ -36,12 +36,34 @@ enum UserTier: String, Codable {
     case enterprise
 }
 
+/// One of the three account classes on TRENDX. Drives visual identity
+/// (avatar shape, badge color, profile banner style) and the
+/// verification flow.
+enum AccountType: String, Codable, CaseIterable {
+    case individual
+    case organization
+    case government
+
+    var displayName: String {
+        switch self {
+        case .individual:   return "فرد"
+        case .organization: return "منظّمة"
+        case .government:   return "جهة حكومية"
+        }
+    }
+}
+
 struct TrendXUser: Codable, Identifiable, Equatable {
     let id: UUID
     var name: String
     var email: String
+    var handle: String?
+    var bio: String?
     var avatarInitial: String
     var avatarUrl: String?
+    var bannerUrl: String?
+    var accountType: AccountType
+    var isVerified: Bool
     var points: Int
     var coins: Double
     var followedTopics: [UUID]
@@ -60,8 +82,13 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         id: UUID = UUID(),
         name: String = "مستخدم",
         email: String = "",
+        handle: String? = nil,
+        bio: String? = nil,
         avatarInitial: String = "م",
         avatarUrl: String? = nil,
+        bannerUrl: String? = nil,
+        accountType: AccountType = .individual,
+        isVerified: Bool = false,
         points: Int = 100,
         coins: Double = 16.67,
         followedTopics: [UUID] = [],
@@ -78,8 +105,13 @@ struct TrendXUser: Codable, Identifiable, Equatable {
         self.id = id
         self.name = name
         self.email = email
+        self.handle = handle
+        self.bio = bio
         self.avatarInitial = avatarInitial
         self.avatarUrl = avatarUrl
+        self.bannerUrl = bannerUrl
+        self.accountType = accountType
+        self.isVerified = isVerified
         self.points = points
         self.coins = coins
         self.followedTopics = followedTopics

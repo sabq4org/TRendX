@@ -1,11 +1,19 @@
 // Mirrors the snake_case JSON shapes returned by the Railway API.
 // The dashboard is read-mostly so we only model what we render.
 
+export type AccountType = "individual" | "organization" | "government";
+
 export type User = {
   id: string;
   name: string;
   email: string;
+  handle?: string | null;
+  bio?: string | null;
   avatar_initial: string;
+  avatar_url?: string | null;
+  banner_url?: string | null;
+  account_type: AccountType;
+  is_verified: boolean;
   points: number;
   coins: number;
   role: "respondent" | "publisher" | "admin";

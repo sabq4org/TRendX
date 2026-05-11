@@ -321,21 +321,29 @@ final class AppStore: ObservableObject {
     /// inline validation; on success returns the fresh user record.
     @discardableResult
     func updateProfile(
-        name: String?,
-        email: String?,
-        avatarInitial: String?,
-        avatarUrl: String?,
-        gender: String?,
-        birthYear: Int?,
-        city: String?,
-        region: String?
+        name: String? = nil,
+        email: String? = nil,
+        handle: String? = nil,
+        bio: String? = nil,
+        avatarInitial: String? = nil,
+        avatarUrl: String? = nil,
+        bannerUrl: String? = nil,
+        accountType: AccountType? = nil,
+        gender: String? = nil,
+        birthYear: Int? = nil,
+        city: String? = nil,
+        region: String? = nil
     ) async throws -> TrendXUser {
         guard let session = authSession, isRemoteEnabled else {
             // Apply locally so the offline flow still updates the UI.
             if let name { currentUser.name = name }
             if let email { currentUser.email = email }
+            if let handle { currentUser.handle = handle }
+            if let bio { currentUser.bio = bio }
             if let avatarInitial { currentUser.avatarInitial = avatarInitial }
             if let avatarUrl { currentUser.avatarUrl = avatarUrl }
+            if let bannerUrl { currentUser.bannerUrl = bannerUrl }
+            if let accountType { currentUser.accountType = accountType }
             if let gender, let g = UserGender(rawValue: gender) { currentUser.gender = g }
             if let birthYear { currentUser.birthYear = birthYear }
             if let city { currentUser.city = city }
@@ -346,8 +354,12 @@ final class AppStore: ObservableObject {
         let updated = try await authRepository.updateProfile(
             name: name,
             email: email,
+            handle: handle,
+            bio: bio,
             avatarInitial: avatarInitial,
             avatarUrl: avatarUrl,
+            bannerUrl: bannerUrl,
+            accountType: accountType,
             gender: gender,
             birthYear: birthYear,
             city: city,
@@ -357,6 +369,14 @@ final class AppStore: ObservableObject {
         currentUser = updated
         persistUser()
         return updated
+    }
+
+    /// Check if a candidate @handle is available. Returns nil when free,
+    /// or a human-readable Arabic error message when not.
+    func checkHandleAvailability(_ candidate: String) async -> String? {
+        guard let session = authSession, isRemoteEnabled else { return nil }
+        return (try? await authRepository.checkHandleAvailability(candidate, session: session))
+            ?? "تعذّر فحص المعرّف الآن — حاول مرة أخرى."
     }
 
     /// Apply onboarding extras gathered by the AI sign-up flow (preferred topics

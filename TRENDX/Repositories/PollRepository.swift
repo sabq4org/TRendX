@@ -128,8 +128,13 @@ struct UserDTO: Codable {
     let id: UUID
     let name: String
     let email: String?
+    let handle: String?
+    let bio: String?
     let avatarInitial: String?
     let avatarUrl: String?
+    let bannerUrl: String?
+    let accountType: String?
+    let isVerified: Bool?
     let points: Int
     let coins: Double
     let followedTopics: [UUID]?
@@ -148,8 +153,13 @@ struct UserDTO: Codable {
             id: id,
             name: name,
             email: email ?? "",
+            handle: handle?.isEmpty == false ? handle : nil,
+            bio: bio?.isEmpty == false ? bio : nil,
             avatarInitial: avatarInitial ?? String(name.prefix(1)),
             avatarUrl: avatarUrl?.isEmpty == false ? avatarUrl : nil,
+            bannerUrl: bannerUrl?.isEmpty == false ? bannerUrl : nil,
+            accountType: accountType.flatMap(AccountType.init(rawValue:)) ?? .individual,
+            isVerified: isVerified ?? false,
             points: points,
             coins: coins,
             followedTopics: followedTopics ?? [],

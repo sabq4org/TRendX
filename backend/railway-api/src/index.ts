@@ -83,6 +83,7 @@ import {
   voteOnComment,
 } from "./lib/comments.js";
 import { buildNotifications } from "./lib/notifications.js";
+import { normalizeHandle, validateHandle } from "./lib/handle.js";
 import { startDailyJob } from "./jobs/daily.js";
 
 // MARK: - Types
@@ -272,11 +273,15 @@ app.post("/profile", async (c) => {
     email?: string;
     avatar_initial?: string;
     avatar_url?: string;
+    banner_url?: string;
+    bio?: string;
+    handle?: string;
     phone?: string;
     gender?: string;
     birth_year?: number;
     city?: string;
     region?: string;
+    account_type?: "individual" | "organization" | "government";
   }>();
 
   const updates: Record<string, unknown> = {};
@@ -284,16 +289,65 @@ app.post("/profile", async (c) => {
   if (body.email !== undefined) updates.email = body.email.trim().toLowerCase();
   if (body.avatar_initial !== undefined) updates.avatarInitial = body.avatar_initial;
   if (body.avatar_url !== undefined) updates.avatarUrl = body.avatar_url;
+  if (body.banner_url !== undefined) updates.bannerUrl = body.banner_url;
+  if (body.bio !== undefined) updates.bio = body.bio;
   if (body.phone !== undefined) updates.phone = body.phone;
   if (body.gender !== undefined) updates.gender = normalizeGender(body.gender);
   if (body.birth_year !== undefined) updates.birthYear = body.birth_year;
   if (body.city !== undefined) updates.city = body.city;
   if (body.region !== undefined) updates.region = body.region;
 
+  // account_type can be self-set to `individual` or `organization` —
+  // governments must be promoted by an admin so we filter that out here.
+  if (body.account_type === "individual" || body.account_type === "organization") {
+    updates.accountType = body.account_type;
+  }
+
+  // Handle changes go through the validator (lowercase, format,
+  // reserved list, uniqueness).
+  if (body.handle !== undefined && body.handle !== null) {
+    const check = await validateHandle(body.handle, c.get("userId"));
+    if (!check.ok) {
+      return c.json({ error: check.message, reason: check.reason }, 400);
+    }
+    updates.handle = check.handle;
+  }
+
   const user = await prisma.user.update({
     where: { id: c.get("userId") },
     data: updates,
   });
+  return c.json(userDTO(user));
+});
+
+// MARK: - Handles
+
+/**
+ * Cheap availability check used by the profile editor: hits this with
+ * the candidate handle on debounce so the user sees green/red as they
+ * type. Doesn't actually reserve the handle.
+ */
+app.get("/handles/check", async (c) => {
+  const raw = c.req.query("handle") ?? "";
+  if (!raw) return c.json({ ok: false, reason: "invalid", message: "أدخل معرّفاً." }, 200);
+  const check = await validateHandle(raw, c.get("userId"));
+  return c.json(check);
+});
+
+/**
+ * Public profile lookup. Accepts either a UUID (`id`) or a handle
+ * (`@handle` — leading @ optional). Returns the full userDTO so the
+ * profile page can render counts, badges, etc. We keep this on the
+ * authed router for now; switch to public when comments / messages
+ * launch.
+ */
+app.get("/users/:idOrHandle", async (c) => {
+  const idOrHandle = c.req.param("idOrHandle");
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrHandle);
+  const user = isUUID
+    ? await prisma.user.findUnique({ where: { id: idOrHandle } })
+    : await prisma.user.findUnique({ where: { handle: normalizeHandle(idOrHandle) } });
+  if (!user) return c.json({ error: "User not found" }, 404);
   return c.json(userDTO(user));
 });
 

@@ -33,6 +33,16 @@ enum UserTier {
   enterprise
 }
 
+// Distinguishes the three classes of account on TRENDX: a regular
+// person, a brand/NGO/media outlet, and an official government body.
+// Visual identity, verification flow, and feature gates all branch on
+// this field — see CLAUDE.md "Retention & engagement layer".
+enum AccountType {
+  individual
+  organization
+  government
+}
+
 enum DeviceType {
   ios
   ipad
@@ -105,6 +115,20 @@ model User {
   avatarInitial String  @default("م") @map("avatar_initial")
   phone         String?
 
+  // Public-facing identity: @handle is unique across the platform once
+  // claimed (case-insensitive checked via a citext-style index in the
+  // migration). bio and bannerUrl populate the profile page; both are
+  // optional so existing rows survive the migration.
+  handle    String? @unique
+  bio       String?
+  bannerUrl String? @map("banner_url")
+
+  // Distinguishes individual vs organization vs government accounts.
+  // Verification is independent — an organization can sign up unverified
+  // and earn the badge later through the admin verification flow.
+  accountType AccountType @default(individual) @map("account_type")
+  isVerified  Boolean     @default(false)     @map("is_verified")
+
   role UserRole @default(respondent)
   tier UserTier @default(free)
 
@@ -149,7 +173,22 @@ model User {
   @@index([role])
   @@index([tier])
   @@index([city])
+  @@index([accountType])
+  @@index([isVerified])
   @@map("users")
+}
+
+// Handles reserved before public claim. Lookup is exact-match against
+// the iOS/Web normalization (lowercase, leading @ stripped). Use the
+// admin tools to seed (gov ministries, royal court, major media).
+model ReservedHandle {
+  handle    String  @id
+  reason    String?
+  reservedFor String? @map("reserved_for") // e.g. "وزارة الصحة"
+  category    String? // "government" | "media" | "royal" | "city" | "trendx"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("reserved_handles")
 }
 
 // MARK: - Sectors (self-referential hierarchy: sector > topic > sub-topic)

@@ -110,21 +110,29 @@ final class AuthRepository {
     /// backend, so callers can selectively patch (name + city) without
     /// nuking the rest. Returns the freshly-decoded domain user.
     func updateProfile(
-        name: String?,
-        email: String?,
-        avatarInitial: String?,
-        avatarUrl: String?,
-        gender: String?,
-        birthYear: Int?,
-        city: String?,
-        region: String?,
+        name: String? = nil,
+        email: String? = nil,
+        handle: String? = nil,
+        bio: String? = nil,
+        avatarInitial: String? = nil,
+        avatarUrl: String? = nil,
+        bannerUrl: String? = nil,
+        accountType: AccountType? = nil,
+        gender: String? = nil,
+        birthYear: Int? = nil,
+        city: String? = nil,
+        region: String? = nil,
         session: AuthSession
     ) async throws -> TrendXUser {
         let payload = ProfileUpdatePayload(
             name: name,
             email: email,
+            handle: handle,
+            bio: bio,
             avatarInitial: avatarInitial,
             avatarUrl: avatarUrl,
+            bannerUrl: bannerUrl,
+            accountType: accountType?.rawValue,
             gender: gender,
             birthYear: birthYear,
             city: city,
@@ -132,6 +140,23 @@ final class AuthRepository {
         )
         let dto: UserDTO = try await client.post("/profile", accessToken: session.accessToken, body: payload)
         return dto.domain
+    }
+
+    /// Cheap server-side availability check for an `@handle` candidate.
+    /// Returns nil when the handle is OK, or a localized error message
+    /// when it's invalid / reserved / taken.
+    func checkHandleAvailability(_ candidate: String, session: AuthSession) async throws -> String? {
+        struct Response: Decodable {
+            let ok: Bool
+            let reason: String?
+            let message: String?
+        }
+        let escaped = candidate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? candidate
+        let result: Response = try await client.get(
+            "/handles/check?handle=\(escaped)",
+            accessToken: session.accessToken
+        )
+        return result.ok ? nil : (result.message ?? "هذا المعرّف غير متاح.")
     }
 
     private func save(_ session: AuthSession) {
@@ -153,8 +178,12 @@ final class AuthRepository {
 private struct ProfileUpdatePayload: Encodable {
     let name: String?
     let email: String?
+    let handle: String?
+    let bio: String?
     let avatarInitial: String?
     let avatarUrl: String?
+    let bannerUrl: String?
+    let accountType: String?
     let gender: String?
     let birthYear: Int?
     let city: String?
@@ -164,8 +193,12 @@ private struct ProfileUpdatePayload: Encodable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         if let name { try container.encode(name, forKey: .name) }
         if let email { try container.encode(email, forKey: .email) }
+        if let handle { try container.encode(handle, forKey: .handle) }
+        if let bio { try container.encode(bio, forKey: .bio) }
         if let avatarInitial { try container.encode(avatarInitial, forKey: .avatarInitial) }
         if let avatarUrl { try container.encode(avatarUrl, forKey: .avatarUrl) }
+        if let bannerUrl { try container.encode(bannerUrl, forKey: .bannerUrl) }
+        if let accountType { try container.encode(accountType, forKey: .accountType) }
         if let gender { try container.encode(gender, forKey: .gender) }
         if let birthYear { try container.encode(birthYear, forKey: .birthYear) }
         if let city { try container.encode(city, forKey: .city) }
@@ -173,7 +206,9 @@ private struct ProfileUpdatePayload: Encodable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, email, avatarInitial, avatarUrl, gender, birthYear, city, region
+        case name, email, handle, bio,
+             avatarInitial, avatarUrl, bannerUrl,
+             accountType, gender, birthYear, city, region
     }
 }
 
