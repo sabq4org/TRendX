@@ -512,12 +512,17 @@ app.get("/me/timeline", async (c) => {
   const cursor = c.req.query("cursor");
   const filterRaw = (c.req.query("filter") ?? "all") as TimelineFilter;
   const limit = Number(c.req.query("limit") ?? "24");
+  // Optional sector focus — only honored when filter === "sectors".
+  // Lets the Sectors tab drill down into a specific topic via a chip
+  // strip without needing a separate endpoint.
+  const topicId = c.req.query("topic_id") ?? undefined;
 
   const cutoff = cursor ? new Date(cursor) : new Date();
   const result = await buildTimeline(userId, {
     cutoff,
     filter: ["all", "accounts", "sectors", "results"].includes(filterRaw) ? filterRaw : "all",
     limit,
+    topicId,
   });
   return c.json(result);
 });

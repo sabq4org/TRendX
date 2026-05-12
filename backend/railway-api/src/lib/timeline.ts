@@ -83,11 +83,17 @@ export type TimelineActivity =
 
 export async function buildTimeline(
   userId: string,
-  options: { cutoff?: Date; filter?: TimelineFilter; limit?: number } = {},
+  options: {
+    cutoff?: Date;
+    filter?: TimelineFilter;
+    limit?: number;
+    topicId?: string;
+  } = {},
 ): Promise<{ items: TimelineActivity[]; next_cutoff: string | null }> {
   const cutoff = options.cutoff ?? new Date();
   const limit = Math.min(40, Math.max(8, options.limit ?? 24));
   const filter = options.filter ?? "all";
+  const focusedTopicId = options.topicId; // only honored when filter === "sectors"
 
   const [me, follows] = await Promise.all([
     prisma.user.findUnique({
@@ -103,6 +109,10 @@ export async function buildTimeline(
   const followedTopicIds = me?.followedTopics ?? [];
 
   // -- Source 1: polls published by followed accounts.
+  //
+  // Shown in the Live ("all") and My-Network ("accounts") tabs. The
+  // Sectors and Results tabs intentionally skip this source — they're
+  // topic-scoped and outcome-scoped respectively.
   const followedPolls = filter === "sectors" || filter === "results"
     ? []
     : followedIds.length === 0
@@ -122,18 +132,77 @@ export async function buildTimeline(
         take: limit,
       });
 
-  // -- Source 2: polls in followed topics (skip if already from followed
-  //    accounts).
-  const sectorPollIds = new Set(followedPolls.map((p) => p.id));
-  const sectorPolls = filter === "accounts" || filter === "results"
-    ? []
-    : followedTopicIds.length === 0
+  const seenPollIds = new Set(followedPolls.map((p) => p.id));
+
+  // -- Source 2: sector polls.
+  //
+  // Drives the "القطاعات" tab. Behavior matrix:
+  //   - filter === "sectors"   → show all sector polls. If a specific
+  //                              topic is focused via `topicId`, scope
+  //                              to that one; otherwise return polls
+  //                              across every topic. Does NOT require
+  //                              the viewer to follow any topic.
+  //   - filter === "all"       → only polls in topics the viewer
+  //                              follows, as a complement to followed
+  //                              accounts.
+  //   - filter === "accounts"  → skip — Accounts is people-scoped.
+  //   - filter === "results"   → skip — Results is outcome-scoped.
+  const sectorPolls =
+    filter === "accounts" || filter === "results"
+      ? []
+      : filter === "sectors"
+      ? await prisma.poll.findMany({
+          where: {
+            status: "active",
+            createdAt: { lt: cutoff },
+            id: { notIn: [...seenPollIds] },
+            ...(focusedTopicId
+              ? { topicId: focusedTopicId }
+              : { topicId: { not: null } }),
+          },
+          include: {
+            options: { orderBy: { displayOrder: "asc" } },
+            votes: { where: { userId }, select: { userId: true, optionId: true } },
+            topic: true,
+            publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+          },
+          orderBy: [{ totalVotes: "desc" }, { createdAt: "desc" }],
+          take: limit,
+        })
+      : followedTopicIds.length === 0
+      ? []
+      : await prisma.poll.findMany({
+          where: {
+            topicId: { in: followedTopicIds },
+            createdAt: { lt: cutoff },
+            id: { notIn: [...seenPollIds] },
+          },
+          include: {
+            options: { orderBy: { displayOrder: "asc" } },
+            votes: { where: { userId }, select: { userId: true, optionId: true } },
+            topic: true,
+            publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: Math.floor(limit * 0.7),
+        });
+  for (const p of sectorPolls) seenPollIds.add(p.id);
+
+  // -- Source 2b: trending polls across the whole network.
+  //
+  // The backbone of the Live ("all") tab. These are the most-engaged
+  // active polls right now, regardless of whether the viewer follows
+  // their publisher or topic. This is what turns the Live tab from a
+  // "what your friends are doing" feed into a "what is الـ Saudi
+  // Arabia voting on right now" feed — and what guarantees the screen
+  // is never blank for a brand-new user.
+  const trendingPolls = filter !== "all"
     ? []
     : await prisma.poll.findMany({
         where: {
-          topicId: { in: followedTopicIds },
+          status: "active",
           createdAt: { lt: cutoff },
-          id: { notIn: [...sectorPollIds] },
+          id: { notIn: [...seenPollIds] },
         },
         include: {
           options: { orderBy: { displayOrder: "asc" } },
@@ -141,9 +210,10 @@ export async function buildTimeline(
           topic: true,
           publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ totalVotes: "desc" }, { createdAt: "desc" }],
         take: Math.floor(limit * 0.7),
       });
+  for (const p of trendingPolls) seenPollIds.add(p.id);
 
   // -- Source 3: surveys from followed accounts.
   const followedSurveys = filter !== "all" && filter !== "accounts"
@@ -219,18 +289,20 @@ export async function buildTimeline(
         take: Math.floor(limit * 0.6),
       });
 
-  // -- Source 5: recently-settled polls (poll_results) — those that
-  //    transitioned to "ended" with the user's follow graph.
+  // -- Source 5: recently-settled polls (poll_results).
+  //
+  // Drives the "النتائج" tab. The earlier version of this query
+  // required the result to come from a followed account OR followed
+  // topic, which made the tab empty for fresh users. The Results tab
+  // is a Kingdom-wide retrospective — it should always show what
+  // Saudi Arabia recently decided, regardless of who the viewer
+  // follows. We still hold the 7-day window so it stays fresh.
   const recentlyEnded = filter !== "all" && filter !== "results"
     ? []
     : await prisma.poll.findMany({
         where: {
           status: "ended",
           expiresAt: { lt: cutoff, gt: new Date(cutoff.getTime() - 7 * 24 * 60 * 60 * 1000) },
-          OR: [
-            { publisherId: { in: followedIds.length ? followedIds : ["-"] } },
-            { topicId: { in: followedTopicIds.length ? followedTopicIds : ["-"] } },
-          ],
         },
         include: {
           options: { orderBy: { votesCount: "desc" } },
@@ -238,8 +310,8 @@ export async function buildTimeline(
           topic: true,
           publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
         },
-        orderBy: { expiresAt: "desc" },
-        take: 6,
+        orderBy: [{ totalVotes: "desc" }, { expiresAt: "desc" }],
+        take: filter === "results" ? 20 : 6,
       });
 
   // -- Source 6: featured stories (active, pinned by publisher OR featured).
@@ -265,28 +337,6 @@ export async function buildTimeline(
         take: 4,
       });
 
-  // -- Source 7: cold-start fallback. When the viewer has no follows and
-  //    no followed topics the standard sources all return empty arrays
-  //    and the "all" tab renders blank — which looks broken on a fresh
-  //    install. Pull the most recently published active polls so the
-  //    radar always has something to show. Other filters intentionally
-  //    stay empty (the user can switch back to "الكل" to explore).
-  const fallbackPolls = (filter === "all"
-                         && followedIds.length === 0
-                         && followedTopicIds.length === 0)
-    ? await prisma.poll.findMany({
-        where: { status: "active", createdAt: { lt: cutoff } },
-        include: {
-          options: { orderBy: { displayOrder: "asc" } },
-          votes: { where: { userId }, select: { userId: true, optionId: true } },
-          topic: true,
-          publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: Math.floor(limit * 0.7),
-      })
-    : [];
-
   // -- Merge + sort + cap.
   const items: TimelineActivity[] = [];
 
@@ -301,6 +351,16 @@ export async function buildTimeline(
     });
   }
   for (const p of sectorPolls) {
+    items.push({
+      kind: "poll_published",
+      id: `poll:${p.id}`,
+      occurred_at: p.createdAt.toISOString(),
+      source: "sector",
+      publisher: null,
+      poll: pollDTO(p, { userId }),
+    });
+  }
+  for (const p of trendingPolls) {
     items.push({
       kind: "poll_published",
       id: `poll:${p.id}`,
@@ -370,17 +430,6 @@ export async function buildTimeline(
       },
     });
   }
-  for (const p of fallbackPolls) {
-    items.push({
-      kind: "poll_published",
-      id: `poll:${p.id}`,
-      occurred_at: p.createdAt.toISOString(),
-      source: "sector",
-      publisher: null,
-      poll: pollDTO(p, { userId }),
-    });
-  }
-
   items.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
   const sliced = items.slice(0, limit);
   const nextCutoff = sliced.length > 0
