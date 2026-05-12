@@ -44,6 +44,16 @@ export async function validateHandle(
     };
   }
 
+  // Ownership shortcut: if the requester *already* holds this handle,
+  // accept the request without consulting the reservation list. Without
+  // this the Ministry of Media (handle "moia") cannot save its own
+  // profile because "moia" is reserved-for the Ministry of Media — the
+  // reservation check would reject the legitimate owner.
+  const existing = await prisma.user.findUnique({ where: { handle } });
+  if (existing && ownerId && existing.id === ownerId) {
+    return { ok: true, handle };
+  }
+
   const reserved = await prisma.reservedHandle.findUnique({
     where: { handle },
   });
@@ -55,7 +65,6 @@ export async function validateHandle(
     };
   }
 
-  const existing = await prisma.user.findUnique({ where: { handle } });
   if (existing && existing.id !== ownerId) {
     return {
       ok: false,
