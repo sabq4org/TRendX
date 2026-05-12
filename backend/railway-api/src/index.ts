@@ -289,6 +289,7 @@ app.post("/profile", async (c) => {
     birth_year?: number;
     city?: string;
     region?: string;
+    country?: string;
     account_type?: "individual" | "organization" | "government";
   }>();
 
@@ -304,6 +305,7 @@ app.post("/profile", async (c) => {
   if (body.birth_year !== undefined) updates.birthYear = body.birth_year;
   if (body.city !== undefined) updates.city = body.city;
   if (body.region !== undefined) updates.region = body.region;
+  if (body.country !== undefined) updates.country = body.country;
 
   // account_type can be self-set to `individual` or `organization` —
   // governments must be promoted by an admin so we filter that out here.
@@ -356,8 +358,83 @@ app.get("/users/:idOrHandle", async (c) => {
     ? await prisma.user.findUnique({ where: { id: idOrHandle } })
     : await prisma.user.findUnique({ where: { handle: normalizeHandle(idOrHandle) } });
   if (!user) return c.json({ error: "User not found" }, 404);
-  const follows = await viewerFollows(c.get("userId"), user.id);
+  const viewerId = c.get("userId");
+  const follows = await viewerFollows(viewerId, user.id);
   return c.json(userDTO(user, { viewerFollows: follows }));
+});
+
+/**
+ * Recent activity for a user's public profile page — their own polls
+ * plus polls they've reposted, merged chronologically. Kept separate
+ * from `/users/:idOrHandle` so the profile header still renders fast
+ * even when the activity query is slower or empty.
+ *
+ * Shape mirrors the timeline activity so the iOS profile screen can
+ * reuse the same TimelineItem decoder if desired.
+ */
+app.get("/users/:idOrHandle/posts", async (c) => {
+  const idOrHandle = c.req.param("idOrHandle");
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrHandle);
+  const user = isUUID
+    ? await prisma.user.findUnique({ where: { id: idOrHandle } })
+    : await prisma.user.findUnique({ where: { handle: normalizeHandle(idOrHandle) } });
+  if (!user) return c.json({ error: "User not found" }, 404);
+  const viewerId = c.get("userId");
+  const limit = Math.min(40, Math.max(5, Number(c.req.query("limit") ?? "20")));
+
+  const [ownPolls, reposts] = await Promise.all([
+    prisma.poll.findMany({
+      where: { publisherId: user.id },
+      include: {
+        options: { orderBy: { displayOrder: "asc" } },
+        votes: { where: { userId: viewerId }, select: { userId: true, optionId: true } },
+        topic: true,
+        publisher: { select: { accountType: true, isVerified: true, handle: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+    prisma.repost.findMany({
+      where: { userId: user.id },
+      include: {
+        poll: {
+          include: {
+            options: { orderBy: { displayOrder: "asc" } },
+            votes: { where: { userId: viewerId }, select: { userId: true, optionId: true } },
+            topic: true,
+            publisher: { select: { accountType: true, isVerified: true, handle: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+  ]);
+
+  type ProfileActivity =
+    | { kind: "poll"; id: string; occurred_at: string; poll: ReturnType<typeof pollDTO> }
+    | { kind: "repost"; id: string; occurred_at: string; poll: ReturnType<typeof pollDTO>; caption: string | null };
+
+  const items: ProfileActivity[] = [];
+  for (const p of ownPolls) {
+    items.push({
+      kind: "poll",
+      id: `poll:${p.id}`,
+      occurred_at: p.createdAt.toISOString(),
+      poll: pollDTO(p, { userId: viewerId }),
+    });
+  }
+  for (const r of reposts) {
+    items.push({
+      kind: "repost",
+      id: `repost:${r.userId}:${r.pollId}`,
+      occurred_at: r.createdAt.toISOString(),
+      poll: pollDTO(r.poll, { userId: viewerId }),
+      caption: r.caption,
+    });
+  }
+  items.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+  return c.json({ items: items.slice(0, limit) });
 });
 
 // MARK: - Follow / Unfollow
@@ -522,10 +599,12 @@ app.get("/stories/:id", async (c) => {
 app.get("/events", async (c) => {
   const status = c.req.query("status"); // upcoming | live | closed | all
   const city = c.req.query("city");
+  const publisherId = c.req.query("publisher_id"); // scope to a single entity
   const events = await prisma.event.findMany({
     where: {
       ...(status && status !== "all" ? { status } : {}),
       ...(city ? { city } : {}),
+      ...(publisherId ? { publisherId } : {}),
     },
     include: { publisher: true },
     orderBy: { startsAt: "asc" },

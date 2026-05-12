@@ -243,7 +243,10 @@ export async function buildTimeline(
       });
 
   // -- Source 6: featured stories (active, pinned by publisher OR featured).
-  const stories = filter !== "all" && filter !== "accounts"
+  // Stories are editorial — they belong only in the "all" feed, not in
+  // the "accounts" tab which is meant to be people-driven (polls,
+  // surveys, votes, reposts from accounts you follow).
+  const stories = filter !== "all"
     ? []
     : await prisma.story.findMany({
         where: {
@@ -261,6 +264,28 @@ export async function buildTimeline(
         orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
         take: 4,
       });
+
+  // -- Source 7: cold-start fallback. When the viewer has no follows and
+  //    no followed topics the standard sources all return empty arrays
+  //    and the "all" tab renders blank — which looks broken on a fresh
+  //    install. Pull the most recently published active polls so the
+  //    radar always has something to show. Other filters intentionally
+  //    stay empty (the user can switch back to "الكل" to explore).
+  const fallbackPolls = (filter === "all"
+                         && followedIds.length === 0
+                         && followedTopicIds.length === 0)
+    ? await prisma.poll.findMany({
+        where: { status: "active", createdAt: { lt: cutoff } },
+        include: {
+          options: { orderBy: { displayOrder: "asc" } },
+          votes: { where: { userId }, select: { userId: true, optionId: true } },
+          topic: true,
+          publisher: { select: { accountType: true, isVerified: true, handle: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: Math.floor(limit * 0.7),
+      })
+    : [];
 
   // -- Merge + sort + cap.
   const items: TimelineActivity[] = [];
@@ -343,6 +368,16 @@ export async function buildTimeline(
         publisher: st.publisher ? userDTO(st.publisher) : null,
         item_count: (st._count?.polls ?? 0) + (st._count?.surveys ?? 0),
       },
+    });
+  }
+  for (const p of fallbackPolls) {
+    items.push({
+      kind: "poll_published",
+      id: `poll:${p.id}`,
+      occurred_at: p.createdAt.toISOString(),
+      source: "sector",
+      publisher: null,
+      poll: pollDTO(p, { userId }),
     });
   }
 
