@@ -458,6 +458,71 @@ struct AIInsightChip: View {
 
 // MARK: - Poll Cover View (editorial hero)
 
+/// Editorial cover that prefers a real publisher-uploaded image when one
+/// exists, and falls back to the layered-gradient `PollCoverView` when it
+/// doesn't. The topic chip + glyph stay overlaid so the cover always
+/// reads as TRENDX-branded content regardless of what photo was uploaded.
+///
+/// `imageURL` accepts both regular `http(s)` URLs and base64 `data:`
+/// URIs — the same dual-mode pipeline avatars use via `TrendXProfileImage`.
+struct TrendXEditorialCover: View {
+    let imageURL: String?
+    let style: PollCoverStyle
+    var height: CGFloat = 140
+    /// Show the topic chip + label overlay. Disable on tiny thumbnails
+    /// where the chip wouldn't fit, or on detail screens that already
+    /// render the topic strip elsewhere.
+    var showsTopicOverlay: Bool = true
+
+    var body: some View {
+        if let raw = imageURL, !raw.isEmpty {
+            ZStack(alignment: .bottomLeading) {
+                TrendXProfileImage(urlString: raw) {
+                    // Fallback to the gradient while the image is loading
+                    // or if the URL is bad — never leave a flat color
+                    // rectangle behind.
+                    PollCoverView(style: style, height: height)
+                }
+                .frame(height: height)
+                .clipped()
+
+                if showsTopicOverlay {
+                    LinearGradient(
+                        colors: [Color.clear, Color.black.opacity(0.55)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: height * 0.55)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: style.glyph)
+                            .font(.system(size: 11, weight: .heavy))
+                        Text(style.label)
+                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.white.opacity(0.16)))
+                    .overlay(Capsule().stroke(.white.opacity(0.28), lineWidth: 0.6))
+                    .padding(12)
+                }
+            }
+            .frame(height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(.white.opacity(0.10), lineWidth: 0.8)
+            )
+            .shadow(color: style.tint.opacity(0.18), radius: 14, x: 0, y: 8)
+        } else {
+            PollCoverView(style: style, height: height)
+        }
+    }
+}
+
 /// A modern editorial cover: mesh-like layered gradient, a fine dot grid for
 /// texture, and typographic hierarchy — no floating clip-art icons.
 /// Rendered only when a poll explicitly has a cover to show.
@@ -754,7 +819,11 @@ struct PollCard: View {
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
 
-            PollCoverView(style: topicStyle, height: 132)
+            TrendXEditorialCover(
+                imageURL: poll.imageURL,
+                style: topicStyle,
+                height: 132
+            )
 
             // Options with topic-colored tint
             VStack(spacing: 10) {

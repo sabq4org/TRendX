@@ -1101,6 +1101,12 @@ app.post("/polls/create", async (c) => {
   if ((body.poll.description ?? "").length > 1000) {
     return c.json({ error: "وصف الاستطلاع لا يتجاوز 1000 حرف." }, 400);
   }
+  // image_url is now a Vercel Blob CDN URL (or a publisher-provided
+  // remote URL). Real URLs are well under a kilobyte — we still cap at
+  // 2 KB so a malformed client can't poison the column with HTML/JSON.
+  if (body.poll.image_url && body.poll.image_url.length > 2048) {
+    return c.json({ error: "image_url must be a URL (≤ 2048 chars)." }, 400);
+  }
   const optionsIn = body.options ?? [];
   if (optionsIn.length < 2 || optionsIn.length > 10) {
     return c.json({ error: "عدد الخيارات يجب أن يكون بين 2 و 10." }, 400);
@@ -1412,6 +1418,7 @@ app.post("/surveys/create", async (c) => {
     survey: {
       title: string;
       description?: string;
+      image_url?: string;
       cover_style?: string;
       topic_id?: string;
       reward_points?: number;
@@ -1425,12 +1432,19 @@ app.post("/surveys/create", async (c) => {
     }>;
   }>();
 
+  // image_url is now a Vercel Blob CDN URL (or remote URL). Cap at 2 KB
+  // so a malformed client can't poison the column with HTML / JSON.
+  if (body.survey.image_url && body.survey.image_url.length > 2048) {
+    return c.json({ error: "image_url must be a URL (≤ 2048 chars)." }, 400);
+  }
+
   const durationDays = Number(body.survey.duration_days ?? 14);
   const survey = await prisma.survey.create({
     data: {
       publisherId: userId,
       title: body.survey.title,
       description: body.survey.description ?? null,
+      imageUrl: body.survey.image_url ?? null,
       coverStyle: body.survey.cover_style ?? null,
       topicId: body.survey.topic_id ?? null,
       rewardPoints: body.survey.reward_points ?? 120,

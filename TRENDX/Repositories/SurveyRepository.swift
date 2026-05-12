@@ -164,6 +164,7 @@ private struct SurveyDTO: Decodable {
             id: id,
             title: title,
             description: description ?? "",
+            imageURL: imageUrl?.isEmpty == false ? imageUrl : nil,
             authorName: authorName?.isEmpty == false ? authorName! : "TrendX Research",
             authorAvatar: authorAvatar?.isEmpty == false ? authorAvatar! : "T",
             authorAvatarUrl: authorAvatarUrl?.isEmpty == false ? authorAvatarUrl : nil,

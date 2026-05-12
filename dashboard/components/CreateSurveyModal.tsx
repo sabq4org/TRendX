@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Loader2, GripVertical } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Topic } from "@/lib/types";
+import { CoverImagePicker } from "./CoverImagePicker";
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 6;
@@ -37,6 +38,7 @@ export function CreateSurveyModal({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [topicId, setTopicId] = useState<string>("");
   const [rewardPoints, setRewardPoints] = useState<number>(120);
   const [durationDays, setDurationDays] = useState<number>(14);
@@ -72,6 +74,7 @@ export function CreateSurveyModal({
         survey: {
           title: title.trim(),
           description: description.trim() || undefined,
+          image_url: imageUrl.trim() || undefined,
           topic_id: topicId || undefined,
           reward_points: rewardPoints,
           duration_days: durationDays,
@@ -114,6 +117,10 @@ export function CreateSurveyModal({
             placeholder="الهدف من البحث، والجمهور المستهدف، والمدّة المتوقعة…"
             className="w-full px-4 py-3 rounded-chip bg-canvas-well text-[14px] text-ink placeholder:text-ink-mute outline-none focus:ring-2 focus:ring-brand-500/40 transition resize-none"
           />
+        </Field>
+
+        <Field label="صورة الغلاف (اختياري)">
+          <CoverImagePicker value={imageUrl} onChange={setImageUrl} />
         </Field>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

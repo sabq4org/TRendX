@@ -866,6 +866,10 @@ struct Survey: Codable, Identifiable {
     let id: UUID
     var title: String
     var description: String
+    /// Publisher-uploaded cover image (CDN URL or base64 `data:` URI).
+    /// When present, survey covers render this photo instead of the
+    /// generic topic gradient — same pattern as `Poll.imageURL`.
+    var imageURL: String?
     var authorName: String
     var authorAvatar: String
     /// Publisher's current avatar URL (uploaded logo). When present,
@@ -895,6 +899,7 @@ struct Survey: Codable, Identifiable {
         id: UUID = UUID(),
         title: String,
         description: String = "",
+        imageURL: String? = nil,
         authorName: String = "TrendX Research",
         authorAvatar: String = "T",
         authorAvatarUrl: String? = nil,
@@ -914,6 +919,7 @@ struct Survey: Codable, Identifiable {
         rewardPoints: Int = 150
     ) {
         self.id = id; self.title = title; self.description = description
+        self.imageURL = imageURL
         self.authorName = authorName; self.authorAvatar = authorAvatar
         self.authorAvatarUrl = authorAvatarUrl
         self.authorIsVerified = authorIsVerified

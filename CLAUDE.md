@@ -106,6 +106,15 @@ Shared API client in [dashboard/lib/api.ts](dashboard/lib/api.ts), auth context 
 
 Deployed URL: <https://t-rend-x.vercel.app>
 
+### Cover-image storage
+
+Polls and surveys carry an optional `image_url` (the iOS app's `TrendXEditorialCover` renders it via `AsyncImage`, falling back to the topic gradient when empty). Real image bytes are **not** stored in Postgres — only a CDN URL.
+
+- Upload flow: dashboard's [`CoverImagePicker`](dashboard/components/CoverImagePicker.tsx) → client-side resize+JPEG-recompress → POST `multipart/form-data` to [`/api/upload`](dashboard/app/api/upload/route.ts) → that route validates the user's TRENDX JWT against `/profile`, calls `put()` from `@vercel/blob`, and returns `{ url }`.
+- Storage: Vercel Blob, public access. Requires `BLOB_READ_WRITE_TOKEN` env var in the dashboard's Vercel project (see [.env.local.example](dashboard/.env.local.example)). Blobs are namespaced as `covers/<userId>/<timestamp>.<ext>` with `addRandomSuffix` to avoid collisions.
+- Limits: `/api/upload` rejects > 5 MB raw and non-(JPEG|PNG|WebP). Backend `POST /polls/create` and `POST /surveys/create` cap `image_url` at 2048 chars so a malformed client can't store JSON in the column.
+- The iOS `TrendXEditorialCover` accepts both `https://` URLs and base64 `data:` URIs (legacy avatar path), so older builds keep working.
+
 ### Retention & engagement layer (added 2026-05-11)
 
 Three on-device hooks back this engagement loop:

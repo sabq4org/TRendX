@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Topic } from "@/lib/types";
+import { CoverImagePicker } from "./CoverImagePicker";
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 6;
@@ -28,6 +29,7 @@ export function CreatePollModal({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [topicId, setTopicId] = useState<string>("");
   const [type, setType] = useState<typeof POLL_TYPES[number]["value"]>("single_choice");
   const [rewardPoints, setRewardPoints] = useState<number>(50);
@@ -57,6 +59,7 @@ export function CreatePollModal({
         poll: {
           title: title.trim(),
           description: description.trim() || undefined,
+          image_url: imageUrl.trim() || undefined,
           topic_id: topicId || undefined,
           type,
           reward_points: rewardPoints,
@@ -92,6 +95,10 @@ export function CreatePollModal({
             placeholder="سياق إضافي يساعد المستجيب يفهم السؤال…"
             className="w-full px-4 py-3 rounded-chip bg-canvas-well text-[14px] text-ink placeholder:text-ink-mute outline-none focus:ring-2 focus:ring-brand-500/40 transition resize-none"
           />
+        </Field>
+
+        <Field label="صورة الغلاف (اختياري)">
+          <CoverImagePicker value={imageUrl} onChange={setImageUrl} />
         </Field>
 
         {/* Topic + Type */}

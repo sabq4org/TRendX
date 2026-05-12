@@ -16,17 +16,30 @@ struct SurveyListRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 14) {
-                // أيقونة القسم
+                // أيقونة القسم — publisher-uploaded image when present,
+                // otherwise the topic gradient with the glyph mark.
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: survey.coverStyle.gradient,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing))
+                    if let raw = survey.imageURL, !raw.isEmpty {
+                        TrendXProfileImage(urlString: raw) {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(LinearGradient(
+                                    colors: survey.coverStyle.gradient,
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing))
+                        }
                         .frame(width: 52, height: 52)
-                    Image(systemName: survey.coverStyle.glyph)
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    } else {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(LinearGradient(
+                                colors: survey.coverStyle.gradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing))
+                            .frame(width: 52, height: 52)
+                        Image(systemName: survey.coverStyle.glyph)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -166,23 +179,34 @@ struct SurveyDetailView: View {
 
     private var surveyHero: some View {
         VStack(spacing: 0) {
-            // Cover
-            ZStack {
-                LinearGradient(
-                    colors: survey.coverStyle.gradient,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing)
-                .frame(height: 140)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            // Cover — publisher-uploaded image when available, otherwise
+            // the editorial gradient hero with the topic phrase.
+            Group {
+                if let raw = survey.imageURL, !raw.isEmpty {
+                    TrendXEditorialCover(
+                        imageURL: raw,
+                        style: survey.coverStyle,
+                        height: 160
+                    )
+                } else {
+                    ZStack {
+                        LinearGradient(
+                            colors: survey.coverStyle.gradient,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing)
+                        .frame(height: 140)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                VStack(spacing: 10) {
-                    Image(systemName: survey.coverStyle.glyph)
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.92))
-                    Text(survey.coverStyle.heroPhrase)
-                        .font(.system(size: 16, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 2)
+                        VStack(spacing: 10) {
+                            Image(systemName: survey.coverStyle.glyph)
+                                .font(.system(size: 32, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.92))
+                            Text(survey.coverStyle.heroPhrase)
+                                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 2)
+                        }
+                    }
                 }
             }
             .padding(.bottom, 16)

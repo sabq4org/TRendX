@@ -85,6 +85,7 @@ export const api = {
       poll: {
         title: string;
         description?: string;
+        image_url?: string;
         cover_style?: string;
         topic_id?: string;
         type?: "single_choice" | "multiple_choice" | "rating" | "linear_scale";
@@ -103,6 +104,7 @@ export const api = {
       survey: {
         title: string;
         description?: string;
+        image_url?: string;
         cover_style?: string;
         topic_id?: string;
         reward_points?: number;
