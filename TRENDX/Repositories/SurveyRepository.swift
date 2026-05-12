@@ -146,15 +146,32 @@ private struct SurveyDTO: Decodable {
     let questions: [SurveyQuestionDTO]?
     let createdAt: Date?
     let expiresAt: Date?
+    // Author identity — backend resolves these from the publisher join
+    // on every request. Previously these were hardcoded to "TrendX
+    // Research" / "T" client-side, which meant every survey rendered
+    // with the same generic identity regardless of who actually
+    // published it (e.g. وزارة الإعلام). We now decode the real
+    // publisher so survey cards match poll cards.
+    let authorName: String?
+    let authorAvatar: String?
+    let authorAvatarUrl: String?
+    let authorIsVerified: Bool?
+    let authorAccountType: String?
+    let authorHandle: String?
 
     var domain: Survey {
         Survey(
             id: id,
             title: title,
             description: description ?? "",
-            authorName: "TrendX Research",
-            authorAvatar: "T",
-            authorIsVerified: true,
+            authorName: authorName?.isEmpty == false ? authorName! : "TrendX Research",
+            authorAvatar: authorAvatar?.isEmpty == false ? authorAvatar! : "T",
+            authorAvatarUrl: authorAvatarUrl?.isEmpty == false ? authorAvatarUrl : nil,
+            authorIsVerified: authorIsVerified ?? false,
+            authorAccountType: AccountType(rawValue: authorAccountType ?? "")
+                ?? .individual,
+            authorHandle: authorHandle?.isEmpty == false ? authorHandle : nil,
+            publisherId: publisherId,
             coverStyle: PollCoverStyle.from(rawValue: coverStyle) ?? .generic,
             questions: (questions ?? [])
                 .sorted { ($0.displayOrder ?? 0) < ($1.displayOrder ?? 0) }

@@ -435,7 +435,7 @@ final class AppStore: ObservableObject {
             if let region { currentUser.region = region }
             if let country { currentUser.country = country }
             persistUser()
-            propagateAuthorChangesToLocalPolls(for: currentUser)
+            propagateAuthorChangesToLocalContent(for: currentUser)
             return currentUser
         }
         let updated = try await authRepository.updateProfile(
@@ -456,22 +456,22 @@ final class AppStore: ObservableObject {
         )
         currentUser = updated
         persistUser()
-        // Optimistically patch every poll this user already published
-        // so the home feed reflects the new logo / display name
-        // immediately. Otherwise the cards keep showing whatever
-        // author snapshot the last /bootstrap returned, and the
-        // change only becomes visible after the next refresh.
-        propagateAuthorChangesToLocalPolls(for: updated)
+        // Optimistically patch every poll AND survey this user already
+        // published so the home feed reflects the new logo / display
+        // name immediately. Otherwise the cards keep showing whatever
+        // author snapshot the last /bootstrap returned, and the change
+        // only becomes visible after the next refresh.
+        propagateAuthorChangesToLocalContent(for: updated)
         return updated
     }
 
-    /// Walk `polls` and patch the cached author fields on every poll
-    /// published by `user`. Covers the case where the Ministry of
-    /// Media (or any account) updates its avatar / name / handle and
-    /// expects the change to show up on its own poll cards without
-    /// waiting for the next bootstrap.
-    private func propagateAuthorChangesToLocalPolls(for user: TrendXUser) {
-        var changed = false
+    /// Walk `polls` + `surveys` and patch the cached author fields on
+    /// every item published by `user`. Covers the case where the
+    /// Ministry of Media (or any account) updates its avatar / name /
+    /// handle and expects the change to show up on its own cards
+    /// without waiting for the next bootstrap.
+    private func propagateAuthorChangesToLocalContent(for user: TrendXUser) {
+        var pollsChanged = false
         for index in polls.indices where polls[index].publisherId == user.id {
             polls[index].authorName = user.name
             polls[index].authorAvatar = user.avatarInitial
@@ -479,9 +479,21 @@ final class AppStore: ObservableObject {
             polls[index].authorAccountType = user.accountType
             polls[index].authorIsVerified = user.isVerified
             polls[index].authorHandle = user.handle
-            changed = true
+            pollsChanged = true
         }
-        if changed { persistPolls() }
+        if pollsChanged { persistPolls() }
+
+        var surveysChanged = false
+        for index in surveys.indices where surveys[index].publisherId == user.id {
+            surveys[index].authorName = user.name
+            surveys[index].authorAvatar = user.avatarInitial
+            surveys[index].authorAvatarUrl = user.avatarUrl
+            surveys[index].authorAccountType = user.accountType
+            surveys[index].authorIsVerified = user.isVerified
+            surveys[index].authorHandle = user.handle
+            surveysChanged = true
+        }
+        if surveysChanged { persistSurveys() }
     }
 
     /// Check if a candidate @handle is available. Returns nil when free,

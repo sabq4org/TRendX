@@ -226,6 +226,13 @@ export async function buildTimeline(
   for (const p of trendingPolls) seenPollIds.add(p.id);
 
   // -- Source 3: surveys from followed accounts.
+  //
+  // We pull the *full* publisher record (same as followedPolls) so the
+  // timeline activity card can render the Ministry of Media's actual
+  // logo — `TimelinePublisher` on iOS needs `id`, `name`, `handle`,
+  // `accountType`, `isVerified`, `avatarUrl`, `avatarInitial`. The
+  // previous narrow Pick + `publisher: null` activity left the survey
+  // card with a generic initial-circle for every government account.
   const followedSurveys = filter !== "all" && filter !== "accounts"
     ? []
     : followedIds.length === 0
@@ -241,7 +248,7 @@ export async function buildTimeline(
             include: { options: { orderBy: { displayOrder: "asc" } } },
           },
           topic: true,
-          publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true } },
+          publisher: { select: { id: true, accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true, bio: true, bannerUrl: true, followersCount: true, followingCount: true, points: true, coins: true, role: true, tier: true, gender: true, birthYear: true, city: true, region: true, country: true, deviceType: true, osVersion: true, email: true, phone: true, isPremium: true, followedTopics: true, completedPolls: true, joinedAt: true, lastActiveAt: true, updatedAt: true } },
         },
         orderBy: { createdAt: "desc" },
         take: Math.floor(limit * 0.5),
@@ -386,7 +393,7 @@ export async function buildTimeline(
       id: `survey:${s.id}`,
       occurred_at: s.createdAt.toISOString(),
       source: "following",
-      publisher: null,
+      publisher: s.publisher ? userDTO(s.publisher as never) : null,
       survey: surveyDTO(s),
     });
   }

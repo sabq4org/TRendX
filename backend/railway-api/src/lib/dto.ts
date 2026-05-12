@@ -102,9 +102,6 @@ export function pollDTO(
     publisher_id: p.publisherId,
     author_name: p.authorName,
     author_avatar: p.authorAvatar,
-    author_is_verified: p.authorIsVerified,
-    author_account_type: p.publisher?.accountType ?? null,
-    author_handle: p.publisher?.handle ?? null,
     // Publisher's current avatar URL so a poll card on the home feed
     // picks up the Ministry of Media's freshly-uploaded logo without
     // needing the poll itself to be re-published. Banner is
@@ -113,6 +110,10 @@ export function pollDTO(
     // response into multi-megabyte payloads. The profile screen
     // fetches the publisher's full userDTO (which carries banner_url)
     // separately when it needs that image.
+    author_avatar_url: p.publisher?.avatarUrl ?? null,
+    author_is_verified: p.authorIsVerified,
+    author_account_type: p.publisher?.accountType ?? null,
+    author_handle: p.publisher?.handle ?? null,
     topic_id: p.topicId,
     topic_name: p.topic?.name ?? null,
     topic_tags: p.topicTags,
@@ -145,7 +146,9 @@ type SurveyWithRelations = Survey & {
     options?: SurveyQuestionOption[];
   })[];
   topic?: Topic | null;
-  publisher?: Pick<User, "accountType" | "isVerified" | "handle" | "name"> | null;
+  publisher?:
+    | Pick<User, "accountType" | "isVerified" | "handle" | "name" | "avatarUrl" | "avatarInitial">
+    | null;
 };
 
 export function surveyDTO(s: SurveyWithRelations) {
@@ -160,6 +163,12 @@ export function surveyDTO(s: SurveyWithRelations) {
     author_is_verified: s.publisher?.isVerified ?? false,
     author_handle: s.publisher?.handle ?? null,
     author_name: s.publisher?.name ?? null,
+    // Publisher's current avatar URL — mirrors the field on pollDTO
+    // so the Ministry of Media's freshly-uploaded logo flows through
+    // to every survey card on the home feed / timeline / sector page
+    // without re-publishing the survey itself.
+    author_avatar: s.publisher?.avatarInitial ?? null,
+    author_avatar_url: s.publisher?.avatarUrl ?? null,
     topic_id: s.topicId,
     topic_name: s.topic?.name ?? null,
     topic_tags: s.topicTags,

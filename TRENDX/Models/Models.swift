@@ -868,7 +868,18 @@ struct Survey: Codable, Identifiable {
     var description: String
     var authorName: String
     var authorAvatar: String
+    /// Publisher's current avatar URL (uploaded logo). When present,
+    /// survey cards render the publisher's actual image instead of the
+    /// initial fallback — same propagation pattern as `Poll`.
+    var authorAvatarUrl: String?
     var authorIsVerified: Bool
+    /// Account type of the publishing entity — drives the verified
+    /// badge style and the gov-green chrome on survey cards.
+    var authorAccountType: AccountType
+    var authorHandle: String?
+    /// The publisher's UUID — used to navigate to their profile and
+    /// to propagate avatar/name updates after a profile edit.
+    var publisherId: UUID?
     var coverStyle: PollCoverStyle
     var questions: [SurveyQuestion]
     var topicName: String?
@@ -886,7 +897,11 @@ struct Survey: Codable, Identifiable {
         description: String = "",
         authorName: String = "TrendX Research",
         authorAvatar: String = "T",
+        authorAvatarUrl: String? = nil,
         authorIsVerified: Bool = true,
+        authorAccountType: AccountType = .individual,
+        authorHandle: String? = nil,
+        publisherId: UUID? = nil,
         coverStyle: PollCoverStyle = .generic,
         questions: [SurveyQuestion] = [],
         topicName: String? = nil,
@@ -900,7 +915,12 @@ struct Survey: Codable, Identifiable {
     ) {
         self.id = id; self.title = title; self.description = description
         self.authorName = authorName; self.authorAvatar = authorAvatar
-        self.authorIsVerified = authorIsVerified; self.coverStyle = coverStyle
+        self.authorAvatarUrl = authorAvatarUrl
+        self.authorIsVerified = authorIsVerified
+        self.authorAccountType = authorAccountType
+        self.authorHandle = authorHandle
+        self.publisherId = publisherId
+        self.coverStyle = coverStyle
         self.questions = questions; self.topicName = topicName
         self.totalResponses = totalResponses; self.completionRate = completionRate
         self.avgCompletionSeconds = avgCompletionSeconds; self.status = status

@@ -644,7 +644,7 @@ app.get("/stories/:id", async (c) => {
         include: {
           questions: { orderBy: { displayOrder: "asc" }, include: { options: true } },
           topic: true,
-          publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true } },
+          publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true } },
         },
       },
     },
@@ -1011,7 +1011,7 @@ app.get("/bootstrap", async (c) => {
           include: { options: { orderBy: { displayOrder: "asc" } } },
         },
         topic: true,
-        publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true } },
+        publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 50,
@@ -1382,6 +1382,7 @@ app.get("/surveys", async (c) => {
         include: { options: { orderBy: { displayOrder: "asc" } } },
       },
       topic: true,
+      publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 100,
@@ -1398,6 +1399,7 @@ app.get("/surveys/:id", async (c) => {
         include: { options: { orderBy: { displayOrder: "asc" } } },
       },
       topic: true,
+      publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true } },
     },
   });
   if (!survey) return c.json({ error: "Survey not found" }, 404);
@@ -1455,6 +1457,7 @@ app.post("/surveys/create", async (c) => {
         include: { options: { orderBy: { displayOrder: "asc" } } },
       },
       topic: true,
+      publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true } },
     },
   });
   return c.json({ survey: surveyDTO(survey) });
