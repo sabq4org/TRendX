@@ -1015,7 +1015,7 @@ private struct AIHighlightBanner: View {
 // description, publisher, and item count so the tap goes somewhere
 // instead of nowhere.
 
-private struct StorySheet: View {
+struct StorySheet: View {
     let story: TimelineStoryPayload
     @Environment(\.dismiss) private var dismiss
 

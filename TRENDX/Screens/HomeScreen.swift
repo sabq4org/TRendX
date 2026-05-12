@@ -443,6 +443,17 @@ private final class RadarPulseViewModel: ObservableObject {
 struct RadarPulseSection: View {
     @EnvironmentObject private var store: AppStore
     @StateObject private var vm: RadarPulseViewModel
+    /// State-driven sheets — tapping a radar row opens the relevant
+    /// detail surface directly instead of bouncing the user through
+    /// the full `TimelineScreen` first. Mirrors `TimelineScreen.handleTap`
+    /// so the routing rules stay consistent between the two surfaces.
+    @State private var selectedPollId: SelectedRadarPoll?
+    @State private var selectedSurvey: Survey?
+    @State private var selectedStory: TimelineStoryPayload?
+
+    private struct SelectedRadarPoll: Identifiable, Hashable {
+        let id: UUID
+    }
 
     init(store: AppStore) {
         _vm = StateObject(wrappedValue: RadarPulseViewModel(store: store))
@@ -458,11 +469,7 @@ struct RadarPulseSection: View {
             } else {
                 LazyVStack(spacing: 10) {
                     ForEach(vm.items) { item in
-                        NavigationLink {
-                            TimelineScreen(store: store)
-                                .environmentObject(store)
-                                .trendxRTL()
-                        } label: {
+                        Button { handleTap(on: item) } label: {
                             RadarPulseRow(item: item)
                         }
                         .buttonStyle(.plain)
@@ -472,6 +479,47 @@ struct RadarPulseSection: View {
             }
         }
         .task { await vm.load() }
+        .sheet(item: $selectedPollId) { wrapper in
+            PollDetailView(pollId: wrapper.id)
+                .environmentObject(store)
+                .trendxRTL()
+        }
+        .sheet(item: $selectedSurvey) { survey in
+            SurveyDetailView(survey: survey)
+                .environmentObject(store)
+                .trendxRTL()
+        }
+        .sheet(item: $selectedStory) { story in
+            StorySheet(story: story)
+                .environmentObject(store)
+                .trendxRTL()
+        }
+    }
+
+    /// Route a row tap to the right destination based on its kind.
+    /// Same matrix as `TimelineScreen.handleTap` — polls open
+    /// `PollDetailView`, surveys open `SurveyDetailView`, stories open
+    /// `StorySheet`. We deliberately *do not* route to the full radar
+    /// here: the user already chose a specific item, so taking them
+    /// through the radar first would just be an extra tap.
+    private func handleTap(on item: TimelineItem) {
+        switch item.kind {
+        case .poll_published, .vote_cast, .repost, .poll_results, .sector_trending:
+            if let id = item.poll?.id {
+                selectedPollId = SelectedRadarPoll(id: id)
+            }
+        case .survey_published:
+            // The Survey model lives in `store.surveys` (refreshed on
+            // bootstrap). If the radar mentions a survey that isn't in
+            // the local cache yet — surveys table grew faster than the
+            // home feed pulled — swallow the tap silently.
+            if let surveyId = item.survey?.id,
+               let survey = store.surveys.first(where: { $0.id == surveyId }) {
+                selectedSurvey = survey
+            }
+        case .story:
+            if let story = item.story { selectedStory = story }
+        }
     }
 
     private var sectionHeader: some View {
@@ -589,7 +637,7 @@ private struct RadarPulseRow: View {
         case .poll_published:
             return item.poll?.title ?? "استطلاع جديد"
         case .survey_published:
-            return item.poll?.title ?? "استبيان جديد"
+            return item.survey?.title ?? "استبيان جديد"
         case .vote_cast:
             if let choice = item.choice, let voter = item.voter {
                 return "\(voter.name) صوّت: \(choice)"
