@@ -85,7 +85,7 @@ import kotlinx.coroutines.launch
 // answer becomes a brand-gradient bubble. Step transitions resign the
 // keyboard and re-focus the right field for text steps.
 
-private enum SignUpStep {
+private enum class SignUpStep {
     Greeting, AskName, AskEmail, AskPassword, AskGender,
     AskBirthDecade, AskCity, AskInterests, AskVoice, Finishing, Done
 }

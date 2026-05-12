@@ -17,6 +17,9 @@ import com.trendx.app.repositories.AuthSession
 import com.trendx.app.repositories.PollRepository
 import com.trendx.app.repositories.ProfilePost
 import com.trendx.app.repositories.SessionStore
+import com.trendx.app.repositories.SurveyDraftInput
+import com.trendx.app.repositories.SurveyRepository
+import com.trendx.app.models.Survey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +37,7 @@ class AppViewModel(context: Context) : ViewModel() {
     private val authRepository = AuthRepository(client, sessionStore)
     private val pollRepository = PollRepository(client)
     private val accountRepository = AccountRepository(client)
+    private val surveyRepository = SurveyRepository(client)
 
     private var session: AuthSession? = null
 
@@ -42,6 +46,13 @@ class AppViewModel(context: Context) : ViewModel() {
     /// the AccountScreen can show the sign-out button only when there's
     /// a real session to sign out of.
     val isRemoteEnabled: Boolean get() = client.config.isConfigured
+
+    /// Direct access for read-only intelligence endpoints (Pulse, DNA,
+    /// Index, Accuracy, Challenge, Notifications). Mirrors how iOS exposes
+    /// `store.apiClient` + `store.accessToken` so screens can call the
+    /// right endpoints without a per-domain repository wrapper.
+    val apiClient: TrendXAPIClient get() = client
+    val accessToken: String? get() = session?.accessToken
 
     // The app shell is always "authenticated" in the same sense as iOS —
     // the tab interface always renders. `isGuest` distinguishes the
@@ -76,6 +87,12 @@ class AppViewModel(context: Context) : ViewModel() {
     private val _gifts = MutableStateFlow(Gift.samples)
     val gifts: StateFlow<List<Gift>> = _gifts.asStateFlow()
 
+    // Surveys: starts with the local sample set so the toggle in PollsScreen
+    // shows real content even before the bootstrap call lands or for guest
+    // sessions. Replaced by /surveys whenever the user is signed in.
+    private val _surveys = MutableStateFlow(Survey.techSamples)
+    val surveys: StateFlow<List<Survey>> = _surveys.asStateFlow()
+
     private val _redemptions = MutableStateFlow<List<Redemption>>(emptyList())
     val redemptions: StateFlow<List<Redemption>> = _redemptions.asStateFlow()
 
@@ -92,6 +109,9 @@ class AppViewModel(context: Context) : ViewModel() {
             // the Home + Polls feeds show real backend content even before
             // the user signs in. Falls back to samples if the network fails.
             refreshBootstrap()
+            // Same idea for surveys — keep the local samples until the
+            // remote response replaces them.
+            refreshSurveys()
         }
     }
 
@@ -242,6 +262,148 @@ class AppViewModel(context: Context) : ViewModel() {
             u.copy(points = newPoints, coins = newPoints / 6.0)
         }
         return redemption
+    }
+
+    // ---- Surveys ----
+
+    /// Pull /surveys and replace the in-memory list. Falls back to the
+    /// bundled samples if the call fails so the toggle in PollsScreen
+    /// always has something to show.
+    fun refreshSurveys() {
+        viewModelScope.launch {
+            val token = session?.accessToken
+            val fetched = surveyRepository.fetchSurveys(token)
+            if (!fetched.isNullOrEmpty()) _surveys.value = fetched
+        }
+    }
+
+    suspend fun fetchSurvey(id: String): Survey? {
+        val token = session?.accessToken
+        return surveyRepository.fetchSurvey(id, token)
+            ?: _surveys.value.firstOrNull { it.id == id }
+    }
+
+    fun submitSurveyResponse(
+        surveyId: String,
+        answers: List<Pair<String, String>>,
+        completionSeconds: Int
+    ) {
+        val token = session?.accessToken
+        if (token == null) {
+            postAppMessage("سُجِّلت إجاباتك محلياً.")
+            return
+        }
+        viewModelScope.launch {
+            val ok = surveyRepository.respondToSurvey(token, surveyId, answers, completionSeconds)
+            val survey = _surveys.value.firstOrNull { it.id == surveyId }
+            if (ok && survey != null) {
+                _currentUser.value = _currentUser.value.let { u ->
+                    val newPoints = u.points + survey.rewardPoints
+                    u.copy(points = newPoints, coins = newPoints / 6.0)
+                }
+                _surveys.value = _surveys.value.map {
+                    if (it.id == surveyId) it.copy(totalResponses = it.totalResponses + 1) else it
+                }
+                postAppMessage("+${survey.rewardPoints} نقطة. شكراً لمشاركتك!")
+            } else if (!ok) {
+                postAppMessage("تعذّر إرسال الإجابات. حاول مجدداً.")
+            }
+        }
+    }
+
+    fun createSurvey(
+        title: String,
+        description: String,
+        coverStyle: String,
+        rewardPoints: Int,
+        durationDays: Int,
+        questions: List<SurveyDraftInput>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val token = session?.accessToken
+        if (token == null) {
+            // Offline / guest fallback: create locally so the UI still
+            // shows progress; will be replaced by real survey on next
+            // refresh once signed in.
+            val placeholder = Survey(
+                id = "local-${System.currentTimeMillis()}",
+                title = title, description = description,
+                coverStyle = com.trendx.app.theme.PollCoverStyle.values()
+                    .firstOrNull { it.rawValue == coverStyle }
+                    ?: com.trendx.app.theme.PollCoverStyle.Generic,
+                authorName = _currentUser.value.name,
+                authorAvatar = _currentUser.value.avatarInitial,
+                authorAvatarUrl = _currentUser.value.avatarUrl,
+                authorAccountType = _currentUser.value.accountType,
+                authorHandle = _currentUser.value.handle,
+                publisherId = _currentUser.value.id,
+                rewardPoints = rewardPoints,
+                questions = questions.mapIndexed { idx, q ->
+                    com.trendx.app.models.SurveyQuestion(
+                        id = "local-q-$idx",
+                        title = q.title,
+                        options = q.options.mapIndexed { oIdx, txt ->
+                            com.trendx.app.models.PollOption(
+                                id = "local-o-$idx-$oIdx", text = txt
+                            )
+                        },
+                        displayOrder = idx,
+                        rewardPoints = q.rewardPoints
+                    )
+                }
+            )
+            _surveys.value = listOf(placeholder) + _surveys.value
+            postAppMessage("سُجِّل الاستبيان محلياً (وضع الضيف).")
+            onSuccess()
+            return
+        }
+        viewModelScope.launch {
+            val created = surveyRepository.createSurvey(
+                accessToken = token, title = title, description = description,
+                coverStyle = coverStyle, rewardPoints = rewardPoints,
+                durationDays = durationDays, questions = questions
+            )
+            if (created != null) {
+                _surveys.value = listOf(created) + _surveys.value
+                postAppMessage("نُشِر الاستبيان.")
+                onSuccess()
+            } else {
+                onError("تعذّر نشر الاستبيان.")
+            }
+        }
+    }
+
+    fun createPoll(
+        title: String,
+        description: String?,
+        topicId: String?,
+        type: String,
+        durationDays: Int,
+        options: List<String>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val token = session?.accessToken
+        if (token == null) {
+            postAppMessage("سجّل الدخول قبل نشر استطلاع.")
+            onError("ليس مسجّلاً للدخول")
+            return
+        }
+        viewModelScope.launch {
+            val ok = surveyRepository.createPoll(
+                accessToken = token, title = title, description = description,
+                topicId = topicId, type = type, durationDays = durationDays,
+                options = options
+            )
+            if (ok) {
+                refreshBootstrap()
+                postAppMessage("نُشِر الاستطلاع.")
+                onSuccess()
+            } else {
+                onError("تعذّر نشر الاستطلاع.")
+            }
+        }
     }
 
     // ---- Account sub-screen suspend fetches (called from LaunchedEffect) ----

@@ -60,6 +60,10 @@ fun HomeScreen(
     onBookmark: (pollId: String) -> Unit,
     onRepost: (pollId: String, repost: Boolean) -> Unit,
     onFollowTopic: (topicId: String) -> Unit,
+    onOpenPulse: () -> Unit,
+    onOpenWeekly: () -> Unit,
+    onOpenIndex: () -> Unit,
+    onOpenNotifications: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedSegment by remember { mutableIntStateOf(0) }
@@ -102,7 +106,7 @@ fun HomeScreen(
                     avatarUrl = user.avatarUrl,
                     isGuest = isGuest,
                     onSignInTap = onSignInTap,
-                    onNotificationsTap = { /* TODO: notifications inbox */ },
+                    onNotificationsTap = onOpenNotifications,
                     onSearchTap = { selectedSegment = 0 },
                     onTimelineTap = if (isGuest) null else { { /* TODO: timeline */ } }
                 )
@@ -141,7 +145,10 @@ fun HomeScreen(
                     onVote = onVote,
                     onShare = onShare,
                     onBookmark = onBookmark,
-                    onRepost = onRepost
+                    onRepost = onRepost,
+                    onOpenPulse = onOpenPulse,
+                    onOpenWeekly = onOpenWeekly,
+                    onOpenIndex = onOpenIndex
                 )
             } else {
                 topicsContent(
@@ -177,7 +184,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.postsContent(
     onVote: (String, String, Boolean) -> Unit,
     onShare: (String) -> Unit,
     onBookmark: (String) -> Unit,
-    onRepost: (String, Boolean) -> Unit
+    onRepost: (String, Boolean) -> Unit,
+    onOpenPulse: () -> Unit,
+    onOpenWeekly: () -> Unit,
+    onOpenIndex: () -> Unit
 ) {
     if (!isGuest) {
         item("events-entry") { EventsHomeEntry(onClick = { /* TODO: events */ }) }
@@ -188,10 +198,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.postsContent(
             onClaim = { /* TODO: claim */ }
         )
     }
-    item("pulse-card") { PulseHomeCard(onClick = { /* TODO: pulse */ }) }
+    item("pulse-card") { PulseHomeCard(onClick = onOpenPulse) }
     item("ai-brief") { AIBriefCard(brief = brief) }
-    item("weekly-challenge") { WeeklyChallengeHomeCard(onClick = { /* TODO */ }) }
-    item("trendx-index") { TrendXIndexHomeCard(onClick = { /* TODO: index */ }) }
+    item("weekly-challenge") { WeeklyChallengeHomeCard(onClick = onOpenWeekly) }
+    item("trendx-index") { TrendXIndexHomeCard(onClick = onOpenIndex) }
     item("momentum-strip") {
         HomeMomentumStrip(
             activeCount = activePolls.size,

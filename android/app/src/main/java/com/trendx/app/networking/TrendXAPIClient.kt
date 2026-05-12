@@ -119,3 +119,86 @@ class TrendXAPIClient(
         return base + normalized
     }
 }
+
+// Intelligence-layer endpoints. Mirrors TRENDX/Networking/TrendXIntelligenceAPI.swift
+// 1-for-1 — the contracts are identical between iOS and Android because the
+// Railway API is the single source of truth.
+
+suspend fun TrendXAPIClient.pulseTodayAnonymous(): DailyPulseDto =
+    get("/pulse/today/anon")
+
+suspend fun TrendXAPIClient.pulseToday(accessToken: String): DailyPulseDto =
+    get("/pulse/today", accessToken)
+
+suspend fun TrendXAPIClient.pulseYesterday(accessToken: String): PulseYesterdayDto =
+    get("/pulse/yesterday", accessToken)
+
+suspend fun TrendXAPIClient.pulseRespond(
+    optionIndex: Int,
+    predictedPct: Int?,
+    accessToken: String
+): PulseResponseDto = post(
+    "/pulse/today/respond",
+    PulseRespondRequest(optionIndex = optionIndex, predictedPct = predictedPct),
+    accessToken
+)
+
+suspend fun TrendXAPIClient.myStreak(accessToken: String): UserStreakDto =
+    get("/me/streak", accessToken)
+
+suspend fun TrendXAPIClient.myOpinionDNA(accessToken: String): OpinionDnaDto =
+    get("/me/dna", accessToken)
+
+suspend fun TrendXAPIClient.trendxIndex(): TrendXIndexDto =
+    get("/public/index")
+
+suspend fun TrendXAPIClient.myAccuracy(accessToken: String): UserAccuracyDto =
+    get("/me/accuracy", accessToken)
+
+suspend fun TrendXAPIClient.accuracyLeaderboard(
+    limit: Int = 25,
+    accessToken: String
+): AccuracyLeaderboardDto =
+    get("/accuracy/leaderboard?limit=$limit", accessToken)
+
+suspend fun TrendXAPIClient.thisWeekChallenge(accessToken: String): WeeklyChallengeDto =
+    get("/challenges/this-week", accessToken)
+
+suspend fun TrendXAPIClient.predictChallenge(
+    id: String,
+    predictedPct: Int,
+    accessToken: String
+): EmptyOk = post(
+    "/challenges/$id/predict",
+    PredictRequest(predictedPct),
+    accessToken
+)
+
+suspend fun TrendXAPIClient.notifications(accessToken: String): List<NotificationDto> =
+    get<NotificationsListDto>("/me/notifications", accessToken).items
+
+// ---- Survey endpoints ----
+
+suspend fun TrendXAPIClient.listSurveys(accessToken: String?): List<SurveyDto> =
+    get("/surveys", accessToken)
+
+suspend fun TrendXAPIClient.getSurvey(id: String, accessToken: String?): SurveyDto =
+    get("/surveys/$id", accessToken)
+
+suspend fun TrendXAPIClient.createSurveyRemote(
+    request: SurveyCreateRequest,
+    accessToken: String
+): SurveyCreateResponse = post("/surveys/create", request, accessToken)
+
+suspend fun TrendXAPIClient.respondToSurvey(
+    id: String,
+    request: SurveyRespondRequest,
+    accessToken: String
+): EmptyOk = post("/surveys/$id/respond", request, accessToken)
+
+// ---- Poll create ----
+
+suspend fun TrendXAPIClient.createPollRemote(
+    request: PollCreateRequest,
+    accessToken: String
+): PollCreateResponse = post("/polls/create", request, accessToken)

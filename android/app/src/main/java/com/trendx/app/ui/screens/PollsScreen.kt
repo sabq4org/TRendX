@@ -44,13 +44,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.trendx.app.models.Poll
+import com.trendx.app.models.Survey
 import com.trendx.app.theme.TrendXAmbientBackground
 import com.trendx.app.theme.TrendXColors
 import com.trendx.app.theme.TrendXGradients
 import com.trendx.app.theme.TrendXType
+import com.trendx.app.ui.components.CategoryInsightCTA
 import com.trendx.app.ui.components.EmptyStateView
 import com.trendx.app.ui.components.PollListRow
 import com.trendx.app.ui.components.PollsSegmentButton
+import com.trendx.app.ui.components.SurveyListRow
 import com.trendx.app.ui.components.TrendXSearchBar
 
 // Faithful Compose port of TRENDX/Screens/PollsScreen.swift. Sticky header
@@ -60,9 +63,13 @@ import com.trendx.app.ui.components.TrendXSearchBar
 @Composable
 fun PollsScreen(
     polls: List<Poll>,
+    surveys: List<Survey>,
     isGuest: Boolean,
     onOpenPoll: (Poll) -> Unit,
+    onOpenSurvey: (Survey) -> Unit,
     onCreatePoll: () -> Unit,
+    onCreateSurvey: () -> Unit,
+    onOpenCategoryInsight: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedSegment by remember { mutableIntStateOf(0) }
@@ -101,7 +108,7 @@ fun PollsScreen(
                     showSurveys = showSurveys,
                     onSelectPolls = { showSurveys = false },
                     onSelectSurveys = { showSurveys = true },
-                    onCreate = onCreatePoll
+                    onCreate = if (showSurveys) onCreateSurvey else onCreatePoll
                 )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
@@ -145,27 +152,46 @@ fun PollsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item("search") {
-                    TrendXSearchBar(
-                        text = searchText,
-                        onTextChange = { searchText = it },
-                        placeholder = "ابحث داخل الاستطلاعات…"
-                    )
-                }
-                if (visiblePolls.isEmpty()) {
-                    item("empty") {
-                        EmptyStateView(
-                            icon = if (selectedSegment == 0) Icons.Filled.AutoAwesome
-                                   else Icons.Filled.CheckCircle,
-                            title = if (selectedSegment == 0) "لحظة هدوء قبل الاتجاه التالي"
-                                    else "لا توجد نتائج هنا",
-                            message = if (selectedSegment == 0) "TRENDX AI يرصد الآن اتجاهات جديدة"
-                                      else "جرّب تغيير البحث."
+                if (!showSurveys) {
+                    item("search") {
+                        TrendXSearchBar(
+                            text = searchText,
+                            onTextChange = { searchText = it },
+                            placeholder = "ابحث داخل الاستطلاعات…"
                         )
                     }
+                    if (visiblePolls.isEmpty()) {
+                        item("empty") {
+                            EmptyStateView(
+                                icon = if (selectedSegment == 0) Icons.Filled.AutoAwesome
+                                       else Icons.Filled.CheckCircle,
+                                title = if (selectedSegment == 0) "لحظة هدوء قبل الاتجاه التالي"
+                                        else "لا توجد نتائج هنا",
+                                message = if (selectedSegment == 0) "TRENDX AI يرصد الآن اتجاهات جديدة"
+                                          else "جرّب تغيير البحث."
+                            )
+                        }
+                    } else {
+                        items(visiblePolls, key = { it.id }) { poll ->
+                            PollListRow(poll = poll, onTap = { onOpenPoll(poll) })
+                        }
+                    }
                 } else {
-                    items(visiblePolls, key = { it.id }) { poll ->
-                        PollListRow(poll = poll, onTap = { onOpenPoll(poll) })
+                    item("category-cta") {
+                        CategoryInsightCTA(onClick = onOpenCategoryInsight)
+                    }
+                    if (surveys.isEmpty()) {
+                        item("survey-empty") {
+                            EmptyStateView(
+                                icon = Icons.Filled.AutoAwesome,
+                                title = "لا توجد استبيانات",
+                                message = "ستظهر الاستبيانات المتعددة الأسئلة هنا"
+                            )
+                        }
+                    } else {
+                        items(surveys, key = { it.id }) { survey ->
+                            SurveyListRow(survey = survey, onTap = { onOpenSurvey(survey) })
+                        }
                     }
                 }
             }

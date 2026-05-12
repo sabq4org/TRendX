@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.trendx.app.models.Gift
 import com.trendx.app.models.Redemption
+import com.trendx.app.models.Survey
 import com.trendx.app.models.TrendXUser
 import com.trendx.app.store.AppViewModel
 import com.trendx.app.store.TabItem
@@ -44,13 +45,20 @@ import com.trendx.app.ui.screens.account.MyNetworkScreen
 import com.trendx.app.ui.screens.account.MyPointsScreen
 import com.trendx.app.ui.screens.account.MyRedemptionsScreen
 import com.trendx.app.ui.screens.account.MyVotedPollsScreen
-import com.trendx.app.ui.screens.account.OpinionDNAScreen
-import com.trendx.app.ui.screens.account.PredictionAccuracyScreen
 import com.trendx.app.ui.screens.account.ProfileEditScreen
 import com.trendx.app.ui.screens.account.PublicProfileScreen
-import com.trendx.app.ui.screens.account.TrendXIndexScreen
 import com.trendx.app.ui.screens.auth.LoginScreen
 import com.trendx.app.ui.screens.auth.WelcomeAfterSignUpScreen
+import com.trendx.app.ui.screens.intelligence.NotificationsInboxScreen
+import com.trendx.app.ui.screens.intelligence.OpinionDNAScreen
+import com.trendx.app.ui.screens.intelligence.PredictionAccuracyScreen
+import com.trendx.app.ui.screens.intelligence.PulseTodayScreen
+import com.trendx.app.ui.screens.intelligence.TrendXIndexScreen
+import com.trendx.app.ui.screens.intelligence.WeeklyChallengeScreen
+import com.trendx.app.ui.screens.surveys.CreatePollSheet
+import com.trendx.app.ui.screens.surveys.CreateSurveySheet
+import com.trendx.app.ui.screens.surveys.SurveyDetailScreen
+import com.trendx.app.ui.screens.surveys.SurveyTakingSheet
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -156,6 +164,7 @@ private fun AuthedShell(
     val polls by vm.polls.collectAsState()
     val gifts by vm.gifts.collectAsState()
     val redemptions by vm.redemptions.collectAsState()
+    val surveys by vm.surveys.collectAsState()
 
     var openPollId by remember { mutableStateOf<String?>(null) }
     var analyticsPollId by remember { mutableStateOf<String?>(null) }
@@ -163,6 +172,14 @@ private fun AuthedShell(
     var giftToConfirm by remember { mutableStateOf<Gift?>(null) }
     var lastRedemption by remember { mutableStateOf<Redemption?>(null) }
     var openProfileFor by remember { mutableStateOf<TrendXUser?>(null) }
+    var showPulse by remember { mutableStateOf(false) }
+    var showWeekly by remember { mutableStateOf(false) }
+    var showIndex by remember { mutableStateOf(false) }
+    var showNotifications by remember { mutableStateOf(false) }
+    var openSurvey by remember { mutableStateOf<Survey?>(null) }
+    var takingSurvey by remember { mutableStateOf<Survey?>(null) }
+    var showCreatePoll by remember { mutableStateOf(false) }
+    var showCreateSurvey by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when (selectedTab) {
@@ -173,7 +190,7 @@ private fun AuthedShell(
                 polls = polls,
                 onSignInTap = onSignInTap,
                 onCreatePollTap = {
-                    if (isGuest) onSignInTap() else { /* TODO: open create-poll sheet */ }
+                    if (isGuest) onSignInTap() else showCreatePoll = true
                 },
                 onOpenPoll = { poll -> openPollId = poll.id },
                 onVote = { pollId, optionId, isPublic ->
@@ -189,14 +206,24 @@ private fun AuthedShell(
                 },
                 onFollowTopic = { topicId ->
                     if (isGuest) onSignInTap() else vm.toggleFollowTopic(topicId)
+                },
+                onOpenPulse = { showPulse = true },
+                onOpenWeekly = { if (isGuest) onSignInTap() else showWeekly = true },
+                onOpenIndex = { showIndex = true },
+                onOpenNotifications = {
+                    if (isGuest) onSignInTap() else showNotifications = true
                 }
             )
             TabItem.Polls -> PollsScreen(
                 polls = polls,
+                surveys = surveys,
                 isGuest = isGuest,
                 onOpenPoll = { openPollId = it.id },
-                onCreatePoll = {
-                    if (isGuest) onSignInTap() else { /* TODO: open create-poll sheet */ }
+                onOpenSurvey = { openSurvey = it },
+                onCreatePoll = { if (isGuest) onSignInTap() else showCreatePoll = true },
+                onCreateSurvey = { if (isGuest) onSignInTap() else showCreateSurvey = true },
+                onOpenCategoryInsight = {
+                    vm.postAppMessage("مركز الذكاء القطاعي قيد الإنشاء.")
                 }
             )
             TabItem.Gifts -> GiftsScreen(
@@ -333,9 +360,9 @@ private fun AuthedShell(
                             openPollId = p.id
                         }
                     )
-                    AccountSubRoute.OpinionDNA -> OpinionDNAScreen(onClose = close)
-                    AccountSubRoute.Index -> TrendXIndexScreen(onClose = close)
-                    AccountSubRoute.Accuracy -> PredictionAccuracyScreen(onClose = close)
+                    AccountSubRoute.OpinionDNA -> OpinionDNAScreen(vm = vm, onClose = close)
+                    AccountSubRoute.Index -> TrendXIndexScreen(vm = vm, onClose = close)
+                    AccountSubRoute.Accuracy -> PredictionAccuracyScreen(vm = vm, onClose = close)
                     AccountSubRoute.Redemptions -> MyRedemptionsScreen(
                         redemptions = redemptions,
                         onClose = close
@@ -423,6 +450,94 @@ private fun AuthedShell(
                     onOpenPoll = { p ->
                         openProfileFor = null
                         openPollId = p.id
+                    }
+                )
+            }
+        }
+
+        // Stage 2 intelligence-layer overlays.
+        if (showPulse) {
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                PulseTodayScreen(vm = vm, onClose = { showPulse = false })
+            }
+        }
+        if (showWeekly) {
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                WeeklyChallengeScreen(vm = vm, onClose = { showWeekly = false })
+            }
+        }
+        if (showIndex) {
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                TrendXIndexScreen(vm = vm, onClose = { showIndex = false })
+            }
+        }
+        if (showNotifications) {
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                NotificationsInboxScreen(vm = vm, onClose = { showNotifications = false })
+            }
+        }
+
+        // Stage 3 — Surveys + Create sheets.
+        openSurvey?.let { survey ->
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                SurveyDetailScreen(
+                    survey = survey,
+                    onClose = { openSurvey = null },
+                    onStart = {
+                        if (isGuest) { openSurvey = null; onSignInTap() }
+                        else takingSurvey = survey
+                    },
+                    onOpenAnalytics = {
+                        vm.postAppMessage("تحليل الاستبيان قيد الإنشاء.")
+                    }
+                )
+            }
+        }
+        takingSurvey?.let { survey ->
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                SurveyTakingSheet(
+                    survey = survey,
+                    currentUserPoints = user.points,
+                    onClose = { takingSurvey = null },
+                    onSubmit = { answers, seconds ->
+                        vm.submitSurveyResponse(
+                            surveyId = survey.id,
+                            answers = answers,
+                            completionSeconds = seconds
+                        )
+                    }
+                )
+            }
+        }
+        if (showCreatePoll) {
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                CreatePollSheet(
+                    topics = topics,
+                    onClose = { showCreatePoll = false },
+                    onPublish = { title, description, topicId, type, durationDays, options, onError ->
+                        vm.createPoll(
+                            title = title, description = description, topicId = topicId,
+                            type = type, durationDays = durationDays, options = options,
+                            onSuccess = { showCreatePoll = false },
+                            onError = onError
+                        )
+                    }
+                )
+            }
+        }
+        if (showCreateSurvey) {
+            Surface(modifier = Modifier.fillMaxSize(), color = TrendXColors.Background) {
+                CreateSurveySheet(
+                    onClose = { showCreateSurvey = false },
+                    onPublish = { title, description, coverStyle, rewardPoints,
+                                  durationDays, questions, onError ->
+                        vm.createSurvey(
+                            title = title, description = description, coverStyle = coverStyle,
+                            rewardPoints = rewardPoints, durationDays = durationDays,
+                            questions = questions,
+                            onSuccess = { showCreateSurvey = false },
+                            onError = onError
+                        )
                     }
                 )
             }
