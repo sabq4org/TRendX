@@ -81,13 +81,21 @@ async function main(): Promise<void> {
       },
     });
   } else {
+    // Update only the identity / authorization fields that we want
+    // the seed to enforce on every deploy. Customizable fields —
+    // avatarUrl, bio, bannerUrl — are intentionally NOT touched
+    // here. Previously the seed overwrote avatarUrl on every deploy,
+    // which meant every Railway redeploy reverted the Ministry's
+    // uploaded logo back to the Saudi emblem from Wikipedia and the
+    // admin had to re-upload it through ProfileEditScreen. The
+    // CREATE branch above still seeds the default emblem on a
+    // brand-new database; existing rows now survive deploys with
+    // whatever the admin last saved.
     await prisma.user.update({
       where: { email: moiaEmail },
       data: {
         name: "وزارة الإعلام",
         handle: "moia",
-        avatarUrl: saudiEmblemURL,
-        bio: "الحساب الرسمي لوزارة الإعلام في المملكة العربية السعودية — صوت رسمي على نبض الرأي.",
         accountType: "government",
         isVerified: true,
         role: "publisher",
