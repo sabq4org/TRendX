@@ -37,7 +37,7 @@ struct TimelinePublisher: Decodable {
     }
 }
 
-struct TimelineStoryPayload: Decodable {
+struct TimelineStoryPayload: Decodable, Identifiable {
     let id: UUID
     let title: String
     let description: String?
@@ -63,6 +63,18 @@ struct TimelineItem: Decodable, Identifiable {
     let topicName: String?
     let totalVotes: Int?
     let story: TimelineStoryPayload?
+    /// Up to 5 regional winners surfaced on `poll_results` cards.
+    /// Decoded as `[]` (or missing) when the poll didn't have
+    /// enough geo-tagged votes to compute regional breakdown.
+    let regionalBreakdown: [RegionalBreakdown]?
+
+    struct RegionalBreakdown: Decodable, Hashable, Identifiable {
+        let region: String
+        let leaderText: String
+        let leaderPercentage: Int
+        let totalVotes: Int
+        var id: String { region }
+    }
 
     enum Kind: String, Decodable {
         case poll_published
@@ -182,6 +194,11 @@ struct TimelineScreen: View {
     /// Wrapped in an Identifiable struct because `sheet(item:)`
     /// requires the bound value to conform to Identifiable.
     @State private var selectedPollId: SelectedPoll?
+    /// Same idea as `selectedPollId` but for survey cards — they need
+    /// the full `Survey` model from the store (not just an ID) to
+    /// drive `SurveyDetailView`. Looked up by survey id at tap time.
+    @State private var selectedSurvey: Survey?
+    @State private var selectedStory: TimelineStoryPayload?
 
     private struct SelectedPoll: Identifiable, Hashable {
         let id: UUID
@@ -200,6 +217,19 @@ struct TimelineScreen: View {
                     headerStrip
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
+
+                    // AI highlight strip — only on the Live tab. Pulls
+                    // the most-engaged active poll from the local store
+                    // and frames it as today's headline. Generated
+                    // client-side so it works offline and doesn't add
+                    // a new endpoint.
+                    if vm.filter == "all", let highlight = aiHighlight {
+                        AIHighlightBanner(headline: highlight.headline,
+                                           subline: highlight.subline) {
+                            selectedPollId = SelectedPoll(id: highlight.pollId)
+                        }
+                        .padding(.horizontal, 20)
+                    }
 
                     // Sector chips appear only on the "sectors" tab —
                     // give the user a way to drill into a single topic
@@ -253,23 +283,65 @@ struct TimelineScreen: View {
                 .environmentObject(store)
                 .trendxRTL()
         }
+        .sheet(item: $selectedSurvey) { survey in
+            SurveyDetailView(survey: survey)
+                .environmentObject(store)
+                .trendxRTL()
+        }
+        .sheet(item: $selectedStory) { story in
+            StorySheet(story: story)
+                .environmentObject(store)
+                .trendxRTL()
+        }
+    }
+
+    /// Today's AI-curated highlight, derived locally from
+    /// `store.polls`. Picks the highest-engagement active poll and
+    /// frames its leading option as the day's headline so the Live
+    /// tab opens with a clear "here's what Saudi Arabia is voting
+    /// on" line — even before any cards load. Returns nil when
+    /// there's no qualifying poll (cold start, no active polls).
+    private var aiHighlight: (pollId: UUID, headline: String, subline: String)? {
+        let candidates = store.polls
+            .filter { $0.status == .active && !$0.isExpired && $0.totalVotes > 0 }
+            .sorted { $0.totalVotes > $1.totalVotes }
+        guard let poll = candidates.first,
+              let leader = poll.options.max(by: { $0.votesCount < $1.votesCount }) else {
+            return nil
+        }
+        let pct = Int(leader.percentage.rounded())
+        let topicHint = poll.topicName.map { " · \($0)" } ?? ""
+        return (
+            pollId: poll.id,
+            headline: "اليوم: \(leader.text) يتصدر بنسبة \(pct)%",
+            subline: "\(poll.title)\(topicHint) · \(poll.totalVotes) صوت"
+        )
     }
 
     /// Route a card tap to the right destination based on its kind.
-    /// Polls / reposts / public votes / results / sector_trending all
-    /// open the underlying poll detail. Stories and survey cards are
-    /// no-ops for now — they need their own detail screens which
-    /// aren't part of this rebuild.
+    /// Each kind opens an appropriate detail surface — polls open
+    /// `PollDetailView`, surveys open `SurveyDetailView`, stories
+    /// open a slim sheet with the story's hero and item count.
     private func handleTap(on item: TimelineItem) {
         switch item.kind {
         case .poll_published, .vote_cast, .repost, .poll_results, .sector_trending:
             if let id = item.poll?.id {
                 selectedPollId = SelectedPoll(id: id)
             }
-        case .survey_published, .story:
-            // No dedicated detail screen yet — swallow the tap rather
-            // than misroute the user to an irrelevant sheet.
-            break
+        case .survey_published:
+            // The Survey model lives in store.surveys (refreshed on
+            // bootstrap). If the radar mentions a survey we haven't
+            // cached yet — e.g. surveys table grew faster than the
+            // home feed pulled — swallow the tap silently. A proper
+            // fix would fetch /surveys/:id on demand, but the radar's
+            // own /me/timeline includes enough metadata to render the
+            // card, so the gap only affects opening.
+            if let surveyId = item.survey?.id,
+               let survey = store.surveys.first(where: { $0.id == surveyId }) {
+                selectedSurvey = survey
+            }
+        case .story:
+            if let story = item.story { selectedStory = story }
         }
     }
 
@@ -745,6 +817,49 @@ private struct TimelineCard: View {
                         .foregroundStyle(TrendXTheme.success)
                 }
             }
+            // Regional breakdown — horizontal strip of "the winning
+            // option in each region". Only shown when the backend
+            // returned at least one row; surveys with sparse geo data
+            // get a clean trophy-only card instead of an empty strip.
+            if let regions = item.regionalBreakdown, !regions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(regions) { region in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.system(size: 10, weight: .heavy))
+                                    Text(region.region)
+                                        .font(.system(size: 10.5, weight: .heavy))
+                                }
+                                .foregroundStyle(TrendXTheme.aiIndigo)
+                                Text(region.leaderText)
+                                    .font(.system(size: 12, weight: .heavy))
+                                    .foregroundStyle(TrendXTheme.ink)
+                                    .lineLimit(1)
+                                HStack(spacing: 4) {
+                                    Text("\(region.leaderPercentage)%")
+                                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                                        .foregroundStyle(TrendXTheme.success)
+                                    Text("· \(region.totalVotes) صوت")
+                                        .font(.system(size: 9.5, weight: .semibold))
+                                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                                }
+                            }
+                            .padding(10)
+                            .frame(width: 140, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(TrendXTheme.softFill)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(TrendXTheme.outline, lineWidth: 0.6)
+                                    )
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -819,5 +934,148 @@ private struct TimelineCard: View {
         f.locale = Locale(identifier: "ar")
         f.unitsStyle = .abbreviated
         return f.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - AI Highlight Banner
+//
+// Sits above the radar feed on the Live tab. Single line of editorial
+// copy + a subline with poll context. Tapping opens the poll detail.
+// Visual: AI violet gradient + sparkles glyph to mark the AI-curated
+// nature, so users can tell it apart from the regular poll cards.
+
+private struct AIHighlightBanner: View {
+    let headline: String
+    let subline: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [TrendXTheme.aiViolet, TrendXTheme.aiIndigo],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 38, height: 38)
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Text("TRENDX AI")
+                            .font(.system(size: 10, weight: .heavy))
+                            .tracking(0.6)
+                            .foregroundStyle(TrendXTheme.aiViolet)
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 4))
+                            .foregroundStyle(TrendXTheme.aiViolet.opacity(0.5))
+                        Text("نبض اليوم")
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.aiViolet)
+                    }
+                    Text(headline)
+                        .font(.system(size: 14, weight: .black, design: .rounded))
+                        .foregroundStyle(TrendXTheme.ink)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(subline)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.aiViolet)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(TrendXTheme.aiViolet.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(TrendXTheme.aiViolet.opacity(0.22), lineWidth: 0.8)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Story sheet
+//
+// Minimal detail surface for `story` activity cards. Stories are
+// editorial collections of polls + surveys — the full curation UX
+// is out of scope here, so the sheet just shows the title,
+// description, publisher, and item count so the tap goes somewhere
+// instead of nowhere.
+
+private struct StorySheet: View {
+    let story: TimelineStoryPayload
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                ZStack {
+                    LinearGradient(
+                        colors: [TrendXTheme.aiViolet, TrendXTheme.aiIndigo],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Image(systemName: "book.fill")
+                        .font(.system(size: 56, weight: .heavy))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                .frame(height: 160)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                HStack(spacing: 6) {
+                    Image(systemName: "book.fill")
+                        .font(.system(size: 11, weight: .heavy))
+                    Text("قصّة محرّرة")
+                        .font(.system(size: 11, weight: .heavy))
+                    Spacer(minLength: 0)
+                    if story.itemCount > 0 {
+                        Label("\(story.itemCount) عنصر", systemImage: "rectangle.stack.fill")
+                            .font(.system(size: 11, weight: .heavy))
+                    }
+                }
+                .foregroundStyle(TrendXTheme.aiViolet)
+
+                Text(story.title)
+                    .font(.system(size: 22, weight: .black, design: .rounded))
+                    .foregroundStyle(TrendXTheme.ink)
+
+                if let pub = story.publisher {
+                    AccountNameRow(user: pub.asUser, nameFont: .system(size: 13, weight: .heavy))
+                }
+
+                if let desc = story.description, !desc.isEmpty {
+                    Text(desc)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                        .lineSpacing(4)
+                }
+
+                Spacer(minLength: 40)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 40)
+        }
+        .background(TrendXTheme.background.ignoresSafeArea())
+        .overlay(alignment: .topTrailing) {
+            Button("إغلاق") { dismiss() }
+                .font(.system(size: 13, weight: .heavy))
+                .foregroundStyle(TrendXTheme.primary)
+                .padding(.trailing, 20)
+                .padding(.top, 16)
+        }
     }
 }

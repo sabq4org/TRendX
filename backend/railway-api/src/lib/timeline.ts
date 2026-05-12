@@ -65,6 +65,16 @@ export type TimelineActivity =
       poll: ReturnType<typeof pollDTO>;
       leader_text: string;
       leader_percentage: number;
+      /// Per-region winner snapshot — up to 5 regions with the
+      /// option that came first for each. Empty when the poll is
+      /// too small or demographics are sparse, in which case the
+      /// iOS card simply omits the regional strip.
+      regional_breakdown: Array<{
+        region: string;
+        leader_text: string;
+        leader_percentage: number;
+        total_votes: number;
+      }>;
     }
   | {
       kind: "story";
@@ -400,6 +410,67 @@ export async function buildTimeline(
       caption: r.caption,
     });
   }
+  // Pre-compute regional breakdowns in one batched query keyed by
+  // pollId. Done in a single groupBy instead of a per-poll loop so a
+  // 20-result page costs one DB round-trip instead of 20.
+  const endedIds = recentlyEnded.map((p) => p.id);
+  const regionalRows = endedIds.length === 0
+    ? []
+    : await prisma.vote.groupBy({
+        by: ["pollId", "region", "optionId"],
+        where: { pollId: { in: endedIds }, region: { not: null } },
+        _count: { _all: true },
+      });
+
+  // Build a poll-id → region → option-id → count map, then collapse
+  // each region down to its winning option. Top 5 regions by total
+  // vote volume are surfaced — anything beyond that and the card
+  // strip becomes noise rather than insight.
+  const regionalByPoll = new Map<
+    string,
+    Array<{
+      region: string;
+      leader_text: string;
+      leader_percentage: number;
+      total_votes: number;
+    }>
+  >();
+  {
+    const grouped: Record<string, Record<string, Record<string, number>>> = {};
+    for (const row of regionalRows) {
+      if (!row.region) continue;
+      const pollMap = (grouped[row.pollId] ??= {});
+      const regMap = (pollMap[row.region] ??= {});
+      regMap[row.optionId] = (regMap[row.optionId] ?? 0) + row._count._all;
+    }
+    for (const p of recentlyEnded) {
+      const pollMap = grouped[p.id];
+      if (!pollMap) continue;
+      const optionText = new Map(p.options.map((o) => [o.id, o.text]));
+      const perRegion = Object.entries(pollMap)
+        .map(([region, optMap]) => {
+          let leaderId = "";
+          let leaderCount = 0;
+          let total = 0;
+          for (const [optId, count] of Object.entries(optMap)) {
+            total += count;
+            if (count > leaderCount) { leaderCount = count; leaderId = optId; }
+          }
+          const leader = optionText.get(leaderId) ?? "—";
+          const pct = total > 0 ? Math.round((leaderCount / total) * 100) : 0;
+          return {
+            region,
+            leader_text: leader,
+            leader_percentage: pct,
+            total_votes: total,
+          };
+        })
+        .sort((a, b) => b.total_votes - a.total_votes)
+        .slice(0, 5);
+      regionalByPoll.set(p.id, perRegion);
+    }
+  }
+
   for (const p of recentlyEnded) {
     const top = p.options[0];
     if (!top) continue;
@@ -412,6 +483,7 @@ export async function buildTimeline(
       leader_percentage: p.totalVotes > 0
         ? Math.round((top.votesCount / p.totalVotes) * 100)
         : 0,
+      regional_breakdown: regionalByPoll.get(p.id) ?? [],
     });
   }
   for (const st of stories) {
