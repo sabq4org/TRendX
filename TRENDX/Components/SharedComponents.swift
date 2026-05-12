@@ -559,6 +559,9 @@ struct PollCard: View {
     /// Optional repost handler — receives the poll id and the *new*
     /// desired state (true = repost, false = un-repost).
     var onRepost: ((UUID, Bool) -> Void)? = nil
+    /// Tapping the author area opens their public profile. Receives the
+    /// `@handle` (without the leading @).
+    var onAuthorTap: ((String) -> Void)? = nil
 
     @State private var selectedOption: UUID?
     /// Per-card opt-in switch: "أظهر تصويتي لمتابعيّ". Default OFF —
@@ -576,6 +579,22 @@ struct PollCard: View {
     private var tint: Color { topicStyle.tint }
     private var isOfficial: Bool {
         poll.authorAccountType == .government || poll.voterAudience != "public"
+    }
+
+    /// Accent color used *inside* the card. For official polls we keep
+    /// the whole card on the Saudi-green palette so the topic colour
+    /// (e.g. media's pink) doesn't bleed inside the green-bordered
+    /// frame. For regular polls we fall back to the topic tint.
+    private var accentTint: Color {
+        isOfficial ? TrendXTheme.saudiGreen : tint
+    }
+    private var accentGradientColors: [Color] {
+        isOfficial
+            ? [TrendXTheme.saudiGreenDeep, TrendXTheme.saudiGreen, TrendXTheme.saudiGreenLight]
+            : topicStyle.gradient
+    }
+    private var accentWash: Color {
+        isOfficial ? TrendXTheme.saudiGreenWash : topicStyle.wash
     }
 
     var body: some View {
@@ -657,64 +676,101 @@ struct PollCard: View {
 
     private var cardBody: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Header: topic pill is the hero of the card identity
-            HStack(spacing: 10) {
-                // Avatar with topic-colored ring (no more generic blue)
-                ZStack {
-                    Circle()
-                        .stroke(
-                            LinearGradient(
-                                colors: topicStyle.gradient,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.8
-                        )
-                        .frame(width: 44, height: 44)
-
-                    Circle()
-                        .fill(tint.opacity(0.10))
-                        .frame(width: 38, height: 38)
-                        .overlay(
-                            Text(poll.authorAvatar)
-                                .font(.system(size: 15, weight: .heavy, design: .rounded))
-                                .foregroundStyle(tint)
-                        )
+            // Header — tappable when we have a handle to navigate to.
+            // Topic colours are *not* used inside the card for gov
+            // polls; everything switches to Saudi-green via accentTint.
+            Button {
+                if let onAuthorTap, let handle = poll.authorHandle, !handle.isEmpty {
+                    onAuthorTap(handle)
                 }
+            } label: {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .stroke(
+                                LinearGradient(
+                                    colors: accentGradientColors,
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.8
+                            )
+                            .frame(width: 44, height: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(poll.authorName)
-                            .font(.trendxBodyBold())
-                            .foregroundStyle(TrendXTheme.ink)
-                            .lineLimit(1)
-
-                        if poll.authorIsVerified {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(tint)
+                        // Government accounts get the institutional emblem
+                        // disc (palm + crossed lines stand-in). Everyone
+                        // else gets their initial on a tint wash.
+                        if isOfficial {
+                            ZStack {
+                                Circle()
+                                    .fill(TrendXTheme.saudiGreen)
+                                    .frame(width: 38, height: 38)
+                                Image(systemName: "leaf.fill")
+                                    .font(.system(size: 16, weight: .heavy))
+                                    .foregroundStyle(.white)
+                                    .offset(y: -2)
+                                Rectangle()
+                                    .fill(.white.opacity(0.85))
+                                    .frame(width: 14, height: 1.2)
+                                    .rotationEffect(.degrees(20))
+                                    .offset(y: 9)
+                                Rectangle()
+                                    .fill(.white.opacity(0.85))
+                                    .frame(width: 14, height: 1.2)
+                                    .rotationEffect(.degrees(-20))
+                                    .offset(y: 9)
+                            }
+                        } else {
+                            Circle()
+                                .fill(accentTint.opacity(0.10))
+                                .frame(width: 38, height: 38)
+                                .overlay(
+                                    Text(poll.authorAvatar)
+                                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                                        .foregroundStyle(accentTint)
+                                )
                         }
                     }
 
-                    HStack(spacing: 5) {
-                        if let topicName = poll.topicName {
-                            Text(topicName)
-                                .font(.system(size: 10.5, weight: .heavy, design: .rounded))
-                                .tracking(0.2)
-                                .foregroundStyle(tint)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule().fill(topicStyle.wash)
-                                )
-                                .overlay(
-                                    Capsule().stroke(topicStyle.hairline, lineWidth: 0.6)
-                                )
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            // Author name stays neutral — never tinted with
+                            // the topic colour. Verified seal uses the
+                            // accent (Saudi-green for gov, brand otherwise).
+                            Text(poll.authorName)
+                                .font(.trendxBodyBold())
+                                .foregroundStyle(TrendXTheme.ink)
+                                .lineLimit(1)
+
+                            if poll.authorIsVerified {
+                                Image(systemName: poll.authorAccountType == .government
+                                      ? "checkmark.shield.fill" : "checkmark.seal.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(accentTint)
+                            }
                         }
 
-                        Text(poll.timeAgo)
-                            .font(.trendxSmall())
-                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                        HStack(spacing: 5) {
+                            if let topicName = poll.topicName {
+                                // Topic pill — switches to Saudi-green for
+                                // government polls so the chip stays inside
+                                // the same palette as the rest of the card.
+                                Text(topicName)
+                                    .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(accentTint)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule().fill(accentWash)
+                                    )
+                                    .overlay(
+                                        Capsule().stroke(accentTint.opacity(0.22), lineWidth: 0.6)
+                                    )
+                            }
+
+                            Text(poll.timeAgo)
+                                .font(.trendxSmall())
+                                .foregroundStyle(TrendXTheme.tertiaryInk)
                     }
                 }
 
@@ -722,6 +778,9 @@ struct PollCard: View {
 
                 StatusBadge(kind: statusKind)
             }
+            }
+            .buttonStyle(.plain)
+            .disabled((poll.authorHandle ?? "").isEmpty)
 
             // Question
             Text(poll.title)

@@ -13,6 +13,8 @@ struct HomeScreen: View {
     @State private var searchText = ""
     @State private var selectedPoll: Poll?
     @State private var showNotifications = false
+    @State private var selectedAuthorHandle: String?
+    @State private var selectedAuthorUser: TrendXUser?
     @StateObject private var notificationsCounter = NotificationsCounter()
 
     private var feedPolls: [Poll] {
@@ -80,6 +82,13 @@ struct HomeScreen: View {
                 }
                 .trendxRTL()
             }
+            .sheet(item: $selectedAuthorUser) { user in
+                NavigationStack {
+                    PublicProfileScreen(user: user, loadFromBackend: true)
+                        .environmentObject(store)
+                }
+                .trendxRTL()
+            }
             .task { await notificationsCounter.refresh(store: store) }
 
             FloatingActionButton {
@@ -94,15 +103,9 @@ struct HomeScreen: View {
 
     private var postsContent: some View {
         VStack(spacing: 24) {
-            // Daily bonus claim — only renders when claimable or just claimed.
-            DailyBonusCard(store: store)
-                .padding(.horizontal, 20)
-
-            // Suggested follows — prioritizes government + verified
-            // accounts in the user's sectors. Empty for guests.
+            // 🔥 Radar + Events are now THE top of Home so the social-
+            // graph layer is impossible to miss. Hidden in guest mode.
             if !store.isGuest {
-                SuggestedFollowsCarousel(store: store)
-
                 NavigationLink {
                     TimelineScreen(store: store)
                         .environmentObject(store)
@@ -112,6 +115,8 @@ struct HomeScreen: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 20)
+
+                SuggestedFollowsCarousel(store: store)
 
                 NavigationLink {
                     EventsScreen(store: store)
@@ -123,6 +128,10 @@ struct HomeScreen: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 20)
             }
+
+            // Daily bonus claim — only renders when claimable or just claimed.
+            DailyBonusCard(store: store)
+                .padding(.horizontal, 20)
 
             // Daily Pulse spotlight — same JSON as the Web /pulse page.
             NavigationLink {
@@ -217,6 +226,14 @@ struct HomeScreen: View {
                                         await store.repost(pollId: pollId)
                                     } else {
                                         await store.unrepost(pollId: pollId)
+                                    }
+                                }
+                            },
+                            onAuthorTap: { handle in
+                                selectedAuthorHandle = handle
+                                Task {
+                                    if let user = await store.loadUserProfile(idOrHandle: handle) {
+                                        await MainActor.run { selectedAuthorUser = user }
                                     }
                                 }
                             }

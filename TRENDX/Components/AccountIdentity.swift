@@ -187,10 +187,42 @@ struct AccountAvatar: View {
         }
     }
 
+    @ViewBuilder
     private var initialView: some View {
-        Text(user.avatarInitial.isEmpty ? String(user.name.prefix(1)) : user.avatarInitial)
-            .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white)
+        // Government accounts without an uploaded avatar get the
+        // stylized institutional emblem (palm + crossed lines) drawn
+        // in SwiftUI — no external asset, no hosted URL dependency.
+        if user.accountType == .government {
+            governmentEmblem
+        } else {
+            Text(user.avatarInitial.isEmpty ? String(user.name.prefix(1)) : user.avatarInitial)
+                .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var governmentEmblem: some View {
+        ZStack {
+            // Palm leaf — vertical centerpiece.
+            Image(systemName: "leaf.fill")
+                .font(.system(size: size * 0.46, weight: .heavy))
+                .foregroundStyle(.white)
+                .offset(y: -size * 0.06)
+
+            // Crossed swords stand-in — two thin white bars.
+            Rectangle()
+                .fill(.white.opacity(0.92))
+                .frame(width: size * 0.38, height: size * 0.04)
+                .rotationEffect(.degrees(18))
+                .offset(y: size * 0.22)
+
+            Rectangle()
+                .fill(.white.opacity(0.92))
+                .frame(width: size * 0.38, height: size * 0.04)
+                .rotationEffect(.degrees(-18))
+                .offset(y: size * 0.22)
+        }
+        .frame(width: size, height: size)
     }
 }
 
