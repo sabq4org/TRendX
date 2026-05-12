@@ -12,6 +12,7 @@ import {
   verifyToken,
 } from "./auth.js";
 import { snake } from "./lib/snake.js";
+import { rateLimit } from "./lib/rate-limit.js";
 import {
   ageGroupFromBirthYear,
   normalizeDevice,
@@ -113,6 +114,35 @@ app.use(
   }),
 );
 
+// MARK: - Rate limit guard
+//
+// `guardRate` shortcut returns a 429 JSON response when the key has
+// exceeded its allowance, otherwise null. Hot paths can `return` the
+// response directly; cold paths can ignore it. Keyed by user id when
+// available, falls back to the remote address for anonymous routes
+// (signup/signin).
+function rateLimitKey(c: Parameters<typeof guardRate>[0]): string {
+  const userId = (c as { get: (k: "userId") => string | undefined }).get("userId");
+  if (userId) return `user:${userId}`;
+  const fwd = c.req.header("x-forwarded-for") ?? "";
+  const ip = fwd.split(",")[0]?.trim() || "anon";
+  return `ip:${ip}`;
+}
+
+function guardRate(
+  c: { req: { header: (k: string) => string | undefined }; get: (k: "userId") => string | undefined; json: (b: unknown, s?: number) => Response },
+  scope: string,
+  max: number,
+  windowMs: number,
+): Response | null {
+  const key = `${rateLimitKey(c)}:${scope}`;
+  if (rateLimit.allow(key, max, windowMs)) return null;
+  return c.json(
+    { error: "تجاوزت الحد المسموح من الطلبات. حاول بعد قليل.", code: "rate_limited" },
+    429,
+  );
+}
+
 // MARK: - Public routes
 
 app.get("/", (c) =>
@@ -129,6 +159,11 @@ app.get("/health", (c) => c.json({ ok: true, service: "trendx-railway-api" }));
 // MARK: - Auth
 
 app.post("/auth/signup", async (c) => {
+  // 5 signups per IP per hour — bot defense.
+  {
+    const rl = guardRate(c, "signup", 5, 60 * 60 * 1000);
+    if (rl) return rl;
+  }
   const body = await c.req.json<{
     name?: string;
     email?: string;
@@ -144,8 +179,11 @@ app.post("/auth/signup", async (c) => {
   const email = (body.email ?? "").trim().toLowerCase();
   const name = (body.name ?? "").trim();
   const password = body.password ?? "";
-  if (!email || !password || password.length < 6 || !name) {
-    return c.json({ error: "Invalid signup payload" }, 400);
+  if (!email || !password || password.length < 8 || !name) {
+    return c.json({ error: "كلمة المرور يجب أن تكون 8 أحرف على الأقل." }, 400);
+  }
+  if (email.length > 120 || name.length > 80) {
+    return c.json({ error: "الاسم أو البريد طويل جداً." }, 400);
   }
 
   const salt = makeSalt();
@@ -193,6 +231,12 @@ app.post("/auth/signup", async (c) => {
 });
 
 app.post("/auth/signin", async (c) => {
+  // 15 signin attempts per IP per 15 minutes — protects against
+  // credential-stuffing while leaving room for legitimate retries.
+  {
+    const rl = guardRate(c, "signin", 15, 15 * 60 * 1000);
+    if (rl) return rl;
+  }
   const body = await c.req.json<{ email?: string; password?: string }>();
   const email = (body.email ?? "").trim().toLowerCase();
 
@@ -206,10 +250,13 @@ app.post("/auth/signin", async (c) => {
   );
   if (!ok) return c.json({ error: "Invalid credentials" }, 401);
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastActiveAt: new Date() },
-  });
+  // Fire-and-forget the lastActiveAt bump. The previous code awaited
+  // this write before responding, which added a full DB round-trip
+  // to every sign-in. Errors are swallowed because a missed
+  // last-active-at timestamp is strictly cosmetic.
+  prisma.user
+    .update({ where: { id: user.id }, data: { lastActiveAt: new Date() } })
+    .catch(() => {});
 
   return c.json({
     access_token: signToken({ sub: user.id, email }, requireSecret()),
@@ -292,6 +339,22 @@ app.post("/profile", async (c) => {
     country?: string;
     account_type?: "individual" | "organization" | "government";
   }>();
+
+  // Validate string lengths once, up front — keeps the actual update
+  // assignment block clean and lets us bail with a 400 before
+  // touching the DB.
+  if ((body.name ?? "").length > 80) {
+    return c.json({ error: "الاسم لا يتجاوز 80 حرفاً." }, 400);
+  }
+  if ((body.email ?? "").length > 120) {
+    return c.json({ error: "البريد لا يتجاوز 120 حرفاً." }, 400);
+  }
+  if ((body.bio ?? "").length > 280) {
+    return c.json({ error: "النبذة لا تتجاوز 280 حرفاً." }, 400);
+  }
+  if ((body.city ?? "").length > 60 || (body.region ?? "").length > 60) {
+    return c.json({ error: "المدينة أو المنطقة طويلة جداً." }, 400);
+  }
 
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = body.name;
@@ -440,6 +503,11 @@ app.get("/users/:idOrHandle/posts", async (c) => {
 // MARK: - Follow / Unfollow
 
 app.post("/users/:id/follow", async (c) => {
+  // 120 follow actions per minute — generous, blocks scripted abuse.
+  {
+    const rl = guardRate(c, "follow", 120, 60_000);
+    if (rl) return rl;
+  }
   const userId = c.get("userId");
   try {
     const result = await followUser(userId, c.req.param("id"));
@@ -687,6 +755,12 @@ app.post("/events", async (c) => {
 // an existing row returns the same payload.
 
 app.post("/polls/:id/repost", async (c) => {
+  // 60 repost toggles per user per minute — well above any plausible
+  // human use, well below scripted abuse.
+  {
+    const rl = guardRate(c, "repost", 60, 60_000);
+    if (rl) return rl;
+  }
   const userId = c.get("userId");
   const pollId = c.req.param("id");
   const body = await c.req.json<{ caption?: string }>().catch(() => ({ caption: undefined }));
@@ -994,6 +1068,12 @@ app.get("/polls/:id", async (c) => {
 });
 
 app.post("/polls/create", async (c) => {
+  // 20 polls per user per hour — generous for legitimate publishers,
+  // tight enough to stop bulk spam.
+  {
+    const rl = guardRate(c, "polls_create", 20, 60 * 60 * 1000);
+    if (rl) return rl;
+  }
   const userId = c.get("userId");
   const body = await c.req.json<{
     poll: {
@@ -1011,6 +1091,23 @@ app.post("/polls/create", async (c) => {
     };
     options: Array<{ text: string }>;
   }>();
+
+  // Hard limits so a malformed client can't poison the table with
+  // 50KB poll titles or unbounded option strings.
+  const title = (body.poll.title ?? "").trim();
+  if (title.length < 4 || title.length > 200) {
+    return c.json({ error: "عنوان الاستطلاع يجب أن يكون من 4 إلى 200 حرف." }, 400);
+  }
+  if ((body.poll.description ?? "").length > 1000) {
+    return c.json({ error: "وصف الاستطلاع لا يتجاوز 1000 حرف." }, 400);
+  }
+  const optionsIn = body.options ?? [];
+  if (optionsIn.length < 2 || optionsIn.length > 10) {
+    return c.json({ error: "عدد الخيارات يجب أن يكون بين 2 و 10." }, 400);
+  }
+  if (optionsIn.some((o) => !o.text || o.text.length > 120)) {
+    return c.json({ error: "نص كل خيار من 1 إلى 120 حرفاً." }, 400);
+  }
 
   const profile = await prisma.user.findUnique({
     where: { id: userId },
@@ -1035,7 +1132,7 @@ app.post("/polls/create", async (c) => {
   const poll = await prisma.poll.create({
     data: {
       publisherId: userId,
-      title: body.poll.title,
+      title,
       description: body.poll.description ?? null,
       imageUrl: body.poll.image_url ?? null,
       coverStyle: body.poll.cover_style ?? null,

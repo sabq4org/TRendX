@@ -206,6 +206,7 @@ model Repost {
   @@id([userId, pollId])
   @@index([pollId])
   @@index([userId])
+  @@index([createdAt(sort: Desc)])
   @@map("reposts")
 }
 
@@ -453,6 +454,8 @@ model Poll {
   @@index([topicId])
   @@index([expiresAt])
   @@index([publisherId])
+  @@index([publisherId, status])
+  @@index([status, createdAt(sort: Desc)])
   @@map("polls")
 }
 
@@ -501,6 +504,7 @@ model Vote {
 
   @@unique([pollId, userId])
   @@index([pollId])
+  @@index([userId])
   @@index([votedAt])
   @@index([city])
   @@index([gender])
