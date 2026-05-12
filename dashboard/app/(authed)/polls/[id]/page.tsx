@@ -1,6 +1,7 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
@@ -14,18 +15,24 @@ import { GroupedBar } from "@/components/charts/GroupedBar";
 import { StackedBar } from "@/components/charts/StackedBar";
 import { AreaTrend } from "@/components/charts/Area";
 import { Heatmap } from "@/components/charts/Heatmap";
+import { Modal } from "@/components/Modal";
+import { EditPollModal } from "@/components/EditPollModal";
 import { fmtInt, fmtSeconds, fmtPctRaw, deviceLabel, genderLabel } from "@/lib/format";
-import { Sparkles, Download } from "lucide-react";
+import { Sparkles, Download, Pencil } from "lucide-react";
 
 const AGE_BUCKETS_ORDER = ["18-24", "25-34", "35-44", "45-54", "55+"];
 
 export default function PollDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const analytics = useFetch((t) => api.pollAnalytics(t, id), token, [id]);
   const bootstrap = useFetch((t) => api.bootstrap(t), token);
+  const [showEdit, setShowEdit] = useState(false);
 
   const poll = bootstrap.data?.polls.find((p) => p.id === id);
+  // Publisher can edit/delete their own poll; admin can edit anyone's.
+  const canEdit = !!user && !!poll && (user.role === "admin" || user.id === poll.publisher_id);
 
   if (analytics.loading) {
     return (
@@ -99,12 +106,22 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
         title={poll?.title ?? "تحليل الاستطلاع"}
         subtitle={poll?.description ?? "تحليل ديموغرافي وسلوكي كامل مع جودة العيّنة."}
         right={
-          <button
-            onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition print:hidden"
-          >
-            <Download size={12} /> اطبع التحليل
-          </button>
+          <div className="flex items-center gap-2 print:hidden">
+            {canEdit && (
+              <button
+                onClick={() => setShowEdit(true)}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
+              >
+                <Pencil size={12} /> تعديل الاستطلاع
+              </button>
+            )}
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
+            >
+              <Download size={12} /> اطبع التحليل
+            </button>
+          </div>
         }
       />
 
@@ -216,6 +233,33 @@ export default function PollDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         )}
       </main>
+
+      {token && poll && (
+        <Modal
+          open={showEdit}
+          onClose={() => setShowEdit(false)}
+          title="تعديل الاستطلاع"
+          subtitle="حدّث العنوان والصورة والإعدادات. لا يمكن تعديل الخيارات بعد بدء التصويت."
+          width="lg"
+        >
+          <EditPollModal
+            token={token}
+            poll={poll}
+            isAdmin={user?.role === "admin"}
+            isGovernment={user?.account_type === "government"}
+            isVerified={!!user?.is_verified}
+            onClose={() => setShowEdit(false)}
+            onSaved={() => {
+              setShowEdit(false);
+              bootstrap.refresh();
+            }}
+            onDeleted={() => {
+              setShowEdit(false);
+              router.push("/polls");
+            }}
+          />
+        </Modal>
+      )}
     </>
   );
 }

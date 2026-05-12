@@ -121,6 +121,49 @@ export const api = {
     return request("/surveys/create", { method: "POST", body, token });
   },
 
+  // Editing an existing poll/survey is restricted to metadata fields
+  // (title, description, image, topic, expiry) — the backend will not
+  // let us mutate options/questions because the cast votes/responses
+  // reference them by id.
+  updatePoll(
+    token: string,
+    id: string,
+    body: {
+      title?: string;
+      description?: string;
+      image_url?: string | null;
+      cover_style?: string | null;
+      topic_id?: string | null;
+      voter_audience?: "public" | "verified" | "verified_citizen";
+      expires_at?: string;
+    },
+  ): Promise<{ poll: Poll }> {
+    return request(`/polls/${id}`, { method: "PATCH", body, token });
+  },
+
+  deletePoll(token: string, id: string): Promise<{ ok: true }> {
+    return request(`/polls/${id}`, { method: "DELETE", token });
+  },
+
+  updateSurvey(
+    token: string,
+    id: string,
+    body: {
+      title?: string;
+      description?: string;
+      image_url?: string | null;
+      cover_style?: string | null;
+      topic_id?: string | null;
+      expires_at?: string;
+    },
+  ): Promise<{ survey: Survey }> {
+    return request(`/surveys/${id}`, { method: "PATCH", body, token });
+  },
+
+  deleteSurvey(token: string, id: string): Promise<{ ok: true }> {
+    return request(`/surveys/${id}`, { method: "DELETE", token });
+  },
+
   pollAnalytics(token: string, pollId: string): Promise<PollAnalytics> {
     return request(`/analytics/poll/${pollId}`, { token });
   },

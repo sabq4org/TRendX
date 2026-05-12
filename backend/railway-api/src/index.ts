@@ -1166,6 +1166,124 @@ app.post("/polls/create", async (c) => {
   return c.json({ poll: pollDTO(poll, { userId }) });
 });
 
+// MARK: - Edit + delete an existing poll
+//
+// Once a poll has votes we can't change its *options* (the votes
+// reference option ids and would become orphaned), but the publisher
+// is free to fix typos in the title/description, swap the cover image,
+// re-classify the topic, or extend the close date. Admins can do the
+// same on anyone's poll for moderation.
+
+app.patch("/polls/:id", async (c) => {
+  const userId = c.get("userId");
+  const pollId = c.req.param("id");
+  const body = await c.req.json<{
+    title?: string;
+    description?: string;
+    image_url?: string | null;
+    cover_style?: string | null;
+    topic_id?: string | null;
+    voter_audience?: "public" | "verified" | "verified_citizen";
+    expires_at?: string;
+  }>();
+
+  const [poll, actor] = await Promise.all([
+    prisma.poll.findUnique({ where: { id: pollId } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, isVerified: true, accountType: true },
+    }),
+  ]);
+  if (!poll) return c.json({ error: "Poll not found" }, 404);
+  if (!actor) return c.json({ error: "Profile not found" }, 404);
+  const isOwner = poll.publisherId === userId;
+  const isAdmin = actor.role === "admin";
+  if (!isOwner && !isAdmin) return c.json({ error: "Forbidden" }, 403);
+
+  // Validate length-limited fields the same way create does so a
+  // malformed client can't bypass the limits by routing through PATCH.
+  const data: Record<string, unknown> = {};
+  if (typeof body.title === "string") {
+    const t = body.title.trim();
+    if (t.length < 4 || t.length > 200) {
+      return c.json({ error: "عنوان الاستطلاع يجب أن يكون من 4 إلى 200 حرف." }, 400);
+    }
+    data.title = t;
+  }
+  if (typeof body.description === "string") {
+    if (body.description.length > 1000) {
+      return c.json({ error: "وصف الاستطلاع لا يتجاوز 1000 حرف." }, 400);
+    }
+    data.description = body.description.length ? body.description : null;
+  }
+  if (body.image_url !== undefined) {
+    if (body.image_url !== null && body.image_url.length > 2048) {
+      return c.json({ error: "image_url must be a URL (≤ 2048 chars)." }, 400);
+    }
+    data.imageUrl = body.image_url || null;
+  }
+  if (body.cover_style !== undefined) {
+    data.coverStyle = body.cover_style || null;
+  }
+  if (body.topic_id !== undefined) {
+    data.topicId = body.topic_id || null;
+  }
+  if (body.voter_audience) {
+    // Same eligibility rules as /polls/create — only verified accounts
+    // can gate on verified, only gov on verified_citizen.
+    if (body.voter_audience === "verified" && !actor.isVerified && !isAdmin) {
+      return c.json({ error: "Verified-only requires a verified account." }, 403);
+    }
+    if (
+      body.voter_audience === "verified_citizen" &&
+      actor.accountType !== "government" &&
+      !isAdmin
+    ) {
+      return c.json({ error: "Verified-citizen requires a government account." }, 403);
+    }
+    data.voterAudience = body.voter_audience;
+  }
+  if (body.expires_at) {
+    const next = new Date(body.expires_at);
+    if (Number.isNaN(next.getTime()) || next.getTime() <= Date.now()) {
+      return c.json({ error: "expires_at must be a future ISO date." }, 400);
+    }
+    data.expiresAt = next;
+  }
+
+  const updated = await prisma.poll.update({
+    where: { id: pollId },
+    data,
+    include: {
+      options: { orderBy: { displayOrder: "asc" } },
+      topic: true,
+      publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true } },
+    },
+  });
+  return c.json({ poll: pollDTO(updated, { userId }) });
+});
+
+app.delete("/polls/:id", async (c) => {
+  const userId = c.get("userId");
+  const pollId = c.req.param("id");
+  const [poll, actor] = await Promise.all([
+    prisma.poll.findUnique({
+      where: { id: pollId },
+      select: { id: true, publisherId: true },
+    }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
+  ]);
+  if (!poll) return c.json({ error: "Poll not found" }, 404);
+  if (!actor) return c.json({ error: "Profile not found" }, 404);
+  const isOwner = poll.publisherId === userId;
+  const isAdmin = actor.role === "admin";
+  if (!isOwner && !isAdmin) return c.json({ error: "Forbidden" }, 403);
+  // Schema is ON DELETE CASCADE for options, votes, reposts, and
+  // comments — no need to clean those up manually.
+  await prisma.poll.delete({ where: { id: pollId } });
+  return c.json({ ok: true });
+});
+
 app.post("/polls/vote", async (c) => {
   const userId = c.get("userId");
   const body = await c.req.json<{
@@ -1475,6 +1593,103 @@ app.post("/surveys/create", async (c) => {
     },
   });
   return c.json({ survey: surveyDTO(survey) });
+});
+
+// MARK: - Edit + delete an existing survey
+//
+// Same constraints as polls: editing existing questions/options would
+// invalidate the cast responses, so we restrict mutations to the safe
+// metadata fields (title, description, cover image, topic, expiry).
+
+app.patch("/surveys/:id", async (c) => {
+  const userId = c.get("userId");
+  const surveyId = c.req.param("id");
+  const body = await c.req.json<{
+    title?: string;
+    description?: string;
+    image_url?: string | null;
+    cover_style?: string | null;
+    topic_id?: string | null;
+    expires_at?: string;
+  }>();
+
+  const [survey, actor] = await Promise.all([
+    prisma.survey.findUnique({ where: { id: surveyId } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
+  ]);
+  if (!survey) return c.json({ error: "Survey not found" }, 404);
+  if (!actor) return c.json({ error: "Profile not found" }, 404);
+  const isOwner = survey.publisherId === userId;
+  const isAdmin = actor.role === "admin";
+  if (!isOwner && !isAdmin) return c.json({ error: "Forbidden" }, 403);
+
+  const data: Record<string, unknown> = {};
+  if (typeof body.title === "string") {
+    const t = body.title.trim();
+    if (t.length < 4 || t.length > 200) {
+      return c.json({ error: "عنوان الاستبيان يجب أن يكون من 4 إلى 200 حرف." }, 400);
+    }
+    data.title = t;
+  }
+  if (typeof body.description === "string") {
+    if (body.description.length > 2000) {
+      return c.json({ error: "وصف الاستبيان لا يتجاوز 2000 حرف." }, 400);
+    }
+    data.description = body.description.length ? body.description : null;
+  }
+  if (body.image_url !== undefined) {
+    if (body.image_url !== null && body.image_url.length > 2048) {
+      return c.json({ error: "image_url must be a URL (≤ 2048 chars)." }, 400);
+    }
+    data.imageUrl = body.image_url || null;
+  }
+  if (body.cover_style !== undefined) {
+    data.coverStyle = body.cover_style || null;
+  }
+  if (body.topic_id !== undefined) {
+    data.topicId = body.topic_id || null;
+  }
+  if (body.expires_at) {
+    const next = new Date(body.expires_at);
+    if (Number.isNaN(next.getTime()) || next.getTime() <= Date.now()) {
+      return c.json({ error: "expires_at must be a future ISO date." }, 400);
+    }
+    data.expiresAt = next;
+  }
+
+  const updated = await prisma.survey.update({
+    where: { id: surveyId },
+    data,
+    include: {
+      questions: {
+        orderBy: { displayOrder: "asc" },
+        include: { options: { orderBy: { displayOrder: "asc" } } },
+      },
+      topic: true,
+      publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, avatarInitial: true } },
+    },
+  });
+  return c.json({ survey: surveyDTO(updated) });
+});
+
+app.delete("/surveys/:id", async (c) => {
+  const userId = c.get("userId");
+  const surveyId = c.req.param("id");
+  const [survey, actor] = await Promise.all([
+    prisma.survey.findUnique({
+      where: { id: surveyId },
+      select: { id: true, publisherId: true },
+    }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
+  ]);
+  if (!survey) return c.json({ error: "Survey not found" }, 404);
+  if (!actor) return c.json({ error: "Profile not found" }, 404);
+  const isOwner = survey.publisherId === userId;
+  const isAdmin = actor.role === "admin";
+  if (!isOwner && !isAdmin) return c.json({ error: "Forbidden" }, 403);
+  // CASCADE deletes questions / options / responses / answers.
+  await prisma.survey.delete({ where: { id: surveyId } });
+  return c.json({ ok: true });
 });
 
 app.post("/surveys/:id/respond", async (c) => {

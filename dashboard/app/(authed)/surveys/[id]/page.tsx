@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { useFetch } from "@/lib/use-fetch";
@@ -10,9 +11,11 @@ import { QualityBadge } from "@/components/QualityBadge";
 import { ChartCard } from "@/components/ChartCard";
 import { HBar } from "@/components/charts/HBar";
 import { Donut } from "@/components/charts/Donut";
+import { Modal } from "@/components/Modal";
+import { EditSurveyModal } from "@/components/EditSurveyModal";
 import { fmtInt, fmtSeconds, fmtPctRaw, deviceLabel, genderLabel } from "@/lib/format";
 import clsx from "clsx";
-import { Sparkles, Download } from "lucide-react";
+import { Sparkles, Download, Pencil } from "lucide-react";
 import type { SurveyAIReport } from "@/lib/types";
 import { SurveyHeatmapsTab } from "@/components/survey/HeatmapsTab";
 import { SurveyPersonasTab } from "@/components/survey/PersonasTab";
@@ -31,10 +34,12 @@ const TAB_LABELS: Record<Tab, string> = {
 
 export default function SurveyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
   const analytics = useFetch((t) => api.surveyAnalytics(t, id), token, [id]);
   const survey = useFetch((t) => api.surveyDetail(t, id), token, [id]);
   const [tab, setTab] = useState<Tab>("summary");
+  const [showEdit, setShowEdit] = useState(false);
   const [aiState, setAIState] = useState<{ loading: boolean; data: SurveyAIReport | null; error: string | null }>(
     { loading: false, data: null, error: null },
   );
@@ -75,6 +80,7 @@ export default function SurveyDetailPage({ params }: { params: Promise<{ id: str
 
   const a = analytics.data;
   const s = survey.data;
+  const canEdit = !!user && (user.role === "admin" || user.id === s.publisher_id);
 
   return (
     <>
@@ -83,12 +89,22 @@ export default function SurveyDetailPage({ params }: { params: Promise<{ id: str
         title={s.title}
         subtitle={s.description ?? "تحليل ذكاء استبياني كامل"}
         right={
-          <button
-            onClick={() => token && window.open(`/reports/survey/${s.id}?token=${token}`, "_blank")}
-            className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
-          >
-            <Download size={12} /> تقرير قابل للطباعة
-          </button>
+          <div className="flex items-center gap-2">
+            {canEdit && (
+              <button
+                onClick={() => setShowEdit(true)}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
+              >
+                <Pencil size={12} /> تعديل الاستبيان
+              </button>
+            )}
+            <button
+              onClick={() => token && window.open(`/reports/survey/${s.id}?token=${token}`, "_blank")}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-2 rounded-chip border border-ink-line hover:border-brand-500 hover:text-brand-600 transition"
+            >
+              <Download size={12} /> تقرير قابل للطباعة
+            </button>
+          </div>
         }
       />
 
@@ -404,6 +420,30 @@ export default function SurveyDetailPage({ params }: { params: Promise<{ id: str
           </div>
         )}
       </main>
+
+      {token && (
+        <Modal
+          open={showEdit}
+          onClose={() => setShowEdit(false)}
+          title="تعديل الاستبيان"
+          subtitle="حدّث العنوان والصورة والإعدادات. لا يمكن تعديل الأسئلة بعد بدء جمع الردود."
+          width="lg"
+        >
+          <EditSurveyModal
+            token={token}
+            survey={s}
+            onClose={() => setShowEdit(false)}
+            onSaved={() => {
+              setShowEdit(false);
+              survey.refresh();
+            }}
+            onDeleted={() => {
+              setShowEdit(false);
+              router.push("/surveys");
+            }}
+          />
+        </Modal>
+      )}
     </>
   );
 }

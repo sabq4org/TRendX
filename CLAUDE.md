@@ -115,6 +115,14 @@ Polls and surveys carry an optional `image_url` (the iOS app's `TrendXEditorialC
 - Limits: `/api/upload` rejects > 5 MB raw and non-(JPEG|PNG|WebP). Backend `POST /polls/create` and `POST /surveys/create` cap `image_url` at 2048 chars so a malformed client can't store JSON in the column.
 - The iOS `TrendXEditorialCover` accepts both `https://` URLs and base64 `data:` URIs (legacy avatar path), so older builds keep working.
 
+### Editing & deleting polls/surveys (added 2026-05-12)
+
+Publishers can revise an existing poll or survey from the dashboard detail page — useful both for fixing typos and for **adding a cover image to content that was already published** without one.
+
+- Backend: `PATCH /polls/:id` and `PATCH /surveys/:id` mutate the safe metadata only (title, description, `image_url`, `cover_style`, `topic_id`, `expires_at`; polls also `voter_audience`). `DELETE /polls/:id` and `DELETE /surveys/:id` hard-delete and rely on `ON DELETE CASCADE` to clean up options/votes/responses/comments. Both require the caller to be the publisher *or* `role = admin`.
+- **Why options/questions aren't editable**: cast votes and survey answers reference the option/question ids; mutating them would orphan the existing data. The dashboard surfaces an inline note explaining this — publishers must delete and recreate if they need a different question set.
+- Dashboard UI: edit pencil in the header of `app/(authed)/polls/[id]` and `app/(authed)/surveys/[id]`. The modals reuse `CoverImagePicker`, so the upload path is identical to creation. A red "حذف" action at the bottom-leading of the modal asks for inline confirmation before issuing `DELETE`. After save the page refreshes its data; after delete it routes back to the list.
+
 ### Retention & engagement layer (added 2026-05-11)
 
 Three on-device hooks back this engagement loop:

@@ -53,14 +53,18 @@ export type Poll = {
   id: string;
   title: string;
   description: string | null;
+  image_url: string | null;
+  cover_style: string | null;
   publisher_id: string | null;
   author_name: string;
   author_avatar: string;
+  author_avatar_url?: string | null;
   topic_id: string | null;
   topic_name: string | null;
   topic_tags: string[];
   type: string;
   status: "active" | "ended" | "draft";
+  voter_audience?: "public" | "verified" | "verified_citizen";
   total_votes: number;
   total_views: number;
   reward_points: number;
@@ -77,6 +81,8 @@ export type Survey = {
   id: string;
   title: string;
   description: string | null;
+  image_url?: string | null;
+  cover_style?: string | null;
   publisher_id: string | null;
   topic_id: string | null;
   topic_name: string | null;
