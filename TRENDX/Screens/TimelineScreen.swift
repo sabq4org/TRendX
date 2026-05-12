@@ -55,6 +55,7 @@ struct TimelineItem: Decodable, Identifiable {
     let voter: TimelinePublisher?
     let reposter: TimelinePublisher?
     let poll: PollPayload?
+    let survey: SurveyPayload?
     let leaderText: String?
     let leaderPercentage: Int?
     let choice: String?
@@ -82,6 +83,22 @@ struct TimelineItem: Decodable, Identifiable {
         let totalVotes: Int?
         let rewardPoints: Int?
         let coverStyle: String?
+    }
+
+    /// Survey payload exposed by `survey_published` activity items.
+    /// Mirrors the slim slice of `surveyDTO` the timeline card needs —
+    /// without this field the survey cards rendered blank because the
+    /// previous code only knew how to read from `poll`.
+    struct SurveyPayload: Decodable {
+        let id: UUID
+        let title: String
+        let description: String?
+        let topicName: String?
+        let totalResponses: Int?
+        let totalCompletes: Int?
+        let completionRate: Int?
+        let authorName: String?
+        let authorAccountType: String?
     }
 }
 
@@ -159,6 +176,16 @@ struct TimelineScreen: View {
     @EnvironmentObject private var store: AppStore
     @StateObject private var vm: TimelineViewModel
     @Environment(\.dismiss) private var dismiss
+    /// Poll selected from a timeline card. Drives a sheet with the
+    /// full PollDetailView so taps on radar cards actually open the
+    /// poll — the previous TimelineCard had no tap handler at all.
+    /// Wrapped in an Identifiable struct because `sheet(item:)`
+    /// requires the bound value to conform to Identifiable.
+    @State private var selectedPollId: SelectedPoll?
+
+    private struct SelectedPoll: Identifiable, Hashable {
+        let id: UUID
+    }
 
     init(store: AppStore) {
         _vm = StateObject(wrappedValue: TimelineViewModel(store: store))
@@ -186,8 +213,13 @@ struct TimelineScreen: View {
                             .padding(.top, 28)
                     } else {
                         ForEach(vm.items) { item in
-                            TimelineCard(item: item)
-                                .padding(.horizontal, 20)
+                            Button {
+                                handleTap(on: item)
+                            } label: {
+                                TimelineCard(item: item)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 20)
                         }
 
                         if vm.isLoading {
@@ -216,20 +248,45 @@ struct TimelineScreen: View {
         .navigationTitle("الرادار")
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.reload() }
+        .sheet(item: $selectedPollId) { wrapper in
+            PollDetailView(pollId: wrapper.id)
+                .environmentObject(store)
+                .trendxRTL()
+        }
+    }
+
+    /// Route a card tap to the right destination based on its kind.
+    /// Polls / reposts / public votes / results / sector_trending all
+    /// open the underlying poll detail. Stories and survey cards are
+    /// no-ops for now — they need their own detail screens which
+    /// aren't part of this rebuild.
+    private func handleTap(on item: TimelineItem) {
+        switch item.kind {
+        case .poll_published, .vote_cast, .repost, .poll_results, .sector_trending:
+            if let id = item.poll?.id {
+                selectedPollId = SelectedPoll(id: id)
+            }
+        case .survey_published, .story:
+            // No dedicated detail screen yet — swallow the tap rather
+            // than misroute the user to an irrelevant sheet.
+            break
+        }
     }
 
     // MARK: - Header
 
-    /// Compact eyebrow + tab strip. The eyebrow line — "نبض المملكة
-    /// الحي" — gives the screen a clear identity so the user knows
-    /// what they're looking at without scrolling.
+    /// Compact eyebrow + tab strip. The eyebrow uses the established
+    /// "نبض السعودية" brand line (same wording the daily Pulse, the
+    /// dashboard, and the TrendX Index all use) with "الحي" added so
+    /// the radar is positioned as the live counterpart to the daily
+    /// Pulse without inventing a new term.
     private var headerStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(TrendXTheme.aiIndigo)
-                Text("نبض المملكة الحي")
+                Text("نبض السعودية الحي")
                     .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(TrendXTheme.aiIndigo)
                 Spacer(minLength: 0)
@@ -287,23 +344,25 @@ struct TimelineScreen: View {
             HStack(spacing: 8) {
                 sectorChip(name: "كل القطاعات", icon: "circle.grid.3x3.fill", topicId: nil)
                 ForEach(store.topics) { topic in
-                    sectorChip(name: topic.name, icon: nil, emoji: topic.icon, topicId: topic.id)
+                    // Topic.icon is an SF Symbol name ("person.3.fill",
+                    // "newspaper.fill", …) — not an emoji. Earlier code
+                    // passed it as `emoji` which rendered the literal
+                    // string. Hand it to the SF Symbol path instead.
+                    sectorChip(name: topic.name, icon: topic.icon, topicId: topic.id)
                 }
             }
             .padding(.horizontal, 20)
         }
     }
 
-    private func sectorChip(name: String, icon: String? = nil, emoji: String? = nil, topicId: UUID?) -> some View {
+    private func sectorChip(name: String, icon: String?, topicId: UUID?) -> some View {
         let isSelected = vm.focusedTopicId == topicId
         return Button {
             vm.focusedTopicId = topicId
             Task { await vm.reload() }
         } label: {
             HStack(spacing: 5) {
-                if let emoji {
-                    Text(emoji).font(.system(size: 12))
-                } else if let icon {
+                if let icon {
                     Image(systemName: icon)
                         .font(.system(size: 10, weight: .heavy))
                 }
@@ -493,8 +552,16 @@ private struct TimelineCard: View {
     @ViewBuilder
     private var content: some View {
         switch item.kind {
-        case .poll_published, .survey_published:
+        case .poll_published:
             publishedBody
+        case .survey_published:
+            // Surveys carry their own payload separate from `poll`.
+            // The earlier code routed them through `publishedBody`
+            // which only knew how to read `item.poll`, so every
+            // survey card rendered as just the "استبيان جديد"
+            // eyebrow with empty body — hence the user's complaint
+            // about the label repeating with no content.
+            surveyBody
         case .vote_cast:
             voteBody
         case .repost:
@@ -505,6 +572,45 @@ private struct TimelineCard: View {
             trendingBody
         case .story:
             storyBody
+        }
+    }
+
+    private var surveyBody: some View {
+        HStack(alignment: .top, spacing: 12) {
+            if let pub = item.publisher {
+                AccountAvatar(user: pub.asUser, size: 44)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                if let pub = item.publisher {
+                    AccountNameRow(user: pub.asUser, nameFont: .system(size: 13, weight: .heavy))
+                }
+                if let title = item.survey?.title {
+                    Text(title)
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(TrendXTheme.ink)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+                if let desc = item.survey?.description, !desc.isEmpty {
+                    Text(desc)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                        .lineLimit(2)
+                }
+                HStack(spacing: 12) {
+                    if let topic = item.survey?.topicName {
+                        Label(topic, systemImage: "tag.fill")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                    if let responses = item.survey?.totalResponses, responses > 0 {
+                        Label("\(responses) مشارك", systemImage: "person.2.fill")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
         }
     }
 
