@@ -41,8 +41,14 @@ struct ContentView: View {
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
 
-                    // Custom Tab Bar
-                    TrendXTabBar(selectedTab: $store.selectedTab)
+                    // Custom Tab Bar — re-tapping the active Home tab
+                    // bumps the scroll-to-top trigger so HomeScreen can
+                    // jump back to the top of its feed.
+                    TrendXTabBar(selectedTab: $store.selectedTab) { tab in
+                        if tab == .home {
+                            store.homeScrollToTopTrigger &+= 1
+                        }
+                    }
 
                     if let message = store.appMessage {
                         BetaStatusBanner(message: message) {
@@ -81,8 +87,11 @@ struct ContentView: View {
             // When the user brings the app back to the foreground, pull
             // the latest polls / surveys / pulse so anything published
             // from the dashboard shows up without needing pull-to-refresh.
+            // Throttled to one bootstrap every 90s — a quick tab-out
+            // and back used to fire a fresh network round-trip and
+            // make every resume feel sluggish.
             guard newPhase == .active, store.isAuthenticated else { return }
-            Task { await store.refreshBootstrap() }
+            Task { await store.refreshBootstrapIfStale() }
         }
     }
 }

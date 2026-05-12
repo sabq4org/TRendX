@@ -9,13 +9,22 @@ import SwiftUI
 
 struct TrendXTabBar: View {
     @Binding var selectedTab: TabItem
-    
+    /// Fires when the user taps the *already-selected* tab. Lets the
+    /// hosting screen do something useful on the re-tap (e.g. scroll
+    /// the home feed back to the top) instead of swallowing it as a
+    /// no-op assignment.
+    var onReselect: ((TabItem) -> Void)? = nil
+
     var body: some View {
         HStack(spacing: 0) {
             ForEach(TabItem.allCases, id: \.self) { tab in
                 TabBarButton(tab: tab, isSelected: selectedTab == tab) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        selectedTab = tab
+                    if selectedTab == tab {
+                        onReselect?(tab)
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedTab = tab
+                        }
                     }
                 }
             }
@@ -80,6 +89,15 @@ struct TabBarButton: View {
 struct HomeHeader: View {
     let userName: String
     let points: Int
+    /// Optional avatar URL — when present the welcome circle renders
+    /// the user's actual photo instead of the initial. Accepts both
+    /// remote http(s) URLs and inline base64 `data:` URLs (uploaded
+    /// via the profile editor's PhotosPicker).
+    var avatarUrl: String? = nil
+    /// Coin balance (نقاط ÷ ٦) — shown as the middle metric capsule
+    /// so the hero has three distinct values instead of the older
+    /// static "AI · رادار" label that duplicated the antenna button.
+    var coins: Double = 0
     var unreadNotifications: Int = 0
     var isGuest: Bool = false
     var onSignInTap: () -> Void = {}
@@ -140,9 +158,20 @@ struct HomeHeader: View {
                 Circle()
                     .stroke(Color.white.opacity(0.45), lineWidth: 1)
                     .frame(width: 52, height: 52)
-                Text(String(userName.prefix(1)))
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
+
+                if let avatarUrl, !avatarUrl.isEmpty {
+                    TrendXProfileImage(urlString: avatarUrl) {
+                        Text(String(userName.prefix(1)))
+                            .font(.system(size: 20, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+                } else {
+                    Text(String(userName.prefix(1)))
+                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                }
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -195,8 +224,8 @@ struct HomeHeader: View {
             .fixedSize(horizontal: false, vertical: true)
 
         HStack(spacing: 10) {
-            MetricCapsule(icon: "star.circle.fill", value: "\(points)", label: "رصيد", tint: TrendXTheme.accent)
-            MetricCapsule(icon: "sparkles", value: "AI", label: "رادار", tint: TrendXTheme.info)
+            MetricCapsule(icon: "star.circle.fill", value: "\(points)", label: "نقطة", tint: TrendXTheme.accent)
+            MetricCapsule(icon: "dollarsign.circle.fill", value: String(format: "%.1f", coins), label: "ريال", tint: TrendXTheme.success)
             MetricCapsule(icon: "newspaper.fill", value: "مجلة", label: "اليوم", tint: TrendXTheme.warning)
         }
     }
@@ -589,22 +618,6 @@ struct PollCard: View {
         poll.authorAccountType == .government || poll.voterAudience != "public"
     }
 
-    /// Accent color used *inside* the card. For official polls we keep
-    /// the whole card on the Saudi-green palette so the topic colour
-    /// (e.g. media's pink) doesn't bleed inside the green-bordered
-    /// frame. For regular polls we fall back to the topic tint.
-    private var accentTint: Color {
-        isOfficial ? TrendXTheme.saudiGreen : tint
-    }
-    private var accentGradientColors: [Color] {
-        isOfficial
-            ? [TrendXTheme.saudiGreenDeep, TrendXTheme.saudiGreen, TrendXTheme.saudiGreenLight]
-            : topicStyle.gradient
-    }
-    private var accentWash: Color {
-        isOfficial ? TrendXTheme.saudiGreenWash : topicStyle.wash
-    }
-
     /// String that can be passed to `/users/:idOrHandle`. Prefers the
     /// publisher's UUID (always present when the post comes from the
     /// API) and falls back to the handle.
@@ -614,40 +627,36 @@ struct PollCard: View {
         return nil
     }
 
-    var body: some View {
-        // Official polls no longer get a green ribbon + green border +
-        // green tinted shadow. That treatment fought with the topic
-        // colours inside ("متنافر مع الألوان الأخرى"). Instead we
-        // surface the official status only via the small inline pill
-        // next to the topic name (rendered inside `cardBody`).
-        HStack(alignment: .top, spacing: 0) {
-            LinearGradient(
-                colors: topicStyle.gradient,
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: 5)
-            .clipShape(
-                UnevenRoundedRectangle(
-                    topLeadingRadius: 20,
-                    bottomLeadingRadius: 20,
-                    bottomTrailingRadius: 0,
-                    topTrailingRadius: 0,
-                    style: .continuous
-                )
-            )
-
-            cardBody
-        }
-        .background(TrendXTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(TrendXTheme.outline, lineWidth: 0.8)
+    /// Lightweight `TrendXUser` synthesized from the poll's cached
+    /// author fields. Lets us reuse the shared `AccountAvatar` and
+    /// `AccountTypeBadge` components instead of duplicating the avatar
+    /// + verification logic inline.
+    private var authorAsUser: TrendXUser {
+        TrendXUser(
+            id: poll.publisherId ?? UUID(),
+            name: poll.authorName,
+            handle: poll.authorHandle,
+            avatarInitial: poll.authorAvatar,
+            avatarUrl: poll.authorAvatarUrl,
+            accountType: poll.authorAccountType,
+            isVerified: poll.authorIsVerified
         )
-        .shadow(color: tint.opacity(0.12), radius: 18, x: 0, y: 8)
-        .shadow(color: TrendXTheme.shadow, radius: 4, x: 0, y: 1)
-        .opacity(poll.isExpired ? 0.82 : 1.0)
+    }
+
+    var body: some View {
+        // Topic colour is now expressed only through the topic pill,
+        // the cover hero, and the option progress bars. The card frame,
+        // shadow, and author chrome stay neutral so stacking five
+        // different topics no longer looks chaotic.
+        cardBody
+            .background(TrendXTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(TrendXTheme.outline, lineWidth: 0.8)
+            )
+            .shadow(color: TrendXTheme.shadow, radius: 14, x: 0, y: 7)
+            .opacity(poll.isExpired ? 0.82 : 1.0)
     }
 
     /// Tiny inline pill that crowns the topic row when a poll is from
@@ -680,77 +689,29 @@ struct PollCard: View {
     private var cardBody: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Header — tappable when we have a handle to navigate to.
-            // Topic colours are *not* used inside the card for gov
-            // polls; everything switches to Saudi-green via accentTint.
+            // Avatar + verification badge come from the shared identity
+            // components so visual treatment matches everywhere
+            // (timeline, profile, suggested follows, comments).
             Button {
                 if let onAuthorTap, let token = authorNavigationToken {
                     onAuthorTap(token)
                 }
             } label: {
                 HStack(spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .stroke(
-                                LinearGradient(
-                                    colors: accentGradientColors,
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1.8
-                            )
-                            .frame(width: 44, height: 44)
-
-                        // Government accounts get the institutional emblem
-                        // disc (palm + crossed lines stand-in). Everyone
-                        // else gets their initial on a tint wash.
-                        if isOfficial {
-                            ZStack {
-                                Circle()
-                                    .fill(TrendXTheme.saudiGreen)
-                                    .frame(width: 38, height: 38)
-                                Image(systemName: "leaf.fill")
-                                    .font(.system(size: 16, weight: .heavy))
-                                    .foregroundStyle(.white)
-                                    .offset(y: -2)
-                                Rectangle()
-                                    .fill(.white.opacity(0.85))
-                                    .frame(width: 14, height: 1.2)
-                                    .rotationEffect(.degrees(20))
-                                    .offset(y: 9)
-                                Rectangle()
-                                    .fill(.white.opacity(0.85))
-                                    .frame(width: 14, height: 1.2)
-                                    .rotationEffect(.degrees(-20))
-                                    .offset(y: 9)
-                            }
-                        } else {
-                            Circle()
-                                .fill(accentTint.opacity(0.10))
-                                .frame(width: 38, height: 38)
-                                .overlay(
-                                    Text(poll.authorAvatar)
-                                        .font(.system(size: 15, weight: .heavy, design: .rounded))
-                                        .foregroundStyle(accentTint)
-                                )
-                        }
-                    }
+                    AccountAvatar(user: authorAsUser, size: 44, showRing: true)
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
-                            // Author name stays neutral — never tinted with
-                            // the topic colour. Verified seal uses the
-                            // accent (Saudi-green for gov, brand otherwise).
                             Text(poll.authorName)
                                 .font(.trendxBodyBold())
                                 .foregroundStyle(TrendXTheme.ink)
                                 .lineLimit(1)
 
-                            if poll.authorIsVerified {
-                                Image(systemName: poll.authorAccountType == .government
-                                      ? "checkmark.shield.fill" : "checkmark.seal.fill")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(accentTint)
-                            }
+                            AccountTypeBadge(
+                                type: poll.authorAccountType,
+                                isVerified: poll.authorIsVerified,
+                                size: 13
+                            )
                         }
 
                         HStack(spacing: 5) {
@@ -933,10 +894,10 @@ struct PollCard: View {
                 Button(action: onBookmark) {
                     Image(systemName: poll.isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(poll.isBookmarked ? tint : TrendXTheme.secondaryInk)
+                        .foregroundStyle(poll.isBookmarked ? TrendXTheme.primary : TrendXTheme.secondaryInk)
                         .frame(width: 32, height: 32)
                         .background(
-                            Circle().fill(poll.isBookmarked ? topicStyle.wash : TrendXTheme.softFill)
+                            Circle().fill(poll.isBookmarked ? TrendXTheme.primary.opacity(0.10) : TrendXTheme.softFill)
                         )
                 }
                 .buttonStyle(.plain)
@@ -1555,105 +1516,82 @@ struct MiniPollCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(alignment: .top, spacing: 0) {
-                // Leading gradient stripe — topic signature
-                LinearGradient(
-                    colors: style.gradient,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(width: 4)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    // Topic chip + optional AI marker
-                    HStack(spacing: 6) {
-                        HStack(spacing: 5) {
-                            Image(systemName: style.glyph)
-                                .font(.system(size: 10, weight: .bold))
-                            Text(poll.topicName ?? style.label)
-                                .font(.system(size: 11, weight: .heavy, design: .rounded))
-                                .tracking(0.2)
-                        }
-                        .foregroundStyle(tint)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule().fill(style.wash)
-                        )
-                        .overlay(
-                            Capsule().stroke(style.hairline, lineWidth: 0.6)
-                        )
-
-                        Spacer(minLength: 0)
-
-                        if poll.aiInsight != nil {
-                            HStack(spacing: 3) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text("AI")
-                                    .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                    .tracking(0.3)
-                            }
-                            .foregroundStyle(TrendXTheme.aiIndigo)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule().fill(TrendXTheme.aiIndigo.opacity(0.10))
-                            )
-                            .overlay(
-                                Capsule().stroke(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 0.8)
-                            )
-                        }
+            VStack(alignment: .leading, spacing: 10) {
+                // Topic chip + optional AI marker. The chip is the
+                // single source of topic identity on the mini card —
+                // we dropped the heavy leading gradient stripe so
+                // five stacked cards no longer look like a paint
+                // palette.
+                HStack(spacing: 6) {
+                    HStack(spacing: 5) {
+                        Image(systemName: style.glyph)
+                            .font(.system(size: 10, weight: .bold))
+                        // No `.tracking()` here — positive letter
+                        // spacing breaks the joined Arabic glyphs.
+                        Text(poll.topicName ?? style.label)
+                            .font(.system(size: 11, weight: .heavy, design: .rounded))
                     }
-
-                    // Title
-                    Text(poll.title)
-                        .font(.system(size: 14.5, weight: .semibold))
-                        .foregroundStyle(TrendXTheme.ink)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .lineLimit(3)
-                        .lineSpacing(2)
+                    .foregroundStyle(tint)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(style.wash))
+                    .overlay(Capsule().stroke(style.hairline, lineWidth: 0.6))
 
                     Spacer(minLength: 0)
 
-                    // Meta row
-                    HStack(spacing: 10) {
-                        Label("\(poll.totalVotes)", systemImage: "person.2.fill")
-                            .labelStyle(.titleAndIcon)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(TrendXTheme.tertiaryInk)
-
+                    if poll.aiInsight != nil {
                         HStack(spacing: 3) {
-                            Image(systemName: "star.circle.fill")
-                                .font(.system(size: 11))
-                                .foregroundStyle(TrendXTheme.accent)
-                            Text("+\(poll.rewardPoints)")
-                                .font(.system(size: 11, weight: .bold, design: .rounded))
-                                .foregroundStyle(TrendXTheme.accentDeep)
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 9, weight: .bold))
+                            Text("AI")
+                                .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                .tracking(0.3)
                         }
-
-                        Spacer(minLength: 0)
-
-                        Image(systemName: "arrow.left")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                Circle().fill(
-                                    LinearGradient(
-                                        colors: style.gradient,
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                            )
-                            .shadow(color: tint.opacity(0.35), radius: 4, x: 0, y: 2)
+                        .foregroundStyle(TrendXTheme.aiIndigo)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(TrendXTheme.aiIndigo.opacity(0.10)))
+                        .overlay(Capsule().stroke(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 0.8))
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 16)
+
+                Text(poll.title)
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.ink)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(3)
+                    .lineSpacing(2)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 10) {
+                    Label("\(poll.totalVotes)", systemImage: "person.2.fill")
+                        .labelStyle(.titleAndIcon)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+
+                    HStack(spacing: 3) {
+                        Image(systemName: "star.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(TrendXTheme.accent)
+                        Text("+\(poll.rewardPoints)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(TrendXTheme.accentDeep)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(TrendXTheme.primaryGradient))
+                        .shadow(color: TrendXTheme.primary.opacity(0.25), radius: 4, x: 0, y: 2)
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 16)
             .frame(width: 248, height: 168)
             .background(TrendXTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -1661,7 +1599,7 @@ struct MiniPollCard: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(TrendXTheme.outline, lineWidth: 0.8)
             )
-            .shadow(color: tint.opacity(0.12), radius: 10, x: 0, y: 4)
+            .shadow(color: TrendXTheme.shadow, radius: 10, x: 0, y: 4)
         }
         .buttonStyle(.plain)
     }

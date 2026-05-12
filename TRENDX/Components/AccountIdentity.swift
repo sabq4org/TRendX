@@ -156,21 +156,20 @@ struct AccountAvatar: View {
                          : TrendXTheme.primaryGradient as LinearGradient))
                 .frame(width: size, height: size)
 
-            if let urlString = user.avatarUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        shape.clip(
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .padding(size * 0.10) // breathing room around emblems
-                        )
-                    default:
+            if let urlString = user.avatarUrl, !urlString.isEmpty {
+                // Uploaded logos fill the circle edge-to-edge — the
+                // 10% breathing-room padding was added for the
+                // SwiftUI-drawn government emblem (palm + crossed
+                // swords) and made user-uploaded logos look like
+                // "logo on top of logo" because the gradient circle
+                // beneath was still visible as a ring.
+                shape.clip(
+                    TrendXProfileImage(urlString: urlString) {
                         initialView
                     }
-                }
-                .frame(width: size, height: size)
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                )
             } else {
                 initialView
             }

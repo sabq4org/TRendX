@@ -10,6 +10,7 @@
 
 import SwiftUI
 import UIKit
+import PhotosUI
 
 struct ProfileEditScreen: View {
     @EnvironmentObject private var store: AppStore
@@ -18,10 +19,11 @@ struct ProfileEditScreen: View {
     @State private var name: String
     @State private var email: String
     @State private var avatarUrl: String
+    @State private var bannerUrl: String
     @State private var handle: String
     @State private var bio: String
     @State private var city: String
-    @State private var region: String
+    @State private var country: String
     @State private var gender: UserGender
     @State private var birthYear: Int
     @State private var accountType: AccountType
@@ -31,6 +33,14 @@ struct ProfileEditScreen: View {
     @State private var showSuccessToast = false
     @State private var handleHint: String?
 
+    /// Photo picker selections. We immediately transcode the selection
+    /// into a compressed base64 data-URL and stuff it into avatarUrl /
+    /// bannerUrl, so the next "Save" round-trips it through the existing
+    /// `/profile` endpoint without needing a separate upload pipeline.
+    @State private var avatarItem: PhotosPickerItem?
+    @State private var bannerItem: PhotosPickerItem?
+    @State private var isProcessingImage = false
+
     private let originalUser: TrendXUser
 
     init(user: TrendXUser) {
@@ -38,10 +48,14 @@ struct ProfileEditScreen: View {
         _name = State(initialValue: user.name)
         _email = State(initialValue: user.email)
         _avatarUrl = State(initialValue: user.avatarUrl ?? "")
+        _bannerUrl = State(initialValue: user.bannerUrl ?? "")
         _handle = State(initialValue: user.handle ?? "")
         _bio = State(initialValue: user.bio ?? "")
         _city = State(initialValue: user.city ?? "")
-        _region = State(initialValue: user.region ?? "")
+        // The country picker mirrors `user.country` (ISO-2 code, e.g.
+        // "SA"). Falls back to Saudi Arabia for fresh accounts so the
+        // form starts at the most likely choice rather than empty.
+        _country = State(initialValue: user.country.isEmpty ? "SA" : user.country)
         _gender = State(initialValue: user.gender)
         _birthYear = State(initialValue: user.birthYear ?? 2000)
         _accountType = State(initialValue: user.accountType)
@@ -51,10 +65,11 @@ struct ProfileEditScreen: View {
         name != originalUser.name
             || email != originalUser.email
             || (avatarUrl.isEmpty ? nil : avatarUrl) != originalUser.avatarUrl
+            || (bannerUrl.isEmpty ? nil : bannerUrl) != originalUser.bannerUrl
             || (handle.isEmpty ? nil : handle) != originalUser.handle
             || (bio.isEmpty ? nil : bio) != originalUser.bio
             || (city.isEmpty ? nil : city) != originalUser.city
-            || (region.isEmpty ? nil : region) != originalUser.region
+            || country != (originalUser.country.isEmpty ? "SA" : originalUser.country)
             || gender != originalUser.gender
             || birthYear != (originalUser.birthYear ?? 2000)
             || accountType != originalUser.accountType
@@ -135,35 +150,44 @@ struct ProfileEditScreen: View {
 
     private var avatarHero: some View {
         VStack(spacing: 12) {
-            ZStack(alignment: .bottomTrailing) {
+            // Banner picker — only meaningful for organizations and
+            // government accounts that want a branded header on their
+            // public profile. Individuals can still set one if they like.
+            bannerStrip
+
+            // Avatar circle + camera badge. The PhotosPicker is hosted
+            // via `.overlay(alignment:)` rather than as a ZStack child
+            // so its hit region isn't shadowed by the avatar image
+            // sitting in the same ZStack. This was the root cause of
+            // the camera badge looking right but never opening the
+            // picker on tap.
+            ZStack {
                 Circle()
                     .fill(TrendXTheme.primaryGradient)
                     .frame(width: 110, height: 110)
                     .shadow(color: TrendXTheme.primary.opacity(0.35), radius: 18, x: 0, y: 10)
 
-                if let url = URL(string: avatarUrl), !avatarUrl.isEmpty {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            avatarInitialView
-                        }
-                    }
+                TrendXProfileImage(urlString: avatarUrl)
                     .frame(width: 104, height: 104)
                     .clipShape(Circle())
-                } else {
-                    avatarInitialView
+                    .allowsHitTesting(false)
+            }
+            .frame(width: 110, height: 110)
+            .overlay(alignment: .bottomTrailing) {
+                PhotosPicker(selection: $avatarItem, matching: .images) {
+                    ZStack {
+                        Circle()
+                            .fill(TrendXTheme.accent)
+                            .frame(width: 38, height: 38)
+                            .overlay(Circle().stroke(.white, lineWidth: 2.5))
+                            .shadow(color: TrendXTheme.accent.opacity(0.35), radius: 6, x: 0, y: 3)
+                        Image(systemName: isProcessingImage ? "hourglass" : "camera.fill")
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(.white)
+                    }
+                    .contentShape(Circle())
                 }
-
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(TrendXTheme.accent))
-                    .overlay(Circle().stroke(.white, lineWidth: 2.5))
-                    .shadow(color: TrendXTheme.accent.opacity(0.35), radius: 6, x: 0, y: 3)
-                    .offset(x: 4, y: 4)
+                .offset(x: 4, y: 4)
             }
 
             VStack(spacing: 4) {
@@ -175,6 +199,60 @@ struct ProfileEditScreen: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
+        .onChange(of: avatarItem) { _, newValue in
+            Task { await loadPickedImage(newValue, target: .avatar) }
+        }
+        .onChange(of: bannerItem) { _, newValue in
+            Task { await loadPickedImage(newValue, target: .banner) }
+        }
+    }
+
+    private var bannerStrip: some View {
+        // Banner preview + picker, with the picker hosted as a
+        // `.overlay` so its hit area isn't intercepted by the image
+        // beneath it (same fix as the avatar camera badge below).
+        TrendXProfileImage(urlString: bannerUrl) {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        TrendXTheme.primary.opacity(0.20),
+                        TrendXTheme.aiViolet.opacity(0.15)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                VStack(spacing: 4) {
+                    Image(systemName: "photo.fill.on.rectangle.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(TrendXTheme.primary.opacity(0.7))
+                    Text("غلاف الصفحة العامة")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 100, maxHeight: 100)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(TrendXTheme.outline, lineWidth: 0.8)
+        )
+        .allowsHitTesting(false)
+        .overlay(alignment: .bottomLeading) {
+            PhotosPicker(selection: $bannerItem, matching: .images) {
+                HStack(spacing: 6) {
+                    Image(systemName: "photo.fill")
+                        .font(.system(size: 10, weight: .heavy))
+                    Text(bannerUrl.isEmpty ? "اختر الغلاف" : "تغيير الغلاف")
+                        .font(.system(size: 11, weight: .heavy))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Capsule().fill(.black.opacity(0.55)))
+                .contentShape(Capsule())
+            }
+            .padding(8)
+        }
     }
 
     private var avatarInitialView: some View {
@@ -203,11 +281,51 @@ struct ProfileEditScreen: View {
             divider
             FieldRow(icon: "text.alignright", label: "نبذة", placeholder: "وصف قصير عنك أو عن حسابك", text: $bio)
             divider
-            FieldRow(icon: "photo.fill", label: "رابط الصورة", placeholder: "URL اختياري", text: $avatarUrl, keyboard: .URL, autocap: false)
-            divider
             FieldRow(icon: "mappin.and.ellipse", label: "المدينة", placeholder: "الرياض، جدة، …", text: $city)
             divider
-            FieldRow(icon: "map.fill", label: "المنطقة", placeholder: "اختياري", text: $region)
+
+            // Country picker — replaces the older free-text "المنطقة"
+            // field. ISO-2 codes go to the backend; the menu shows the
+            // Arabic name. Saudi Arabia leads the list as the default
+            // for TRENDX's primary market.
+            HStack(spacing: 12) {
+                fieldIcon("globe")
+                Text("الدولة")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .frame(width: 70, alignment: .leading)
+                Spacer(minLength: 0)
+                Menu {
+                    ForEach(TrendXCountryList.countries, id: \.code) { option in
+                        Button {
+                            country = option.code
+                        } label: {
+                            HStack {
+                                Text("\(option.flag) \(option.name)")
+                                if country == option.code {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(TrendXCountryList.displayName(forCode: country))
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.ink)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Capsule().fill(TrendXTheme.softFill))
+                    .contentShape(Capsule())
+                }
+                .menuStyle(.button)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             divider
 
             // Account type — individual or organization. Government is
@@ -342,6 +460,49 @@ struct ProfileEditScreen: View {
         .disabled(!canSave)
     }
 
+    // MARK: - Image picker handling
+
+    private enum ImageTarget { case avatar, banner }
+
+    /// Load a `PhotosPickerItem`, resize + JPEG-compress it, then encode
+    /// as a base64 `data:` URL we can ship through the existing
+    /// `/profile` endpoint. Avatars are limited to ~512px and banners to
+    /// ~1024px so the resulting payload stays small (typically <120KB).
+    private func loadPickedImage(_ item: PhotosPickerItem?, target: ImageTarget) async {
+        guard let item else { return }
+        isProcessingImage = true
+        defer { isProcessingImage = false }
+
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
+            errorMessage = "تعذّر قراءة الصورة، حاول اختيار صورة أخرى."
+            return
+        }
+        guard let original = UIImage(data: data) else {
+            errorMessage = "صيغة الصورة غير مدعومة."
+            return
+        }
+
+        // Avatars: smaller (max 480px) and tighter compression (0.6).
+        // Banners: stay a touch larger (max 960px) at 0.55. Both
+        // budgets keep the base64-encoded payload comfortably under
+        // 80KB for typical photos, down from ~150KB at quality 0.72,
+        // which the perf audit identified as the biggest contributor
+        // to slow polls-feed rendering on profile pages.
+        let maxDim: CGFloat = target == .avatar ? 480 : 960
+        let quality: CGFloat = target == .avatar ? 0.6 : 0.55
+        let resized = original.trendxResized(maxDimension: maxDim)
+        guard let jpeg = resized.jpegData(compressionQuality: quality) else {
+            errorMessage = "فشل ضغط الصورة."
+            return
+        }
+
+        let dataURL = "data:image/jpeg;base64,\(jpeg.base64EncodedString())"
+        switch target {
+        case .avatar: avatarUrl = dataURL
+        case .banner: bannerUrl = dataURL
+        }
+    }
+
     private func save() async {
         errorMessage = nil
         isSaving = true
@@ -354,11 +515,12 @@ struct ProfileEditScreen: View {
                 bio: bio.isEmpty ? nil : bio,
                 avatarInitial: String(name.trimmingCharacters(in: .whitespaces).prefix(1)),
                 avatarUrl: avatarUrl.isEmpty ? nil : avatarUrl,
+                bannerUrl: bannerUrl.isEmpty ? nil : bannerUrl,
                 accountType: accountType == .government ? nil : accountType,
                 gender: gender.rawValue,
                 birthYear: birthYear,
                 city: city.isEmpty ? nil : city,
-                region: region.isEmpty ? nil : region
+                country: country
             )
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
@@ -446,5 +608,160 @@ private struct FieldRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+    }
+}
+
+// MARK: - Image helper used by the profile preview hero
+//
+// Centralizes the "render a URL string that might be a remote http URL
+// or an inline base64 data-URL" dance. AsyncImage can't decode `data:`
+// URLs reliably, so we sniff the scheme and route accordingly.
+
+struct TrendXProfileImage<Placeholder: View>: View {
+    let urlString: String?
+    @ViewBuilder var placeholder: () -> Placeholder
+
+    init(urlString: String?, @ViewBuilder placeholder: @escaping () -> Placeholder = { EmptyView() }) {
+        self.urlString = urlString
+        self.placeholder = placeholder
+    }
+
+    var body: some View {
+        if let raw = urlString, !raw.isEmpty {
+            if raw.hasPrefix("data:") {
+                // Cached path — data: URLs are content-addressable so we
+                // can key by the URL string. Decoding 100KB+ base64
+                // images on every SwiftUI body re-evaluation was a
+                // major source of UI jank on profile screens that show
+                // the same logo dozens of times (each poll card).
+                if let ui = TrendXImageCache.shared.image(for: raw) {
+                    Image(uiImage: ui).resizable().scaledToFill()
+                } else {
+                    placeholder()
+                }
+            } else if let url = URL(string: raw) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .empty:
+                        placeholder()
+                    case .failure:
+                        placeholder()
+                    @unknown default:
+                        placeholder()
+                    }
+                }
+            } else {
+                placeholder()
+            }
+        } else {
+            placeholder()
+        }
+    }
+}
+
+// MARK: - Image cache
+
+/// Lightweight singleton wrapper around `NSCache<NSString, UIImage>`
+/// to keep decoded `data:` URLs in memory. The whole point is that
+/// each base64-encoded logo (typically 80-150KB encoded, ~250KB
+/// decoded) only gets decoded once per process. Cleared automatically
+/// under memory pressure by NSCache.
+final class TrendXImageCache {
+    static let shared = TrendXImageCache()
+    private let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 80
+        c.totalCostLimit = 32 * 1024 * 1024 // ~32 MB of decoded image data
+        return c
+    }()
+
+    private init() {}
+
+    func image(for urlString: String) -> UIImage? {
+        let key = urlString as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        guard let data = Self.decodeDataURL(urlString),
+              let image = UIImage(data: data) else { return nil }
+        // Cost ≈ pixel bytes (width × height × 4). Falls back to
+        // encoded data size when the image is opaque or has weird CG
+        // backing — close enough for our LRU budget.
+        let cost = image.cgImage.map { $0.width * $0.height * 4 } ?? data.count
+        cache.setObject(image, forKey: key, cost: cost)
+        return image
+    }
+
+    private static func decodeDataURL(_ raw: String) -> Data? {
+        guard let comma = raw.firstIndex(of: ",") else { return nil }
+        let base64Part = String(raw[raw.index(after: comma)...])
+        return Data(base64Encoded: base64Part)
+    }
+}
+
+extension UIImage {
+    /// Returns a copy scaled so the longest edge is `maxDimension` while
+    /// preserving aspect ratio. Used to keep base64-encoded avatars and
+    /// banners under ~120KB without burning device cycles re-encoding
+    /// images that are already small enough.
+    func trendxResized(maxDimension: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxDimension else { return self }
+        let scale = maxDimension / longest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+}
+
+// MARK: - Country list
+//
+// Short curated list focused on Arab markets — Saudi Arabia first since
+// that is TRENDX's primary launch market. ISO-3166 alpha-2 codes go to
+// the backend; the menu shows the Arabic name and a flag emoji so the
+// picker reads as a brand-y "where are you" rather than a dropdown of
+// 195 obscure entries. "—" code is reserved for "other" (no country
+// override).
+
+enum TrendXCountryList {
+    struct Country {
+        let code: String
+        let name: String
+        let flag: String
+    }
+
+    static let countries: [Country] = [
+        .init(code: "SA", name: "السعودية",   flag: "🇸🇦"),
+        .init(code: "AE", name: "الإمارات",   flag: "🇦🇪"),
+        .init(code: "KW", name: "الكويت",     flag: "🇰🇼"),
+        .init(code: "QA", name: "قطر",        flag: "🇶🇦"),
+        .init(code: "BH", name: "البحرين",    flag: "🇧🇭"),
+        .init(code: "OM", name: "عُمان",       flag: "🇴🇲"),
+        .init(code: "YE", name: "اليمن",      flag: "🇾🇪"),
+        .init(code: "EG", name: "مصر",         flag: "🇪🇬"),
+        .init(code: "JO", name: "الأردن",     flag: "🇯🇴"),
+        .init(code: "IQ", name: "العراق",     flag: "🇮🇶"),
+        .init(code: "LB", name: "لبنان",      flag: "🇱🇧"),
+        .init(code: "SY", name: "سوريا",      flag: "🇸🇾"),
+        .init(code: "PS", name: "فلسطين",     flag: "🇵🇸"),
+        .init(code: "LY", name: "ليبيا",      flag: "🇱🇾"),
+        .init(code: "TN", name: "تونس",       flag: "🇹🇳"),
+        .init(code: "DZ", name: "الجزائر",    flag: "🇩🇿"),
+        .init(code: "MA", name: "المغرب",     flag: "🇲🇦"),
+        .init(code: "SD", name: "السودان",    flag: "🇸🇩"),
+        .init(code: "MR", name: "موريتانيا",  flag: "🇲🇷"),
+        .init(code: "DJ", name: "جيبوتي",     flag: "🇩🇯"),
+        .init(code: "SO", name: "الصومال",    flag: "🇸🇴"),
+        .init(code: "KM", name: "جزر القمر",  flag: "🇰🇲"),
+        .init(code: "XX", name: "أخرى",        flag: "🌍"),
+    ]
+
+    static func displayName(forCode code: String) -> String {
+        guard let match = countries.first(where: { $0.code == code }) else {
+            return "🇸🇦 السعودية"
+        }
+        return "\(match.flag) \(match.name)"
     }
 }

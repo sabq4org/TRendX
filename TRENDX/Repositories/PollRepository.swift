@@ -110,7 +110,7 @@ private struct CreatePollRequest: Encodable {
 
     init(poll: Poll, userId: UUID?) {
         self.poll = PollDTO(domain: poll)
-        self.options = poll.options.map(PollOptionDTO.init(domain:))
+        self.options = poll.options.map { PollOptionDTO(domain: $0) }
         self.userId = userId
     }
 }
@@ -211,6 +211,7 @@ struct PollDTO: Codable {
     let coverStyle: PollCoverStyle?
     let authorName: String?
     let authorAvatar: String?
+    let authorAvatarUrl: String?
     let authorIsVerified: Bool?
     let options: [PollOptionDTO]?
     let topicId: UUID?
@@ -245,8 +246,9 @@ struct PollDTO: Codable {
         self.coverStyle = domain.coverStyle
         self.authorName = domain.authorName
         self.authorAvatar = domain.authorAvatar
+        self.authorAvatarUrl = domain.authorAvatarUrl
         self.authorIsVerified = domain.authorIsVerified
-        self.options = domain.options.map(PollOptionDTO.init(domain:))
+        self.options = domain.options.map { PollOptionDTO(domain: $0) }
         self.topicId = domain.topicId
         self.topicName = domain.topicName
         self.type = domain.type
@@ -277,6 +279,7 @@ struct PollDTO: Codable {
             coverStyle: coverStyle,
             authorName: authorName ?? "TrendX User",
             authorAvatar: authorAvatar ?? "T",
+            authorAvatarUrl: authorAvatarUrl,
             authorIsVerified: authorIsVerified ?? false,
             options: options?.map(\.domain) ?? [],
             topicId: topicId,

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct HomeScreen: View {
     @EnvironmentObject private var store: AppStore
@@ -30,11 +31,19 @@ struct HomeScreen: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
+            ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
+                // Anchor the very top of the feed so re-tapping the
+                // Home tab can scroll back here. The id has to live on
+                // a real view inside the scroll content, not on the
+                // ScrollView itself.
+                Color.clear.frame(height: 0).id("home-top")
                 VStack(spacing: 18) {
                     HomeHeader(
                         userName: store.currentUser.name,
                         points: store.currentUser.points,
+                        avatarUrl: store.currentUser.avatarUrl,
+                        coins: store.currentUser.coins,
                         unreadNotifications: notificationsCounter.unreadCount,
                         isGuest: store.isGuest,
                         onSignInTap: {
@@ -84,21 +93,23 @@ struct HomeScreen: View {
                 }
                 .trendxRTL()
             }
-            .sheet(item: $selectedAuthorUser) { user in
-                NavigationStack {
-                    PublicProfileScreen(user: user, loadFromBackend: true)
-                        .environmentObject(store)
-                }
-                .trendxRTL()
+            .navigationDestination(item: $selectedAuthorUser) { user in
+                PublicProfileScreen(user: user, loadFromBackend: true)
+                    .environmentObject(store)
+                    .trendxRTL()
             }
-            .sheet(isPresented: $showTimeline) {
-                NavigationStack {
-                    TimelineScreen(store: store)
-                        .environmentObject(store)
-                }
-                .trendxRTL()
+            .navigationDestination(isPresented: $showTimeline) {
+                TimelineScreen(store: store)
+                    .environmentObject(store)
+                    .trendxRTL()
             }
             .task { await notificationsCounter.refresh(store: store) }
+            .onChange(of: store.homeScrollToTopTrigger) { _, _ in
+                withAnimation(.easeOut(duration: 0.4)) {
+                    proxy.scrollTo("home-top", anchor: .top)
+                }
+            }
+            }
 
             FloatingActionButton {
                 store.showCreatePoll = true
@@ -112,18 +123,12 @@ struct HomeScreen: View {
 
     private var postsContent: some View {
         VStack(spacing: 24) {
-            // 🔥 Radar + Events are now THE top of Home so the social-
-            // graph layer is impossible to miss. Hidden in guest mode.
+            // 🔥 The radar pulse + suggested-follows + events make the
+            // social-graph layer impossible to miss. The pulse shows
+            // live activity from people the user follows rather than
+            // a passive "tap to open" entry card.
             if !store.isGuest {
-                NavigationLink {
-                    TimelineScreen(store: store)
-                        .environmentObject(store)
-                        .trendxRTL()
-                } label: {
-                    TimelineHomeEntry()
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 20)
+                RadarPulseSection(store: store)
 
                 SuggestedFollowsCarousel(store: store)
 
@@ -402,11 +407,75 @@ struct TopicFilterChip: View {
         .trendxRTL()
 }
 
-// MARK: - Timeline Home Entry
+// MARK: - Radar Pulse Section
+//
+// Live preview of the 4 most recent timeline activities (reposts from
+// followed accounts, polls from followed accounts/topics, public votes,
+// recent results, stories). Replaces the previous static "TimelineHomeEntry"
+// gateway card so the user sees actual movement from their network without
+// an extra tap.
 
-private struct TimelineHomeEntry: View {
+@MainActor
+private final class RadarPulseViewModel: ObservableObject {
+    @Published private(set) var items: [TimelineItem] = []
+    @Published private(set) var isLoading = false
+
+    private let store: AppStore
+    init(store: AppStore) { self.store = store }
+
+    func load() async {
+        guard let token = store.accessToken else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let response = try await store.apiClient.timeline(
+                filter: "all",
+                cursor: nil,
+                accessToken: token
+            )
+            items = Array(response.items.prefix(4))
+        } catch {
+            items = []
+        }
+    }
+}
+
+struct RadarPulseSection: View {
+    @EnvironmentObject private var store: AppStore
+    @StateObject private var vm: RadarPulseViewModel
+
+    init(store: AppStore) {
+        _vm = StateObject(wrappedValue: RadarPulseViewModel(store: store))
+    }
+
     var body: some View {
-        HStack(spacing: 14) {
+        VStack(spacing: 12) {
+            sectionHeader
+
+            if vm.items.isEmpty {
+                emptyState
+                    .padding(.horizontal, 20)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(vm.items) { item in
+                        NavigationLink {
+                            TimelineScreen(store: store)
+                                .environmentObject(store)
+                                .trendxRTL()
+                        } label: {
+                            RadarPulseRow(item: item)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+        .task { await vm.load() }
+    }
+
+    private var sectionHeader: some View {
+        HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .fill(LinearGradient(
@@ -414,45 +483,189 @@ private struct TimelineHomeEntry: View {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
-                    .frame(width: 48, height: 48)
-                    .shadow(color: TrendXTheme.aiIndigo.opacity(0.35), radius: 10, x: 0, y: 5)
+                    .frame(width: 38, height: 38)
                 Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.system(size: 15, weight: .heavy))
                     .foregroundStyle(.white)
+                // Tiny "live" dot
+                Circle()
+                    .fill(TrendXTheme.success)
+                    .frame(width: 8, height: 8)
+                    .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                    .offset(x: 14, y: -14)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("نبض من تتابعهم")
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(TrendXTheme.ink)
+                Text("نشاط لحظي من حساباتك ومجالاتك")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+            }
+
+            Spacer(minLength: 0)
+
+            NavigationLink {
+                TimelineScreen(store: store)
+                    .environmentObject(store)
+                    .trendxRTL()
+            } label: {
+                HStack(spacing: 4) {
+                    Text("الرادار")
+                        .font(.system(size: 11.5, weight: .heavy))
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .heavy))
+                }
+                .foregroundStyle(TrendXTheme.aiIndigo)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(TrendXTheme.aiIndigo.opacity(0.10)))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var emptyState: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                .font(.system(size: 18, weight: .light))
+                .foregroundStyle(TrendXTheme.tertiaryInk)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("رادارك هادئ الآن")
+                    .font(.system(size: 12.5, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.ink)
+                Text("تابع جهات وحسابات نشطة لتمتلئ هذه المنطقة.")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(TrendXTheme.outline.opacity(0.6), lineWidth: 0.8)
+                )
+        )
+    }
+}
+
+/// Compact 1-row preview of a single timeline activity. Tap behavior
+/// is owned by the enclosing `NavigationLink` (always routes to the
+/// full `TimelineScreen` for now — deeper drill-downs come later).
+private struct RadarPulseRow: View {
+    let item: TimelineItem
+
+    private var kindAccent: Color {
+        switch item.kind {
+        case .poll_published, .survey_published: return TrendXTheme.primary
+        case .vote_cast:        return TrendXTheme.aiIndigo
+        case .repost:           return TrendXTheme.aiViolet
+        case .poll_results:     return TrendXTheme.success
+        case .sector_trending:  return TrendXTheme.accent
+        case .story:            return TrendXTheme.aiViolet
+        }
+    }
+
+    private var kindIcon: String {
+        switch item.kind {
+        case .poll_published:   return "doc.text.fill"
+        case .survey_published: return "list.bullet.clipboard.fill"
+        case .vote_cast:        return "checkmark.bubble.fill"
+        case .repost:           return "arrow.2.squarepath"
+        case .poll_results:     return "chart.bar.xaxis"
+        case .sector_trending:  return "flame.fill"
+        case .story:            return "book.fill"
+        }
+    }
+
+    private var primaryText: String {
+        switch item.kind {
+        case .poll_published:
+            return item.poll?.title ?? "استطلاع جديد"
+        case .survey_published:
+            return item.poll?.title ?? "استبيان جديد"
+        case .vote_cast:
+            if let choice = item.choice, let voter = item.voter {
+                return "\(voter.name) صوّت: \(choice)"
+            }
+            return "صوت جديد من شخص تتابعه"
+        case .repost:
+            return item.poll?.title ?? "إعادة نشر"
+        case .poll_results:
+            if let leader = item.leaderText, let pct = item.leaderPercentage {
+                return "النتيجة: \(leader) (\(pct)%)"
+            }
+            return item.poll?.title ?? "نتائج جاهزة"
+        case .sector_trending:
+            return item.topicName.map { "اتجاه ساخن في \($0)" } ?? "اتجاه ساخن"
+        case .story:
+            return item.story?.title ?? "قصّة جديدة"
+        }
+    }
+
+    private var subtitle: String? {
+        switch item.kind {
+        case .poll_published, .survey_published:
+            return item.publisher?.name
+        case .repost:
+            return item.reposter.map { "\($0.name) أعاد النشر" }
+        case .poll_results:
+            return item.poll?.title
+        case .vote_cast:
+            return item.poll?.title
+        case .sector_trending:
+            return item.totalVotes.map { "\($0) صوت في آخر 24 ساعة" }
+        case .story:
+            return item.story?.publisher?.name
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 11) {
+            ZStack {
+                Circle()
+                    .fill(kindAccent.opacity(0.14))
+                    .frame(width: 38, height: 38)
+                Image(systemName: kindIcon)
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(kindAccent)
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text("الرادار")
-                        .font(.system(size: 15, weight: .black, design: .rounded))
-                        .foregroundStyle(TrendXTheme.ink)
-                    Text("جديد")
-                        .font(.system(size: 9, weight: .heavy))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(TrendXTheme.aiViolet))
-                        .foregroundStyle(.white)
-                }
-                Text("نشاط المتابعين، الجهات الرسمية، وأقسامك المفضّلة لحظياً")
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                Text(primaryText)
+                    .font(.system(size: 12.5, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.ink)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.tertiaryInk)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.left")
-                .font(.system(size: 12, weight: .heavy))
-                .foregroundStyle(TrendXTheme.aiIndigo)
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(TrendXTheme.mutedInk)
         }
-        .padding(14)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(TrendXTheme.surface)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(kindAccent.opacity(0.16), lineWidth: 0.8)
                 )
-                .shadow(color: TrendXTheme.aiIndigo.opacity(0.10), radius: 12, x: 0, y: 5)
+                .shadow(color: kindAccent.opacity(0.06), radius: 8, x: 0, y: 3)
         )
     }
 }

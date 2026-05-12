@@ -603,6 +603,72 @@ extension TrendXAPIClient {
         let dto: UserDTO = try await get("/users/\(escaped)", accessToken: accessToken)
         return dto.domain
     }
+
+    /// Recent activity (own polls + reposts) for a user's profile page.
+    /// Returns the merged feed in chronological order.
+    func userPosts(idOrHandle: String, accessToken: String) async throws -> [ProfileActivity] {
+        let escaped = idOrHandle
+            .replacingOccurrences(of: "@", with: "")
+            .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? idOrHandle
+        let response: ProfileActivityResponse = try await get(
+            "/users/\(escaped)/posts",
+            accessToken: accessToken
+        )
+        return response.items
+    }
+}
+
+/// Activity item returned by `GET /users/:idOrHandle/posts`. Mirrors
+/// the timeline activity shape but limited to the profile owner's own
+/// polls and reposts.
+struct ProfileActivity: Decodable, Identifiable {
+    let id: String
+    let kind: Kind
+    let occurredAt: Date
+    let poll: PollDTO
+    let caption: String?
+
+    enum Kind: String, Decodable {
+        case poll
+        case repost
+    }
+
+    /// Build a `ProfileActivity` from a locally-cached `Poll`. Used by
+    /// `PublicProfileScreen` as a fallback so a profile never looks
+    /// empty when the dedicated `/users/:id/posts` endpoint returns
+    /// nothing (older backend deploy, brand-new account, transient
+    /// network issue). Always classifies as `.poll` since reposts are
+    /// only known via the dedicated endpoint.
+    static func fromLocalPoll(_ poll: Poll) -> ProfileActivity {
+        ProfileActivity(
+            id: "local-poll:\(poll.id.uuidString)",
+            kind: .poll,
+            occurredAt: poll.createdAt,
+            poll: PollDTO(domain: poll),
+            caption: nil
+        )
+    }
+
+    /// Repost variant used when we know — locally, from
+    /// `AppStore.myRepostedPollIds` — that the viewer reposted this
+    /// poll, but the backend response didn't include the repost row
+    /// (e.g. the request is still in flight, or the endpoint is
+    /// reachable but the repost migration hasn't been rolled). Lets the
+    /// "أعاد X نشر هذا" card appear on the viewer's own profile the
+    /// instant they tap the button.
+    static func fromLocalRepost(_ poll: Poll) -> ProfileActivity {
+        ProfileActivity(
+            id: "local-repost:\(poll.id.uuidString)",
+            kind: .repost,
+            occurredAt: Date(),
+            poll: PollDTO(domain: poll),
+            caption: nil
+        )
+    }
+}
+
+private struct ProfileActivityResponse: Decodable {
+    let items: [ProfileActivity]
 }
 
 

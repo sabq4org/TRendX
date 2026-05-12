@@ -23,11 +23,21 @@ struct PublicProfileScreen: View {
 
     let user: TrendXUser
     var loadFromBackend: Bool = false
+    /// Set to `true` when the screen is presented inside a sheet so the
+    /// trailing "إغلاق" button is rendered. The default (`false`) is the
+    /// preferred path: push from a `NavigationStack` and let the native
+    /// back chevron handle dismissal.
+    var presentedAsSheet: Bool = false
 
     @State private var resolved: TrendXUser?
     @State private var isFollowing: Bool = false
     @State private var followersCount: Int = 0
     @State private var isFollowBusy: Bool = false
+    @State private var posts: [ProfileActivity] = []
+    @State private var isLoadingPosts: Bool = false
+    @State private var events: [TrendXEvent] = []
+    @State private var isLoadingEvents: Bool = false
+    @State private var selectedEvent: TrendXEvent?
 
     private var current: TrendXUser { resolved ?? user }
     private var isSelf: Bool { current.id == store.currentUser.id }
@@ -42,14 +52,28 @@ struct PublicProfileScreen: View {
         }
         .background(TrendXTheme.background.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("إغلاق") { dismiss() }
-                    .font(.system(size: 13, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.primary)
+            if presentedAsSheet {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("إغلاق") { dismiss() }
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.primary)
+                }
             }
         }
-        .task { await refreshIfNeeded() }
+        .task {
+            await refreshIfNeeded()
+            await loadPosts()
+            await loadEvents()
+        }
+        .sheet(item: $selectedEvent) { ev in
+            NavigationStack {
+                EventDetailScreen(event: ev, store: store)
+                    .environmentObject(store)
+            }
+            .trendxRTL()
+        }
     }
 
     // MARK: - Hero (branches by account type)
@@ -60,6 +84,31 @@ struct PublicProfileScreen: View {
         case .individual:   individualHero
         case .organization: organizationHero
         case .government:   governmentHero
+        }
+    }
+
+    /// Floating back button rendered on top of the hero. Replaces the
+    /// native navigation-bar chevron (we hide it via
+    /// `.navigationBarBackButtonHidden`) so the action lives where the
+    /// user's eye already is — on the brand banner. RTL note: the
+    /// `topLeading` overlay anchors to the *right* side in our
+    /// right-to-left layout, which matches the natural "back" direction.
+    @ViewBuilder
+    private var heroBackButton: some View {
+        if !presentedAsSheet {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(.black.opacity(0.32)))
+                    .overlay(Circle().stroke(.white.opacity(0.32), lineWidth: 0.7))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+            .padding(.leading, 14)
         }
     }
 
@@ -99,6 +148,7 @@ struct PublicProfileScreen: View {
                 endPoint: .bottom
             )
         )
+        .overlay(alignment: .topLeading) { heroBackButton }
     }
 
     private var organizationHero: some View {
@@ -107,21 +157,13 @@ struct PublicProfileScreen: View {
             // overlaying a subtle dot grid. Replaced by `banner_url`
             // when one is uploaded.
             ZStack {
-                if let url = current.bannerUrl.flatMap(URL.init(string:)) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            orgGoldFallback
-                        }
-                    }
-                } else {
+                TrendXProfileImage(urlString: current.bannerUrl) {
                     orgGoldFallback
                 }
             }
             .frame(height: 130)
             .clipped()
+            .overlay(alignment: .topLeading) { heroBackButton }
 
             VStack(spacing: 12) {
                 AccountAvatar(user: current, size: 88)
@@ -180,37 +222,17 @@ struct PublicProfileScreen: View {
     private var governmentHero: some View {
         VStack(spacing: 0) {
             // Saudi-green banner with the Islamic-style geometric overlay,
-            // the institutional emblem centered, and the "العلامة الرسمية"
-            // eyebrow stamped at the top.
+            // no eyebrow stamp — the verified-shield badge next to the
+            // ministry name + the Saudi-green identity already telegraph
+            // "official" without a redundant text label.
             ZStack {
-                if let url = current.bannerUrl.flatMap(URL.init(string:)) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        default:
-                            governmentBannerFallback
-                        }
-                    }
-                } else {
+                TrendXProfileImage(urlString: current.bannerUrl) {
                     governmentBannerFallback
                 }
             }
             .frame(height: 220)
             .clipped()
-            .overlay(alignment: .top) {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .font(.system(size: 10, weight: .heavy))
-                    Text("العلامة الرسمية")
-                        .font(.system(size: 11, weight: .heavy))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(Capsule().fill(.white.opacity(0.18)))
-                .overlay(Capsule().stroke(.white.opacity(0.34), lineWidth: 0.8))
-                .padding(.top, 12)
-            }
+            .overlay(alignment: .topLeading) { heroBackButton }
 
             // The institutional info card slides up beneath the banner
             // (overlap by 28pt) so the avatar straddles the seam — gives
@@ -316,9 +338,149 @@ struct PublicProfileScreen: View {
                     .padding(.horizontal, 20)
             }
 
-            comingSoonCard
-                .padding(.horizontal, 20)
+            if !events.isEmpty || isLoadingEvents {
+                eventsSection
+                    .padding(.top, 6)
+            }
+
+            postsSection
+                .padding(.top, 6)
         }
+    }
+
+    // MARK: - Events section
+    //
+    // Only renders when the entity has at least one event published.
+    // Tap opens the full `EventDetailScreen` sheet (with the Saudi-map
+    // heatmap, RSVP button, etc.).
+
+    private var eventsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(current.accountType.tint)
+                Text("الفعاليات")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.ink)
+                Spacer(minLength: 0)
+                if isLoadingEvents {
+                    ProgressView()
+                        .tint(current.accountType.tint)
+                        .scaleEffect(0.7)
+                }
+            }
+            .padding(.horizontal, 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(events) { event in
+                        Button { selectedEvent = event } label: {
+                            ProfileEventCard(event: event, tint: current.accountType.tint)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    // MARK: - Posts section
+
+    private var postsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(current.accountType.tint)
+                Text("المنشورات وإعادات النشر")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.ink)
+                Spacer(minLength: 0)
+                if isLoadingPosts {
+                    ProgressView()
+                        .tint(current.accountType.tint)
+                        .scaleEffect(0.7)
+                }
+            }
+            .padding(.horizontal, 20)
+
+            if posts.isEmpty && !isLoadingPosts {
+                postsEmptyState
+                    .padding(.horizontal, 20)
+            } else {
+                LazyVStack(spacing: 14) {
+                    ForEach(posts) { item in
+                        postRow(for: item)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func postRow(for item: ProfileActivity) -> some View {
+        let poll = item.poll.domain
+        VStack(alignment: .leading, spacing: 8) {
+            if item.kind == .repost {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.2.squarepath")
+                        .font(.system(size: 11, weight: .heavy))
+                    Text("أعاد \(current.name) نشر هذا")
+                        .font(.system(size: 11.5, weight: .heavy))
+                    if let caption = item.caption, !caption.isEmpty {
+                        Text("·")
+                            .foregroundStyle(TrendXTheme.mutedInk)
+                        Text(caption)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(TrendXTheme.secondaryInk)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(TrendXTheme.aiViolet)
+                .padding(.horizontal, 4)
+            }
+
+            PollCard(
+                poll: poll,
+                onVote: { _ in },
+                onBookmark: {},
+                onShare: {},
+                onRepost: nil,
+                onAuthorTap: nil
+            )
+            .allowsHitTesting(false)
+        }
+    }
+
+    private var postsEmptyState: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "tray")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.tertiaryInk)
+                Text("لا توجد منشورات بعد")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.ink)
+            }
+            Text("سيظهر هنا كل ما ينشره \(current.name) من استطلاعات وإعادات نشر، فور وصوله.")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TrendXTheme.secondaryInk)
+                .lineSpacing(3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(TrendXTheme.outline.opacity(0.5), lineWidth: 0.8)
+                )
+        )
     }
 
     private var followButton: some View {
@@ -364,10 +526,32 @@ struct PublicProfileScreen: View {
         HStack(spacing: 12) {
             statTile(label: "متابعون", value: shortNumber(followersCount), icon: "person.2.fill")
             statTile(label: "يتابع", value: shortNumber(current.followingCount), icon: "person.crop.circle.badge.checkmark")
-            statTile(label: current.accountType == .individual ? "تصويتات" : "منشورات",
-                     value: "\(current.completedPolls.count)",
-                     icon: "doc.text.fill")
+            statTile(label: postsLabel, value: "\(postsCount)", icon: "doc.text.fill")
         }
+    }
+
+    /// Number to show in the third stat tile.
+    ///
+    /// Individuals: cast votes — `completedPolls.count` is correct
+    /// because their profile activity is "what I voted on", not
+    /// "what I published".
+    ///
+    /// Organizations & governments: published polls. The earlier
+    /// version of this view reused `completedPolls.count` for every
+    /// account type, which made the Ministry of Media's profile show
+    /// "0 منشورات" even though three polls were seeded under its
+    /// account — a published organization rarely *votes* on its own
+    /// polls, so that counter stays at 0. Now we count the posts the
+    /// profile actually surfaces (own polls only, no reposts).
+    private var postsCount: Int {
+        if current.accountType == .individual {
+            return current.completedPolls.count
+        }
+        return posts.filter { $0.kind == .poll }.count
+    }
+
+    private var postsLabel: String {
+        current.accountType == .individual ? "تصويتات" : "منشورات"
     }
 
     private func shortNumber(_ n: Int) -> String {
@@ -454,34 +638,79 @@ struct PublicProfileScreen: View {
         )
     }
 
-    private var comingSoonCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(current.accountType.tint)
-                Text("قريباً")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(current.accountType.tint)
+    // MARK: - Data
+
+    private func loadPosts() async {
+        guard let token = store.accessToken else { return }
+        isLoadingPosts = true
+        defer { isLoadingPosts = false }
+
+        let key = current.handle ?? current.id.uuidString
+        let backendPosts = (try? await store.apiClient.userPosts(idOrHandle: key, accessToken: token)) ?? []
+
+        // Defensive merge with local state. Two scenarios this guards:
+        //  1) Backend returns nothing (older deploy, transient error):
+        //     show the profile owner's own polls *and* — when viewing
+        //     our own profile — every repost we know about locally.
+        //  2) Backend returns posts but doesn't yet include a fresh
+        //     repost (e.g. the user tapped repost a moment ago and
+        //     the backend's /users/:id/posts is cached or slow): we
+        //     splice in the missing local reposts so the card the
+        //     user just created appears immediately on their profile.
+        let isViewingSelf = current.id == store.currentUser.id
+
+        if backendPosts.isEmpty {
+            var fallback: [ProfileActivity] = store.polls
+                .filter { $0.publisherId == current.id }
+                .map(ProfileActivity.fromLocalPoll)
+
+            if isViewingSelf {
+                for repostedId in store.myRepostedPollIds {
+                    if let poll = store.polls.first(where: { $0.id == repostedId }) {
+                        fallback.append(ProfileActivity.fromLocalRepost(poll))
+                    }
+                }
             }
-            Text("سترى هنا منشورات \(current.name) — استطلاعاتها، استبياناتها، فعالياتها — فور إطلاق الـTimeline.")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(TrendXTheme.secondaryInk)
-                .lineSpacing(3)
+            posts = fallback.sorted { $0.occurredAt > $1.occurredAt }
+        } else if isViewingSelf {
+            // Backend has data — splice in any locally-tracked reposts
+            // it didn't return yet so the "just reposted" feedback is
+            // never lost on the way back to the profile.
+            let backendRepostedPollIds = Set(
+                backendPosts
+                    .filter { $0.kind == .repost }
+                    .map(\.poll.id)
+            )
+            let missing = store.myRepostedPollIds.subtracting(backendRepostedPollIds)
+            var combined = backendPosts
+            for repostedId in missing {
+                if let poll = store.polls.first(where: { $0.id == repostedId }) {
+                    combined.append(ProfileActivity.fromLocalRepost(poll))
+                }
+            }
+            posts = combined.sorted { $0.occurredAt > $1.occurredAt }
+        } else {
+            posts = backendPosts
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(TrendXTheme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(TrendXTheme.outline.opacity(0.5), lineWidth: 0.8)
-                )
-        )
     }
 
-    // MARK: - Data
+    private func loadEvents() async {
+        isLoadingEvents = true
+        defer { isLoadingEvents = false }
+        if let items = try? await store.apiClient.listEvents(
+            publisherId: current.id,
+            accessToken: store.accessToken
+        ) {
+            // Strict client-side filter — protects against an older
+            // backend deploy that ignores `publisher_id` and returns
+            // every event. Without this, the Ministry of Media's
+            // press conference shows up on personal profiles, which is
+            // a hard bug ("الفعاليات موجودة في كل الصفحات"). Belt and
+            // suspenders: the new backend filters too, but the iOS
+            // layer must not depend on a redeploy.
+            events = items.filter { $0.publisher?.id == current.id }
+        }
+    }
 
     private func refreshIfNeeded() async {
         // Seed state from the user we were initialized with so the
@@ -498,5 +727,101 @@ struct PublicProfileScreen: View {
             isFollowing = fresh.viewerFollows
             followersCount = fresh.followersCount
         }
+    }
+}
+
+// MARK: - Compact event card for the profile carousel
+
+private struct ProfileEventCard: View {
+    let event: TrendXEvent
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                statusDot
+                Text(statusLabel)
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(statusColor)
+                Spacer(minLength: 0)
+                if let cat = event.category, !cat.isEmpty {
+                    Text(cat)
+                        .font(.system(size: 9, weight: .heavy))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(tint.opacity(0.12)))
+                        .foregroundStyle(tint)
+                }
+            }
+
+            Text(event.title)
+                .font(.system(size: 13.5, weight: .heavy))
+                .foregroundStyle(TrendXTheme.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Label(formatStart(event.startsAt), systemImage: "calendar")
+                    .font(.system(size: 10.5, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.secondaryInk)
+                if let city = event.city {
+                    Label(city, systemImage: "mappin.and.ellipse")
+                        .font(.system(size: 10.5, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 6) {
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 10, weight: .heavy))
+                Text("\(event.attendingCount) مشارك")
+                    .font(.system(size: 11, weight: .heavy))
+            }
+            .foregroundStyle(tint)
+        }
+        .padding(12)
+        .frame(width: 220, height: 170, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(tint.opacity(0.18), lineWidth: 0.8)
+                )
+                .shadow(color: TrendXTheme.shadow, radius: 8, x: 0, y: 3)
+        )
+    }
+
+    private var statusLabel: String {
+        switch event.status {
+        case "live": return "مباشر"
+        case "closed": return "منتهية"
+        default: return "قريباً"
+        }
+    }
+
+    private var statusColor: Color {
+        switch event.status {
+        case "live": return .red
+        case "closed": return TrendXTheme.tertiaryInk
+        default: return tint
+        }
+    }
+
+    @ViewBuilder
+    private var statusDot: some View {
+        Circle()
+            .fill(statusColor)
+            .frame(width: 6, height: 6)
+    }
+
+    private func formatStart(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter.trendxFractional.date(from: iso)
+            ?? ISO8601DateFormatter.trendxInternet.date(from: iso) else { return iso }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ar")
+        f.dateFormat = "EEEE d MMM"
+        return f.string(from: date)
     }
 }

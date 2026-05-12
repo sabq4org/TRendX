@@ -55,7 +55,13 @@ struct EventDetailScreen: View {
 
     private var banner: some View {
         ZStack(alignment: .topTrailing) {
-            if let url = current.bannerImage.flatMap(URL.init(string:)) {
+            // Branded banners take precedence over the generic fallback.
+            // When we recognize a known title we render a SwiftUI logo
+            // mark instead of leaving the bannerImage URL flow — this
+            // keeps the demo crisp without needing static-file hosting.
+            if isSaudiMediaForum {
+                SaudiMediaForumBanner()
+            } else if let url = current.bannerImage.flatMap(URL.init(string:)) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image): image.resizable().scaledToFill()
@@ -80,6 +86,11 @@ struct EventDetailScreen: View {
         }
         .frame(height: 200)
         .clipped()
+    }
+
+    private var isSaudiMediaForum: Bool {
+        current.title.contains("المنتدى السعودي للإعلام")
+            || current.title.contains("Saudi Media Forum")
     }
 
     private var bannerFallback: some View {
@@ -388,5 +399,79 @@ struct SaudiMapHeatmap: View {
             }
         }
         .position(x: point.x * size.width, y: point.y * size.height)
+    }
+}
+
+// MARK: - Saudi Media Forum branded banner
+//
+// SwiftUI rendition of the المنتدى السعودي للإعلام identity. Forest-green
+// background + Arabic + Latin lockup + a hand-laid cluster of white
+// squares to echo the original mark. Used by `EventDetailScreen` when
+// the event title matches; standalone so it can be reused on cards too.
+
+struct SaudiMediaForumBanner: View {
+    var body: some View {
+        ZStack {
+            // Forest green from the official identity — deeper than the
+            // app's saudiGreen so the white type pops without fighting
+            // the Saudi-green palette already used elsewhere.
+            Color(red: 0.063, green: 0.31, blue: 0.235)
+                .ignoresSafeArea()
+
+            HStack(spacing: 18) {
+                pixelCluster
+                    .frame(width: 60, height: 90)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text("المنتدى السعودي للإعلام")
+                        .font(.system(size: 22, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text("SAUDI MEDIA FORUM")
+                        .font(.system(size: 12, weight: .heavy))
+                        .tracking(2.5)
+                        .foregroundStyle(.white.opacity(0.95))
+                }
+            }
+            .padding(.horizontal, 22)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Hand-laid square cluster that echoes the falling-pixels motif on
+    /// the official mark. Drawn through Canvas so it stays crisp at any
+    /// banner height — the grid is sized off the geometry so it scales
+    /// alongside the text.
+    private var pixelCluster: some View {
+        Canvas { ctx, size in
+            let cell: CGFloat = 9
+            let gap: CGFloat = 2
+            let step = cell + gap
+
+            // (col, row) — coordinates chosen to look like a 3D-ish
+            // stack with some pixels breaking off, matching the
+            // original brand mark's visual rhythm.
+            let positions: [(Int, Int)] = [
+                (1, 0), (2, 0),
+                (0, 1), (1, 1), (2, 1), (3, 1),
+                (0, 2), (1, 2), (3, 2),
+                (2, 3), (3, 3),
+                (4, 3),
+                (1, 4),
+                (3, 4), (4, 4),
+                (2, 5),
+            ]
+
+            for (col, row) in positions {
+                let rect = CGRect(
+                    x: CGFloat(col) * step,
+                    y: CGFloat(row) * step,
+                    width: cell,
+                    height: cell
+                )
+                ctx.fill(Path(rect), with: .color(.white))
+            }
+        }
     }
 }

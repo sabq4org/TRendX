@@ -4,7 +4,9 @@
 //
 
 import Foundation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 struct AuthSession: Codable, Equatable {
     var accessToken: String
@@ -72,7 +74,7 @@ final class AuthRepository {
             city: city,
             region: region,
             deviceType: "ios",
-            osVersion: UIDevice.current.systemVersion
+            osVersion: Self.systemVersionString
         )
         let response: AuthResponse = try await client.post(
             "/auth/signup",
@@ -122,6 +124,7 @@ final class AuthRepository {
         birthYear: Int? = nil,
         city: String? = nil,
         region: String? = nil,
+        country: String? = nil,
         session: AuthSession
     ) async throws -> TrendXUser {
         let payload = ProfileUpdatePayload(
@@ -136,7 +139,8 @@ final class AuthRepository {
             gender: gender,
             birthYear: birthYear,
             city: city,
-            region: region
+            region: region,
+            country: country
         )
         let dto: UserDTO = try await client.post("/profile", accessToken: session.accessToken, body: payload)
         return dto.domain
@@ -173,6 +177,15 @@ final class AuthRepository {
             email: email
         )
     }
+
+    private static var systemVersionString: String {
+        #if canImport(UIKit)
+        return UIDevice.current.systemVersion
+        #else
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+        #endif
+    }
 }
 
 private struct ProfileUpdatePayload: Encodable {
@@ -188,6 +201,7 @@ private struct ProfileUpdatePayload: Encodable {
     let birthYear: Int?
     let city: String?
     let region: String?
+    let country: String?
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -203,12 +217,13 @@ private struct ProfileUpdatePayload: Encodable {
         if let birthYear { try container.encode(birthYear, forKey: .birthYear) }
         if let city { try container.encode(city, forKey: .city) }
         if let region { try container.encode(region, forKey: .region) }
+        if let country { try container.encode(country, forKey: .country) }
     }
 
     enum CodingKeys: String, CodingKey {
         case name, email, handle, bio,
              avatarInitial, avatarUrl, bannerUrl,
-             accountType, gender, birthYear, city, region
+             accountType, gender, birthYear, city, region, country
     }
 }
 

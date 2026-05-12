@@ -46,9 +46,16 @@ struct TrendXEventList: Decodable {
 private struct RSVPBody: Encodable { let status: String }
 
 extension TrendXAPIClient {
-    func listEvents(status: String? = nil, accessToken: String?) async throws -> [TrendXEvent] {
+    func listEvents(
+        status: String? = nil,
+        publisherId: UUID? = nil,
+        accessToken: String?
+    ) async throws -> [TrendXEvent] {
+        var queryItems: [String] = []
+        if let status, !status.isEmpty { queryItems.append("status=\(status)") }
+        if let publisherId { queryItems.append("publisher_id=\(publisherId.uuidString)") }
         var path = "/events"
-        if let status, !status.isEmpty { path += "?status=\(status)" }
+        if !queryItems.isEmpty { path += "?" + queryItems.joined(separator: "&") }
         let list: TrendXEventList = try await get(path, accessToken: accessToken)
         return list.items
     }

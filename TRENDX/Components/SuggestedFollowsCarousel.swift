@@ -65,12 +65,10 @@ struct SuggestedFollowsCarousel: View {
                         .padding(.horizontal, 20)
                     }
                 }
-                .sheet(item: $selectedUser) { user in
-                    NavigationStack {
-                        PublicProfileScreen(user: user, loadFromBackend: true)
-                            .environmentObject(store)
-                    }
-                    .trendxRTL()
+                .navigationDestination(item: $selectedUser) { user in
+                    PublicProfileScreen(user: user, loadFromBackend: true)
+                        .environmentObject(store)
+                        .trendxRTL()
                 }
             }
         }

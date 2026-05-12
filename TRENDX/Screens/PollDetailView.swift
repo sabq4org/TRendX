@@ -32,6 +32,15 @@ struct PollDetailView: View {
                             },
                             onShare: {
                                 store.sharePoll(poll.id)
+                            },
+                            onRepost: { pollId, shouldRepost in
+                                Task {
+                                    if shouldRepost {
+                                        await store.repost(pollId: pollId)
+                                    } else {
+                                        await store.unrepost(pollId: pollId)
+                                    }
+                                }
                             }
                         )
 

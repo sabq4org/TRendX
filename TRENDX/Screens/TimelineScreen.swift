@@ -91,11 +91,20 @@ struct TimelineResponse: Decodable {
 }
 
 extension TrendXAPIClient {
-    func timeline(filter: String, cursor: String?, accessToken: String) async throws -> TimelineResponse {
-        var path = "/me/timeline?filter=\(filter)"
+    func timeline(
+        filter: String,
+        cursor: String?,
+        topicId: UUID? = nil,
+        accessToken: String
+    ) async throws -> TimelineResponse {
+        var query = ["filter=\(filter)"]
         if let cursor, let escaped = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
-            path += "&cursor=\(escaped)"
+            query.append("cursor=\(escaped)")
         }
+        if let topicId {
+            query.append("topic_id=\(topicId.uuidString)")
+        }
+        let path = "/me/timeline?" + query.joined(separator: "&")
         return try await get(path, accessToken: accessToken)
     }
 }
@@ -108,6 +117,9 @@ final class TimelineViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published var filter: String = "all"
+    /// Only meaningful when `filter == "sectors"`. nil means "all
+    /// sectors at once"; setting a UUID drills into a single topic.
+    @Published var focusedTopicId: UUID?
 
     private var cursor: String?
     private let store: AppStore
@@ -128,6 +140,7 @@ final class TimelineViewModel: ObservableObject {
             let response = try await store.apiClient.timeline(
                 filter: filter,
                 cursor: cursor,
+                topicId: filter == "sectors" ? focusedTopicId : nil,
                 accessToken: token
             )
             items.append(contentsOf: response.items)
@@ -157,13 +170,20 @@ struct TimelineScreen: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 14) {
-                    filterChips
+                    headerStrip
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
 
+                    // Sector chips appear only on the "sectors" tab —
+                    // give the user a way to drill into a single topic
+                    // without leaving the radar.
+                    if vm.filter == "sectors" {
+                        sectorChipsStrip
+                    }
+
                     if vm.items.isEmpty && !vm.isLoading {
-                        emptyState
-                            .padding(.top, 40)
+                        emptyState(for: vm.filter)
+                            .padding(.top, 28)
                     } else {
                         ForEach(vm.items) { item in
                             TimelineCard(item: item)
@@ -198,13 +218,34 @@ struct TimelineScreen: View {
         .task { await vm.reload() }
     }
 
+    // MARK: - Header
+
+    /// Compact eyebrow + tab strip. The eyebrow line — "نبض المملكة
+    /// الحي" — gives the screen a clear identity so the user knows
+    /// what they're looking at without scrolling.
+    private var headerStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.aiIndigo)
+                Text("نبض المملكة الحي")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(TrendXTheme.aiIndigo)
+                Spacer(minLength: 0)
+            }
+
+            filterChips
+        }
+    }
+
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                chip(label: "الكل",        value: "all")
-                chip(label: "الحسابات",    value: "accounts")
-                chip(label: "القطاعات",    value: "sectors")
-                chip(label: "النتائج",     value: "results")
+                chip(label: "اللحظة",   value: "all")
+                chip(label: "من أتابع", value: "accounts")
+                chip(label: "القطاعات", value: "sectors")
+                chip(label: "النتائج",  value: "results")
             }
         }
     }
@@ -213,6 +254,9 @@ struct TimelineScreen: View {
         let isSelected = vm.filter == value
         return Button {
             vm.filter = value
+            // Drop any sector focus when switching tabs so the user
+            // gets the broad view of the new tab they just opened.
+            if value != "sectors" { vm.focusedTopicId = nil }
             Task { await vm.reload() }
         } label: {
             Text(label)
@@ -232,15 +276,140 @@ struct TimelineScreen: View {
         .buttonStyle(.plain)
     }
 
-    private var emptyState: some View {
+    // MARK: - Sector chips
+    //
+    // When the user lands on the "القطاعات" tab they get a chip strip
+    // of every topic with an "كل القطاعات" entry at the start. Tapping
+    // a chip narrows the feed via the backend's topic_id query.
+
+    private var sectorChipsStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                sectorChip(name: "كل القطاعات", icon: "circle.grid.3x3.fill", topicId: nil)
+                ForEach(store.topics) { topic in
+                    sectorChip(name: topic.name, icon: nil, emoji: topic.icon, topicId: topic.id)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    private func sectorChip(name: String, icon: String? = nil, emoji: String? = nil, topicId: UUID?) -> some View {
+        let isSelected = vm.focusedTopicId == topicId
+        return Button {
+            vm.focusedTopicId = topicId
+            Task { await vm.reload() }
+        } label: {
+            HStack(spacing: 5) {
+                if let emoji {
+                    Text(emoji).font(.system(size: 12))
+                } else if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 10, weight: .heavy))
+                }
+                Text(name)
+                    .font(.system(size: 12, weight: .heavy))
+            }
+            .foregroundStyle(isSelected ? .white : TrendXTheme.secondaryInk)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(isSelected
+                                ? AnyShapeStyle(TrendXTheme.aiIndigo)
+                                : AnyShapeStyle(TrendXTheme.surface))
+            )
+            .overlay(
+                Capsule().stroke(isSelected ? Color.clear : TrendXTheme.outline, lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Empty states (per tab)
+    //
+    // Each tab has its own zero-content treatment because they mean
+    // different things — "اللحظة" empty is genuinely unusual and
+    // signals an API error, while "من أتابع" empty is the normal
+    // starting state for any new user and should onboard them, not
+    // apologize.
+
+    @ViewBuilder
+    private func emptyState(for filter: String) -> some View {
+        switch filter {
+        case "accounts":
+            accountsEmptyState
+        case "sectors":
+            sectorsEmptyState
+        case "results":
+            resultsEmptyState
+        default:
+            liveEmptyState
+        }
+    }
+
+    private var liveEmptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "antenna.radiowaves.left.and.right")
+            Image(systemName: "antenna.radiowaves.left.and.right.slash")
                 .font(.system(size: 32, weight: .light))
                 .foregroundStyle(TrendXTheme.tertiaryInk)
-            Text("رادارك هادئ الآن")
+            Text("الرادار صامت الآن")
                 .font(.system(size: 15, weight: .heavy))
                 .foregroundStyle(TrendXTheme.ink)
-            Text("تابع وزارات وحسابات نشطة وستمتلئ هذه الشاشة بنبض اليوم.")
+            Text("اسحب للأسفل لإعادة التحديث — قد يكون اتصالك بطيئاً أو الخدمة قيد التحديث.")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TrendXTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+    }
+
+    private var accountsEmptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "person.2.crop.square.stack.fill")
+                .font(.system(size: 32, weight: .heavy))
+                .foregroundStyle(TrendXTheme.aiIndigo)
+            Text("ابدأ ببناء شبكتك")
+                .font(.system(size: 16, weight: .black))
+                .foregroundStyle(TrendXTheme.ink)
+            Text("تابع جهات حكومية وحسابات إعلامية وشخصيات نشطة — وستمتلئ هذي الشاشة بنبضهم اللحظي.")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(TrendXTheme.secondaryInk)
+                .lineSpacing(3)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 30)
+
+            // Inline suggested-follows carousel — turns the empty
+            // state from a dead end into a one-tap launchpad.
+            SuggestedFollowsCarousel(store: store)
+        }
+        .padding(.top, 6)
+    }
+
+    private var sectorsEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "rectangle.3.group.fill")
+                .font(.system(size: 28, weight: .heavy))
+                .foregroundStyle(TrendXTheme.aiIndigo)
+            Text("لا توجد استطلاعات نشطة في هذا القطاع")
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(TrendXTheme.ink)
+            Text("اختر قطاعاً آخر من الأعلى، أو عُد للحظة لترى ما يصوّت عليه السعوديون الآن.")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(TrendXTheme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+    }
+
+    private var resultsEmptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "trophy")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(TrendXTheme.success)
+            Text("لا توجد نتائج هذا الأسبوع")
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(TrendXTheme.ink)
+            Text("ستظهر هنا الاستطلاعات التي حُسمت في آخر سبعة أيام مع المتصدر في كل واحدة.")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(TrendXTheme.secondaryInk)
                 .multilineTextAlignment(.center)

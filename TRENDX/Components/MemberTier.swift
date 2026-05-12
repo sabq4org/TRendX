@@ -137,59 +137,24 @@ struct MemberTierProgressCard: View {
     private var tier: MemberTier { MemberTier.from(points: points) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 10) {
                 MemberTierBadge(tier: tier)
-                Spacer()
-                if let next = tier.next {
-                    Text("التالي: \(next.label)")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(TrendXTheme.tertiaryInk)
-                } else {
-                    Text("أعلى مستوى ✦")
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(tier.tint)
-                }
+                Spacer(minLength: 0)
+                Text("\(points) نقطة")
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(tier.tint)
+                    .monospacedDigit()
             }
 
             if let next = tier.next {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("\(tier.pointsToNext(points: points)) نقطة")
-                            .font(.system(size: 14, weight: .black, design: .rounded))
-                            .foregroundStyle(TrendXTheme.ink)
-                        Text("للوصول إلى \(next.label)")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(TrendXTheme.secondaryInk)
-                    }
-
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(TrendXTheme.softFill)
-                                .frame(height: 8)
-                            Capsule()
-                                .fill(tier.gradient)
-                                .frame(width: max(geo.size.width * tier.progress(points: points), 10), height: 8)
-                        }
-                    }
-                    .frame(height: 8)
-
-                    HStack {
-                        Text("\(tier.threshold)")
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .foregroundStyle(TrendXTheme.tertiaryInk)
-                        Spacer()
-                        Text("\(next.threshold)")
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .foregroundStyle(TrendXTheme.tertiaryInk)
-                    }
-                }
-            } else {
-                Text("وصلت لأعلى مستوى عضوية — استمتع بالامتيازات الحصرية.")
-                    .font(.system(size: 12, weight: .semibold))
+                Text("تبقى \(tier.pointsToNext(points: points)) نقطة للوصول إلى \(next.label)")
+                    .font(.system(size: 12, weight: .heavy))
                     .foregroundStyle(TrendXTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+
+            tierRail
         }
         .padding(16)
         .background(
@@ -200,5 +165,96 @@ struct MemberTierProgressCard: View {
                         .strokeBorder(tier.tint.opacity(0.18), lineWidth: 1)
                 )
         )
+    }
+
+    /// Four-tier rail showing every milestone with a filled progress
+    /// segment between the previous tier and the current one. Replaces
+    /// the older bar that only knew the *current* tier's bracket and
+    /// looked broken to anyone trying to read absolute position
+    /// across all tiers ("المؤشر غير").
+    private var tierRail: some View {
+        let allTiers = MemberTier.allCases
+        let railProgress = railFillRatio(points: points)
+
+        return VStack(spacing: 8) {
+            GeometryReader { geo in
+                let width = geo.size.width
+                let dotSize: CGFloat = 14
+                let trackHeight: CGFloat = 6
+
+                ZStack(alignment: .leading) {
+                    // Track
+                    Capsule()
+                        .fill(TrendXTheme.softFill)
+                        .frame(height: trackHeight)
+
+                    // Filled portion up to current points.
+                    Capsule()
+                        .fill(tier.gradient)
+                        .frame(width: max(0, width * railProgress), height: trackHeight)
+
+                    // Per-tier dots, positioned by their absolute threshold
+                    // along the rail. Solid when reached, hollow otherwise.
+                    ForEach(Array(allTiers.enumerated()), id: \.offset) { idx, t in
+                        let pos = dotPosition(for: t, width: width, dotSize: dotSize)
+                        ZStack {
+                            Circle()
+                                .fill(points >= t.threshold ? t.tint : TrendXTheme.surface)
+                                .frame(width: dotSize, height: dotSize)
+                                .overlay(
+                                    Circle().stroke(t.tint, lineWidth: 1.5)
+                                )
+                            if points >= t.threshold {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 7, weight: .heavy))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .offset(x: pos)
+                    }
+                    .frame(height: dotSize)
+                }
+                .frame(height: dotSize)
+            }
+            .frame(height: 14)
+
+            // Threshold labels under each dot.
+            GeometryReader { geo in
+                let width = geo.size.width
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(allTiers.enumerated()), id: \.offset) { idx, t in
+                        let pos = dotPosition(for: t, width: width, dotSize: 0)
+                        VStack(spacing: 1) {
+                            Text(t.label)
+                                .font(.system(size: 9, weight: .heavy))
+                                .foregroundStyle(points >= t.threshold ? t.tint : TrendXTheme.tertiaryInk)
+                            Text("\(t.threshold)")
+                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                                .foregroundStyle(TrendXTheme.tertiaryInk)
+                                .monospacedDigit()
+                        }
+                        .frame(width: 52)
+                        .offset(x: pos - 26)
+                    }
+                }
+            }
+            .frame(height: 24)
+        }
+    }
+
+    /// Fraction of the rail to fill — uses the absolute point span
+    /// from Bronze threshold (0) to Diamond threshold (3000). Capped
+    /// at 1.0 for users who exceed Diamond.
+    private func railFillRatio(points: Int) -> Double {
+        let max = MemberTier.diamond.threshold
+        guard max > 0 else { return 1 }
+        return min(1, Swift.max(0, Double(points) / Double(max)))
+    }
+
+    private func dotPosition(for tier: MemberTier, width: CGFloat, dotSize: CGFloat) -> CGFloat {
+        let max = MemberTier.diamond.threshold
+        guard max > 0 else { return 0 }
+        let ratio = CGFloat(tier.threshold) / CGFloat(max)
+        return ratio * (width - dotSize)
     }
 }

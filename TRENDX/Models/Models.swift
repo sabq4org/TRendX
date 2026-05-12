@@ -53,7 +53,7 @@ enum AccountType: String, Codable, CaseIterable {
     }
 }
 
-struct TrendXUser: Codable, Identifiable, Equatable {
+struct TrendXUser: Codable, Identifiable, Equatable, Hashable {
     let id: UUID
     var name: String
     var email: String
@@ -386,6 +386,12 @@ struct Poll: Codable, Identifiable, Equatable {
     var coverStyle: PollCoverStyle?
     var authorName: String
     var authorAvatar: String
+    /// Publisher's current avatar URL (uploaded logo or remote URL).
+    /// When present, poll cards render the publisher's actual image
+    /// instead of the static initial — that way the Ministry of Media
+    /// (or any account) can change their logo and existing polls
+    /// pick it up on the next bootstrap refresh.
+    var authorAvatarUrl: String?
     var authorIsVerified: Bool
     var options: [PollOption]
     var topicId: UUID?
@@ -426,6 +432,7 @@ struct Poll: Codable, Identifiable, Equatable {
         coverStyle: PollCoverStyle? = nil,
         authorName: String = "مستخدم",
         authorAvatar: String = "م",
+        authorAvatarUrl: String? = nil,
         authorIsVerified: Bool = false,
         options: [PollOption] = [],
         topicId: UUID? = nil,
@@ -456,6 +463,7 @@ struct Poll: Codable, Identifiable, Equatable {
         self.coverStyle = coverStyle
         self.authorName = authorName
         self.authorAvatar = authorAvatar
+        self.authorAvatarUrl = authorAvatarUrl
         self.authorIsVerified = authorIsVerified
         self.options = options
         self.topicId = topicId

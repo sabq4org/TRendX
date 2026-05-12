@@ -15,7 +15,18 @@ final class AppStore: ObservableObject {
     @Published var surveys: [Survey]
     @Published var gifts: [Gift]
     @Published var redemptions: [Redemption]
+    /// Poll IDs the viewer has reposted — derived from `myRepostsKey`.
+    /// Mirror-only state: views read from `poll.viewerReposted` (which
+    /// `applyRepostFlags` keeps in sync) but the source of truth lives
+    /// here so it survives any `polls` rewrite from the bootstrap.
+    @Published private(set) var myRepostedPollIds: Set<UUID> = []
     @Published var selectedTab: TabItem = .home
+    /// Monotonic counter incremented every time the user taps the
+    /// already-selected Home tab. `HomeScreen` observes this through
+    /// `.onChange` and uses it to scroll its `ScrollViewReader` back
+    /// to the top — the standard "tap the active tab twice to jump
+    /// home" gesture iOS users expect from a primary tab.
+    @Published var homeScrollToTopTrigger: Int = 0
     @Published var showCreatePoll: Bool = false
     @Published var isAuthenticated: Bool
     @Published var isLoading: Bool = false
@@ -58,6 +69,12 @@ final class AppStore: ObservableObject {
     private let topicsKey = "trendx_topics_v1"
     private let pollsKey = "trendx_polls_v1"
     private let redemptionsKey = "trendx_redemptions_v1"
+    /// Local mirror of poll IDs the viewer has reposted. We persist this
+    /// separately from the polls array because the `/bootstrap` response
+    /// does not carry `viewer_reposted` per poll — without this set the
+    /// repost flag would silently reset on every refresh and on app
+    /// restart, even though the backend still has the record.
+    private let myRepostsKey = "trendx_my_reposts_v1"
     private let client: TrendXAPIClient
     private let authRepository: AuthRepository
     private let pollRepository: PollRepository
@@ -65,6 +82,13 @@ final class AppStore: ObservableObject {
     private let rewardsRepository: RewardsRepository
     private let aiRepository: AIRepository
     private var authSession: AuthSession?
+    /// Timestamp of the last successful (or attempted) bootstrap. We
+    /// throttle background refreshes — triggered by foreground
+    /// transitions — to at most one per 90 seconds. Previously every
+    /// app-resume kicked off a full /bootstrap which made even quick
+    /// tab-out/tab-in flows feel laggy on slower networks.
+    private var lastBootstrapAt: Date = .distantPast
+    private let bootstrapThrottle: TimeInterval = 90
 
     /// Public read-only access to the live access token. Layer-3 screens
     /// (Pulse, DNA, Index, …) use this to call `TrendXAPIClient` directly
@@ -140,8 +164,44 @@ final class AppStore: ObservableObject {
             self.redemptions = []
         }
 
+        if let data = UserDefaults.standard.data(forKey: myRepostsKey),
+           let ids = try? JSONDecoder().decode(Set<UUID>.self, from: data) {
+            self.myRepostedPollIds = ids
+        }
+        applyRepostFlags()
+        reconcileFollowedTopicsFlags()
+
         if isAuthenticated {
             Task { await refreshBootstrap() }
+        }
+    }
+
+    /// Stamp `viewerReposted` on every poll that the user has reposted
+    /// locally. Call after any rewrite of `polls` — `init`, bootstrap
+    /// refresh, or single-poll replace — so the UI stays consistent
+    /// with the source-of-truth set.
+    private func applyRepostFlags() {
+        guard !myRepostedPollIds.isEmpty else { return }
+        for index in polls.indices where myRepostedPollIds.contains(polls[index].id) {
+            polls[index].viewerReposted = true
+        }
+    }
+
+    /// Mirror `currentUser.followedTopics` onto each `topic.isFollowing`
+    /// flag. Run after any rewrite of either array (bootstrap refresh,
+    /// sign-in) so the UI shows the right state. The two stores are
+    /// kept in lockstep on mutations via `toggleFollowTopic` — this
+    /// only matters when the topics list is replaced wholesale.
+    private func reconcileFollowedTopicsFlags() {
+        let followed = Set(currentUser.followedTopics)
+        for index in topics.indices {
+            topics[index].isFollowing = followed.contains(topics[index].id)
+        }
+    }
+
+    private func persistMyReposts() {
+        if let data = try? JSONEncoder().encode(myRepostedPollIds) {
+            UserDefaults.standard.set(data, forKey: myRepostsKey)
         }
     }
 
@@ -225,6 +285,8 @@ final class AppStore: ObservableObject {
             isGuest = false
             isAuthenticated = true
         }
+        myRepostedPollIds.removeAll()
+        persistMyReposts()
         appMessage = nil
         showWelcomeAfterSignUp = false
     }
@@ -249,7 +311,20 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Same as `refreshBootstrap()` but skips the call entirely if we
+    /// already ran one recently. Use this from passive triggers like
+    /// `scenePhase == .active` so a quick tab-out → tab-in doesn't
+    /// kick off a full network round-trip. Pull-to-refresh and
+    /// explicit user gestures should keep calling `refreshBootstrap()`.
+    func refreshBootstrapIfStale() async {
+        if Date().timeIntervalSince(lastBootstrapAt) < bootstrapThrottle {
+            return
+        }
+        await refreshBootstrap()
+    }
+
     func refreshBootstrap() async {
+        lastBootstrapAt = Date()
         isLoading = true
         defer { isLoading = false }
 
@@ -261,6 +336,14 @@ final class AppStore: ObservableObject {
         do {
             let bootstrap = try await bootstrapTask
             topics = bootstrap.topics
+            // Topic.isFollowing is a per-viewer flag — the bootstrap
+            // response can't carry it because /bootstrap is the same
+            // payload for every caller. Reconcile here against the
+            // current user's followedTopics so the UI matches what the
+            // user actually follows. Without this, signing out and
+            // back in (or any session restore) silently looked like
+            // the user lost all their interests.
+            reconcileFollowedTopicsFlags()
             polls = bootstrap.polls.isEmpty ? polls : bootstrap.polls
             let remoteSurveys = await surveysTask
             if !remoteSurveys.isEmpty {
@@ -269,6 +352,7 @@ final class AppStore: ObservableObject {
             }
             gifts = await giftsTask
             redemptions = await redemptionsTask
+            applyRepostFlags()
             persistTopics()
             persistPolls()
             persistRedemptions()
@@ -332,7 +416,8 @@ final class AppStore: ObservableObject {
         gender: String? = nil,
         birthYear: Int? = nil,
         city: String? = nil,
-        region: String? = nil
+        region: String? = nil,
+        country: String? = nil
     ) async throws -> TrendXUser {
         guard let session = authSession, isRemoteEnabled else {
             // Apply locally so the offline flow still updates the UI.
@@ -348,6 +433,7 @@ final class AppStore: ObservableObject {
             if let birthYear { currentUser.birthYear = birthYear }
             if let city { currentUser.city = city }
             if let region { currentUser.region = region }
+            if let country { currentUser.country = country }
             persistUser()
             return currentUser
         }
@@ -364,6 +450,7 @@ final class AppStore: ObservableObject {
             birthYear: birthYear,
             city: city,
             region: region,
+            country: country,
             session: session
         )
         currentUser = updated
@@ -419,19 +506,30 @@ final class AppStore: ObservableObject {
     }
 
     /// Repost a poll to your followers' timelines (optimistic flip).
+    /// On success surfaces a transient banner so the user knows where
+    /// the repost just landed — their own profile + every follower's
+    /// "الرادار" timeline.
     @discardableResult
     func repost(pollId: UUID) async -> Bool {
         guard let token = accessToken else { return false }
+        myRepostedPollIds.insert(pollId)
+        persistMyReposts()
         if let index = polls.firstIndex(where: { $0.id == pollId }) {
             polls[index].viewerReposted = true
             polls[index].sharesCount += 1
             persistPolls()
         }
         let ok = (try? await apiClient.repostPoll(id: pollId, accessToken: token)) != nil
-        if !ok, let index = polls.firstIndex(where: { $0.id == pollId }) {
-            polls[index].viewerReposted = false
-            polls[index].sharesCount = max(0, polls[index].sharesCount - 1)
-            persistPolls()
+        if !ok {
+            myRepostedPollIds.remove(pollId)
+            persistMyReposts()
+            if let index = polls.firstIndex(where: { $0.id == pollId }) {
+                polls[index].viewerReposted = false
+                polls[index].sharesCount = max(0, polls[index].sharesCount - 1)
+                persistPolls()
+            }
+        } else {
+            appMessage = "تمت إعادة النشر — ظاهرة في صفحتك وعند متابعيك."
         }
         return ok
     }
@@ -439,16 +537,24 @@ final class AppStore: ObservableObject {
     @discardableResult
     func unrepost(pollId: UUID) async -> Bool {
         guard let token = accessToken else { return false }
+        myRepostedPollIds.remove(pollId)
+        persistMyReposts()
         if let index = polls.firstIndex(where: { $0.id == pollId }) {
             polls[index].viewerReposted = false
             polls[index].sharesCount = max(0, polls[index].sharesCount - 1)
             persistPolls()
         }
         let ok = (try? await apiClient.unrepostPoll(id: pollId, accessToken: token)) != nil
-        if !ok, let index = polls.firstIndex(where: { $0.id == pollId }) {
-            polls[index].viewerReposted = true
-            polls[index].sharesCount += 1
-            persistPolls()
+        if !ok {
+            myRepostedPollIds.insert(pollId)
+            persistMyReposts()
+            if let index = polls.firstIndex(where: { $0.id == pollId }) {
+                polls[index].viewerReposted = true
+                polls[index].sharesCount += 1
+                persistPolls()
+            }
+        } else {
+            appMessage = "تم إلغاء إعادة النشر."
         }
         return ok
     }
