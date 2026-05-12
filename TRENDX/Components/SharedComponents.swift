@@ -1583,84 +1583,133 @@ struct MiniPollCard: View {
     private var style: PollCoverStyle { poll.topicStyle }
     private var tint: Color { style.tint }
 
+    private var hasImage: Bool {
+        if let url = poll.imageURL, !url.isEmpty { return true }
+        return false
+    }
+
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 10) {
-                // Topic chip + optional AI marker. The chip is the
-                // single source of topic identity on the mini card —
-                // we dropped the heavy leading gradient stripe so
-                // five stacked cards no longer look like a paint
-                // palette.
-                HStack(spacing: 6) {
-                    HStack(spacing: 5) {
-                        Image(systemName: style.glyph)
-                            .font(.system(size: 10, weight: .bold))
-                        // No `.tracking()` here — positive letter
-                        // spacing breaks the joined Arabic glyphs.
-                        Text(poll.topicName ?? style.label)
-                            .font(.system(size: 11, weight: .heavy, design: .rounded))
-                    }
-                    .foregroundStyle(tint)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(style.wash))
-                    .overlay(Capsule().stroke(style.hairline, lineWidth: 0.6))
-
-                    Spacer(minLength: 0)
-
-                    if poll.aiInsight != nil {
-                        HStack(spacing: 3) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 9, weight: .bold))
-                            Text("AI")
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                .tracking(0.3)
+            VStack(alignment: .leading, spacing: 0) {
+                // Cover strip — when the publisher uploaded an image we
+                // showcase it as the top third of the card with the
+                // topic chip overlaid on a dark gradient. Without an
+                // image we fall through to the original topic chip
+                // row so the card still reads cleanly.
+                if hasImage {
+                    ZStack(alignment: .bottomLeading) {
+                        TrendXProfileImage(urlString: poll.imageURL) {
+                            LinearGradient(
+                                colors: style.gradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         }
-                        .foregroundStyle(TrendXTheme.aiIndigo)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(TrendXTheme.aiIndigo.opacity(0.10)))
-                        .overlay(Capsule().stroke(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 0.8))
+                        .frame(height: 84)
+                        .clipped()
+
+                        LinearGradient(
+                            colors: [Color.clear, Color.black.opacity(0.50)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 84)
+                        .allowsHitTesting(false)
+
+                        HStack(spacing: 5) {
+                            Image(systemName: style.glyph)
+                                .font(.system(size: 9.5, weight: .heavy))
+                            Text(poll.topicName ?? style.label)
+                                .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(.white.opacity(0.18)))
+                        .overlay(Capsule().stroke(.white.opacity(0.28), lineWidth: 0.6))
+                        .padding(10)
                     }
+                    .frame(height: 84)
+                    .clipped()
                 }
 
-                Text(poll.title)
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(TrendXTheme.ink)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .lineLimit(3)
-                    .lineSpacing(2)
+                VStack(alignment: .leading, spacing: 10) {
+                    if !hasImage {
+                        // Topic chip + optional AI marker. The chip is the
+                        // single source of topic identity on the mini card —
+                        // we dropped the heavy leading gradient stripe so
+                        // five stacked cards no longer look like a paint
+                        // palette.
+                        HStack(spacing: 6) {
+                            HStack(spacing: 5) {
+                                Image(systemName: style.glyph)
+                                    .font(.system(size: 10, weight: .bold))
+                                Text(poll.topicName ?? style.label)
+                                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+                            }
+                            .foregroundStyle(tint)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(style.wash))
+                            .overlay(Capsule().stroke(style.hairline, lineWidth: 0.6))
 
-                Spacer(minLength: 0)
+                            Spacer(minLength: 0)
 
-                HStack(spacing: 10) {
-                    Label("\(poll.totalVotes)", systemImage: "person.2.fill")
-                        .labelStyle(.titleAndIcon)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(TrendXTheme.tertiaryInk)
-
-                    HStack(spacing: 3) {
-                        Image(systemName: "star.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(TrendXTheme.accent)
-                        Text("+\(poll.rewardPoints)")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                            .foregroundStyle(TrendXTheme.accentDeep)
+                            if poll.aiInsight != nil {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text("AI")
+                                        .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                        .tracking(0.3)
+                                }
+                                .foregroundStyle(TrendXTheme.aiIndigo)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(TrendXTheme.aiIndigo.opacity(0.10)))
+                                .overlay(Capsule().stroke(TrendXTheme.aiIndigo.opacity(0.18), lineWidth: 0.8))
+                            }
+                        }
                     }
+
+                    Text(poll.title)
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .foregroundStyle(TrendXTheme.ink)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(hasImage ? 2 : 3)
+                        .lineSpacing(2)
 
                     Spacer(minLength: 0)
 
-                    Image(systemName: "arrow.left")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Circle().fill(TrendXTheme.primaryGradient))
-                        .shadow(color: TrendXTheme.primary.opacity(0.25), radius: 4, x: 0, y: 2)
+                    HStack(spacing: 10) {
+                        Label("\(poll.totalVotes)", systemImage: "person.2.fill")
+                            .labelStyle(.titleAndIcon)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(TrendXTheme.tertiaryInk)
+
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(TrendXTheme.accent)
+                            Text("+\(poll.rewardPoints)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(TrendXTheme.accentDeep)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(TrendXTheme.primaryGradient))
+                            .shadow(color: TrendXTheme.primary.opacity(0.25), radius: 4, x: 0, y: 2)
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, hasImage ? 12 : 16)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 16)
             .frame(width: 248, height: 168)
             .background(TrendXTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))

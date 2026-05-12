@@ -439,6 +439,32 @@ struct PublicProfileScreen: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
+
+                    // When viewing my own profile, every repost row gets
+                    // an "undo" chip so the user can pull a repost back
+                    // without hunting for the underlying poll card.
+                    if isSelf {
+                        Button {
+                            Task { await undoRepost(pollId: poll.id) }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9.5, weight: .heavy))
+                                Text("إلغاء إعادة النشر")
+                                    .font(.system(size: 11, weight: .heavy))
+                            }
+                            .foregroundStyle(TrendXTheme.aiViolet)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule().fill(TrendXTheme.aiViolet.opacity(0.10))
+                            )
+                            .overlay(
+                                Capsule().stroke(TrendXTheme.aiViolet.opacity(0.22), lineWidth: 0.8)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .foregroundStyle(TrendXTheme.aiViolet)
                 .padding(.horizontal, 4)
@@ -454,6 +480,16 @@ struct PublicProfileScreen: View {
             )
             .allowsHitTesting(false)
         }
+    }
+
+    /// Optimistically removes the repost row from the local feed, then
+    /// asks the store to unrepost. If the network call fails the next
+    /// `loadPosts()` will restore it — same pattern as `repost()`.
+    private func undoRepost(pollId: UUID) async {
+        await MainActor.run {
+            posts.removeAll { $0.kind == .repost && $0.poll.id == pollId }
+        }
+        _ = await store.unrepost(pollId: pollId)
     }
 
     private var postsEmptyState: some View {

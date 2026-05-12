@@ -296,6 +296,26 @@ struct PollListRow: View {
                 .frame(width: 4)
 
                 HStack(alignment: .top, spacing: 14) {
+                    // Cover thumbnail — only when the publisher
+                    // uploaded an image. Falling back to "no thumbnail"
+                    // keeps the legacy gradient-only rows compact and
+                    // unchanged.
+                    if let imageURL = poll.imageURL, !imageURL.isEmpty {
+                        TrendXProfileImage(urlString: imageURL) {
+                            LinearGradient(
+                                colors: style.gradient,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        }
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(TrendXTheme.outline, lineWidth: 0.6)
+                        )
+                    }
+
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
                             if let topicName = poll.topicName {
