@@ -765,7 +765,12 @@ struct PollCard: View {
                 HStack(spacing: 10) {
                     AccountAvatar(user: authorAsUser, size: 44, showRing: true)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    // Spacing of 2 made the author name look glued to
+                    // the topic/time row underneath — the descender of
+                    // Arabic glyphs (ج، م، ي) literally kissed the
+                    // capsule above. 6 gives the row visual breathing
+                    // room without inflating the card height.
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 4) {
                             Text(poll.authorName)
                                 .font(.trendxBodyBold())
