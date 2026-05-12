@@ -53,6 +53,11 @@ async function main(): Promise<void> {
   // account fresh on every deploy without overwriting the password.
   console.log("[seed] upserting government showcase account…");
   const moiaEmail = "moia@trendx.sa";
+  // Public, stable URL for the Saudi national emblem (palm + crossed
+  // swords) from Wikipedia Commons. Used as the avatar for وزارة
+  // الإعلام so the profile carries the real institutional mark
+  // instead of the SwiftUI programmatic fallback.
+  const saudiEmblemURL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Emblem_of_Saudi_Arabia.svg/512px-Emblem_of_Saudi_Arabia.svg.png";
   const existingMoia = await prisma.user.findUnique({ where: { email: moiaEmail } });
   if (!existingMoia) {
     const salt = makeSalt();
@@ -64,6 +69,7 @@ async function main(): Promise<void> {
         passwordSalt: salt,
         name: "وزارة الإعلام",
         avatarInitial: "وم",
+        avatarUrl: saudiEmblemURL,
         handle: "moia",
         bio: "الحساب الرسمي لوزارة الإعلام في المملكة العربية السعودية — صوت رسمي على نبض الرأي.",
         accountType: "government",
@@ -80,6 +86,7 @@ async function main(): Promise<void> {
       data: {
         name: "وزارة الإعلام",
         handle: "moia",
+        avatarUrl: saudiEmblemURL,
         bio: "الحساب الرسمي لوزارة الإعلام في المملكة العربية السعودية — صوت رسمي على نبض الرأي.",
         accountType: "government",
         isVerified: true,

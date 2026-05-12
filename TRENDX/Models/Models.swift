@@ -407,6 +407,9 @@ struct Poll: Codable, Identifiable, Equatable {
     /// marker and green border for government-published polls.
     var authorAccountType: AccountType
     var authorHandle: String?
+    /// The publisher's UUID — used to navigate to their profile even
+    /// when they haven't set a `@handle` yet.
+    var publisherId: UUID?
     /// Audience gate for voting: "public" / "verified" / "verified_citizen".
     var voterAudience: String
     /// Whether the current viewer has reposted this poll. Driven by
@@ -442,6 +445,7 @@ struct Poll: Codable, Identifiable, Equatable {
         savesCount: Int = 0,
         authorAccountType: AccountType = .individual,
         authorHandle: String? = nil,
+        publisherId: UUID? = nil,
         voterAudience: String = "public",
         aiInsight: String? = nil
     ) {
@@ -471,6 +475,7 @@ struct Poll: Codable, Identifiable, Equatable {
         self.savesCount = savesCount
         self.authorAccountType = authorAccountType
         self.authorHandle = authorHandle
+        self.publisherId = publisherId
         self.voterAudience = voterAudience
         self.aiInsight = aiInsight
     }

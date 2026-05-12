@@ -291,33 +291,9 @@ struct PublicProfileScreen: View {
                 }
                 ctx.stroke(path, with: .color(.white.opacity(0.08)), lineWidth: 0.6)
             }
-
-            // Large institutional emblem in the center — palm + crossed
-            // lines as a stylized stand-in for the Saudi national mark.
-            VStack(spacing: 6) {
-                ZStack {
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 64, weight: .heavy))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
-                    // Two crossed lines below the palm (sword stand-ins).
-                    Path { path in
-                        path.move(to: CGPoint(x: -22, y: 24))
-                        path.addLine(to: CGPoint(x: 22, y: 38))
-                        path.move(to: CGPoint(x: -22, y: 38))
-                        path.addLine(to: CGPoint(x: 22, y: 24))
-                    }
-                    .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 3.4, lineCap: .round))
-                    .frame(width: 60, height: 60)
-                    .offset(y: 50)
-                }
-                .padding(.top, 16)
-
-                Text(current.name)
-                    .font(.system(size: 16, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.top, 60)
-            }
+            // The institutional emblem is carried by the AccountAvatar
+            // (offset below the banner) so the banner stays a clean
+            // patterned backdrop. No duplicated emblem anymore.
         }
     }
 

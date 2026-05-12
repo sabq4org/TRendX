@@ -15,6 +15,7 @@ struct HomeScreen: View {
     @State private var showNotifications = false
     @State private var selectedAuthorHandle: String?
     @State private var selectedAuthorUser: TrendXUser?
+    @State private var showTimeline = false
     @StateObject private var notificationsCounter = NotificationsCounter()
 
     private var feedPolls: [Poll] {
@@ -46,7 +47,8 @@ struct HomeScreen: View {
                             withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
                                 selectedSegment = 0
                             }
-                        }
+                        },
+                        onTimelineTap: store.isGuest ? nil : { showTimeline = true }
                     )
 
                     if selectedSegment == 0 {
@@ -85,6 +87,13 @@ struct HomeScreen: View {
             .sheet(item: $selectedAuthorUser) { user in
                 NavigationStack {
                     PublicProfileScreen(user: user, loadFromBackend: true)
+                        .environmentObject(store)
+                }
+                .trendxRTL()
+            }
+            .sheet(isPresented: $showTimeline) {
+                NavigationStack {
+                    TimelineScreen(store: store)
                         .environmentObject(store)
                 }
                 .trendxRTL()

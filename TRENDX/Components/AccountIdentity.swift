@@ -143,48 +143,43 @@ struct AccountAvatar: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            ZStack {
-                shape.asRoundedRect
-                    .fill(user.accountType == .government
-                          ? TrendXTheme.saudiGreenGradient
-                          : (user.accountType == .organization
-                             ? TrendXTheme.orgGoldGradient
-                             : TrendXTheme.primaryGradient as LinearGradient))
-                    .frame(width: size, height: size)
+        // No corner verification shield — verification is always shown
+        // inline via `AccountTypeBadge` next to the name. Doubling it
+        // on both the avatar and the name row made the profile look
+        // cluttered ("توثيق على اللوقو وتوثيق على الاسم").
+        ZStack {
+            shape.asRoundedRect
+                .fill(user.accountType == .government
+                      ? TrendXTheme.saudiGreenGradient
+                      : (user.accountType == .organization
+                         ? TrendXTheme.orgGoldGradient
+                         : TrendXTheme.primaryGradient as LinearGradient))
+                .frame(width: size, height: size)
 
-                if let urlString = user.avatarUrl, let url = URL(string: urlString) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            shape.clip(image.resizable().scaledToFill())
-                        default:
-                            initialView
-                        }
+            if let urlString = user.avatarUrl, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        shape.clip(
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .padding(size * 0.10) // breathing room around emblems
+                        )
+                    default:
+                        initialView
                     }
-                    .frame(width: size, height: size)
-                } else {
-                    initialView
                 }
-            }
-            .overlay(
-                showRing
-                ? AnyView(shape.asRoundedRect.strokeBorder(ringColor.opacity(0.55), lineWidth: ringWidth))
-                : AnyView(EmptyView())
-            )
-
-            // Government accounts get a discreet "official" corner mark
-            // (a small white shield with the Saudi-green check icon).
-            if user.accountType == .government && size >= 56 {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: size * 0.22, weight: .heavy))
-                    .foregroundStyle(TrendXTheme.saudiGreen)
-                    .padding(2)
-                    .background(Circle().fill(.white))
-                    .overlay(Circle().stroke(TrendXTheme.saudiGreen.opacity(0.4), lineWidth: 1))
-                    .offset(x: 2, y: 2)
+                .frame(width: size, height: size)
+            } else {
+                initialView
             }
         }
+        .overlay(
+            showRing
+            ? AnyView(shape.asRoundedRect.strokeBorder(ringColor.opacity(0.55), lineWidth: ringWidth))
+            : AnyView(EmptyView())
+        )
     }
 
     @ViewBuilder

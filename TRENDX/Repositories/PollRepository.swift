@@ -233,6 +233,7 @@ struct PollDTO: Codable {
     let totalSaves: Int?
     let authorAccountType: String?
     let authorHandle: String?
+    let publisherId: UUID?
     let voterAudience: String?
     let aiInsight: String?
 
@@ -262,6 +263,7 @@ struct PollDTO: Codable {
         self.totalSaves = domain.savesCount
         self.authorAccountType = domain.authorAccountType.rawValue
         self.authorHandle = domain.authorHandle
+        self.publisherId = domain.publisherId
         self.voterAudience = domain.voterAudience
         self.aiInsight = domain.aiInsight
     }
@@ -294,6 +296,7 @@ struct PollDTO: Codable {
             savesCount: totalSaves ?? 0,
             authorAccountType: authorAccountType.flatMap(AccountType.init(rawValue:)) ?? .individual,
             authorHandle: authorHandle?.isEmpty == false ? authorHandle : nil,
+            publisherId: publisherId,
             voterAudience: voterAudience ?? "public",
             aiInsight: aiInsight
         )

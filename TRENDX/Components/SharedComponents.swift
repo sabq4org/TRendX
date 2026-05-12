@@ -85,6 +85,10 @@ struct HomeHeader: View {
     var onSignInTap: () -> Void = {}
     let onNotificationsTap: () -> Void
     let onSearchTap: () -> Void
+    /// New: opens the Timeline (الرادار) directly from anywhere on
+    /// Home — no need to scroll past 200pt of cards to find the
+    /// entry point. Hidden when guest because timeline needs auth.
+    var onTimelineTap: (() -> Void)? = nil
 
     private var greeting: TrendXAI.Greeting {
         TrendXAI.greeting(for: userName)
@@ -154,6 +158,10 @@ struct HomeHeader: View {
             }
 
             Spacer(minLength: 0)
+
+            if let onTimelineTap {
+                HeaderIconButton(icon: "antenna.radiowaves.left.and.right", action: onTimelineTap)
+            }
 
             HeaderIconButton(icon: "magnifyingglass", action: onSearchTap)
 
@@ -597,80 +605,75 @@ struct PollCard: View {
         isOfficial ? TrendXTheme.saudiGreenWash : topicStyle.wash
     }
 
+    /// String that can be passed to `/users/:idOrHandle`. Prefers the
+    /// publisher's UUID (always present when the post comes from the
+    /// API) and falls back to the handle.
+    private var authorNavigationToken: String? {
+        if let id = poll.publisherId?.uuidString { return id }
+        if let handle = poll.authorHandle, !handle.isEmpty { return handle }
+        return nil
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            if isOfficial {
-                officialBanner
-            }
-
-            HStack(alignment: .top, spacing: 0) {
-                // Topic accent stripe — government polls override with a
-                // solid Saudi-green stripe so the official marker reads
-                // from across the screen.
-                Group {
-                    if isOfficial {
-                        TrendXTheme.saudiGreenGradient
-                    } else {
-                        LinearGradient(
-                            colors: topicStyle.gradient,
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    }
-                }
-                .frame(width: isOfficial ? 6 : 5)
-                .clipShape(
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: isOfficial ? 0 : 20,
-                        bottomLeadingRadius: 20,
-                        bottomTrailingRadius: 0,
-                        topTrailingRadius: 0,
-                        style: .continuous
-                    )
+        // Official polls no longer get a green ribbon + green border +
+        // green tinted shadow. That treatment fought with the topic
+        // colours inside ("متنافر مع الألوان الأخرى"). Instead we
+        // surface the official status only via the small inline pill
+        // next to the topic name (rendered inside `cardBody`).
+        HStack(alignment: .top, spacing: 0) {
+            LinearGradient(
+                colors: topicStyle.gradient,
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: 5)
+            .clipShape(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: 20,
+                    bottomLeadingRadius: 20,
+                    bottomTrailingRadius: 0,
+                    topTrailingRadius: 0,
+                    style: .continuous
                 )
+            )
 
-                cardBody
-            }
+            cardBody
         }
         .background(TrendXTheme.surface)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(
-                    isOfficial ? TrendXTheme.saudiGreen.opacity(0.32) : TrendXTheme.outline,
-                    lineWidth: isOfficial ? 1.2 : 0.8
-                )
+                .stroke(TrendXTheme.outline, lineWidth: 0.8)
         )
-        .shadow(color: (isOfficial ? TrendXTheme.saudiGreen : tint).opacity(0.14), radius: 18, x: 0, y: 8)
+        .shadow(color: tint.opacity(0.12), radius: 18, x: 0, y: 8)
         .shadow(color: TrendXTheme.shadow, radius: 4, x: 0, y: 1)
         .opacity(poll.isExpired ? 0.82 : 1.0)
     }
 
-    /// "استطلاع رسمي" eyebrow that crowns government-published polls.
-    /// Surfaces audience gating ("للموثّقين", "استطلاع وطني") inline.
-    private var officialBanner: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 10, weight: .heavy))
-            Text(officialBannerLabel)
-                .font(.system(size: 11, weight: .heavy))
-            Spacer(minLength: 0)
-            Text(poll.authorName)
-                .font(.system(size: 10.5, weight: .semibold))
-                .opacity(0.85)
-                .lineLimit(1)
+    /// Tiny inline pill that crowns the topic row when a poll is from
+    /// a government account (or has a non-public audience). Replaces
+    /// the heavy ribbon-across-the-top treatment.
+    @ViewBuilder
+    private var officialInlineMarker: some View {
+        if isOfficial {
+            HStack(spacing: 3) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 9, weight: .heavy))
+                Text(officialBannerLabel)
+                    .font(.system(size: 9.5, weight: .heavy))
+            }
+            .foregroundStyle(TrendXTheme.saudiGreen)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(TrendXTheme.saudiGreenWash))
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(TrendXTheme.saudiGreenGradient)
     }
 
     private var officialBannerLabel: String {
         switch poll.voterAudience {
-        case "verified_citizen": return "استطلاع وطني · للمواطنين الموثّقين"
-        case "verified":         return "استطلاع رسمي · للحسابات الموثّقة"
-        default:                  return "استطلاع رسمي"
+        case "verified_citizen": return "استطلاع وطني"
+        case "verified":         return "للموثّقين"
+        default:                  return "رسمي"
         }
     }
 
@@ -680,8 +683,8 @@ struct PollCard: View {
             // Topic colours are *not* used inside the card for gov
             // polls; everything switches to Saudi-green via accentTint.
             Button {
-                if let onAuthorTap, let handle = poll.authorHandle, !handle.isEmpty {
-                    onAuthorTap(handle)
+                if let onAuthorTap, let token = authorNavigationToken {
+                    onAuthorTap(token)
                 }
             } label: {
                 HStack(spacing: 10) {
@@ -752,21 +755,20 @@ struct PollCard: View {
 
                         HStack(spacing: 5) {
                             if let topicName = poll.topicName {
-                                // Topic pill — switches to Saudi-green for
-                                // government polls so the chip stays inside
-                                // the same palette as the rest of the card.
+                                // Topic pill uses the topic colour for non-
+                                // official polls. For official polls the
+                                // pill stays neutral; the official status
+                                // is shown by the green pill next to it.
                                 Text(topicName)
                                     .font(.system(size: 10.5, weight: .heavy, design: .rounded))
-                                    .foregroundStyle(accentTint)
+                                    .foregroundStyle(tint)
                                     .padding(.horizontal, 7)
                                     .padding(.vertical, 2)
-                                    .background(
-                                        Capsule().fill(accentWash)
-                                    )
-                                    .overlay(
-                                        Capsule().stroke(accentTint.opacity(0.22), lineWidth: 0.6)
-                                    )
+                                    .background(Capsule().fill(topicStyle.wash))
+                                    .overlay(Capsule().stroke(topicStyle.hairline, lineWidth: 0.6))
                             }
+
+                            officialInlineMarker
 
                             Text(poll.timeAgo)
                                 .font(.trendxSmall())
@@ -780,7 +782,7 @@ struct PollCard: View {
             }
             }
             .buttonStyle(.plain)
-            .disabled((poll.authorHandle ?? "").isEmpty)
+            .disabled(authorNavigationToken == nil)
 
             // Question
             Text(poll.title)

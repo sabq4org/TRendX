@@ -43,6 +43,22 @@ struct AccountScreen: View {
                 MemberTierProgressCard(points: store.currentUser.points)
                     .padding(.horizontal, 20)
 
+                // Social graph entry — followers + following lists.
+                if !store.isGuest {
+                    NavigationLink {
+                        MyNetworkScreen(store: store)
+                            .environmentObject(store)
+                            .trendxRTL()
+                    } label: {
+                        MyNetworkEntryCard(
+                            following: store.currentUser.followingCount,
+                            followers: store.currentUser.followersCount
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                }
+
                 // NEW: Opinion DNA — direct entry to identity screen
                 NavigationLink {
                     OpinionDNAScreen()
@@ -588,5 +604,60 @@ private struct GuestAccountHero: View {
                 .foregroundStyle(TrendXTheme.secondaryInk)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Network entry on Account
+
+private struct MyNetworkEntryCard: View {
+    let following: Int
+    let followers: Int
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(
+                        colors: [TrendXTheme.aiIndigo, TrendXTheme.primary],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 46, height: 46)
+                    .shadow(color: TrendXTheme.primary.opacity(0.30), radius: 10, x: 0, y: 5)
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("شبكتي")
+                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .foregroundStyle(TrendXTheme.ink)
+                HStack(spacing: 10) {
+                    Label("\(following) يتابعهم", systemImage: "person.crop.circle.badge.checkmark")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                    Label("\(followers) متابعونك", systemImage: "person.2")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(TrendXTheme.secondaryInk)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.left")
+                .font(.system(size: 12, weight: .heavy))
+                .foregroundStyle(TrendXTheme.primary)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(TrendXTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(TrendXTheme.primary.opacity(0.18), lineWidth: 0.8)
+                )
+                .shadow(color: TrendXTheme.shadow, radius: 10, x: 0, y: 4)
+        )
     }
 }
