@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Don't back up the auth session — it's bound to a single device. -->
+    <exclude domain="sharedpref" path="trendx_session.xml" />
+</full-backup-content>
