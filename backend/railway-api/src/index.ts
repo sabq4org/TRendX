@@ -389,7 +389,7 @@ app.get("/users/:idOrHandle/posts", async (c) => {
         options: { orderBy: { displayOrder: "asc" } },
         votes: { where: { userId: viewerId }, select: { userId: true, optionId: true } },
         topic: true,
-        publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+        publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true } },
       },
       orderBy: { createdAt: "desc" },
       take: limit,
@@ -402,7 +402,7 @@ app.get("/users/:idOrHandle/posts", async (c) => {
             options: { orderBy: { displayOrder: "asc" } },
             votes: { where: { userId: viewerId }, select: { userId: true, optionId: true } },
             topic: true,
-            publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+            publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true } },
           },
         },
       },
@@ -568,7 +568,7 @@ app.get("/stories/:id", async (c) => {
         include: {
           options: { orderBy: { displayOrder: "asc" } },
           topic: true,
-          publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+          publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true } },
         },
       },
       surveys: {
@@ -576,7 +576,7 @@ app.get("/stories/:id", async (c) => {
         include: {
           questions: { orderBy: { displayOrder: "asc" }, include: { options: true } },
           topic: true,
-          publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, bannerUrl: true } },
+          publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true } },
         },
       },
     },
@@ -737,7 +737,7 @@ app.get("/sectors/:topicId/takeover", async (c) => {
         include: {
           options: { orderBy: { displayOrder: "asc" } },
           topic: true,
-          publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+          publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true } },
         },
       })
     : null;
@@ -921,7 +921,7 @@ app.get("/bootstrap", async (c) => {
         options: { orderBy: { displayOrder: "asc" } },
         votes: { where: { userId }, select: { userId: true, optionId: true } },
         topic: true,
-        publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true, bannerUrl: true } },
+        publisher: { select: { accountType: true, isVerified: true, handle: true, avatarUrl: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -937,7 +937,7 @@ app.get("/bootstrap", async (c) => {
           include: { options: { orderBy: { displayOrder: "asc" } } },
         },
         topic: true,
-        publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true, bannerUrl: true } },
+        publisher: { select: { accountType: true, isVerified: true, handle: true, name: true, avatarUrl: true } },
       },
       orderBy: { createdAt: "desc" },
       take: 50,

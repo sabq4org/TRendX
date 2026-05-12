@@ -72,7 +72,7 @@ type PollWithRelations = Poll & {
   votes?: Pick<Vote, "userId" | "optionId">[];
   topic?: Topic | null;
   publisher?:
-    | Pick<User, "accountType" | "isVerified" | "handle" | "avatarUrl" | "bannerUrl">
+    | Pick<User, "accountType" | "isVerified" | "handle" | "avatarUrl">
     | null;
 };
 
@@ -105,11 +105,14 @@ export function pollDTO(
     author_is_verified: p.authorIsVerified,
     author_account_type: p.publisher?.accountType ?? null,
     author_handle: p.publisher?.handle ?? null,
-    // Publisher's current avatar/banner URLs so a poll card on the
-    // home feed picks up the Ministry of Media's freshly-uploaded
-    // logo without needing the poll itself to be re-published.
-    author_avatar_url: p.publisher?.avatarUrl ?? null,
-    author_banner_url: p.publisher?.bannerUrl ?? null,
+    // Publisher's current avatar URL so a poll card on the home feed
+    // picks up the Ministry of Media's freshly-uploaded logo without
+    // needing the poll itself to be re-published. Banner is
+    // intentionally omitted — base64-encoded banners can be 100KB+
+    // each and embedding them on every poll DTO turned the bootstrap
+    // response into multi-megabyte payloads. The profile screen
+    // fetches the publisher's full userDTO (which carries banner_url)
+    // separately when it needs that image.
     topic_id: p.topicId,
     topic_name: p.topic?.name ?? null,
     topic_tags: p.topicTags,
