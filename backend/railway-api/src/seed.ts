@@ -258,8 +258,18 @@ async function main(): Promise<void> {
       });
     }
 
-    // Event: ملتقى الإعلام السعودي 2026
-    const eventTitle = "ملتقى الإعلام السعودي 2026";
+    // Event: المنتدى السعودي للإعلام
+    //
+    // First rename any pre-seeded event the ministry already published
+    // under the older "ملتقى الإعلام السعودي 2026" title so existing
+    // deployments converge on the new branding. Then either find the
+    // already-renamed event or seed it fresh.
+    const eventTitle = "المنتدى السعودي للإعلام";
+    const legacyEventTitle = "ملتقى الإعلام السعودي 2026";
+    await prisma.event.updateMany({
+      where: { publisherId: moia.id, title: legacyEventTitle },
+      data: { title: eventTitle },
+    });
     const eventExisting = await prisma.event.findFirst({
       where: { publisherId: moia.id, title: eventTitle },
     });
